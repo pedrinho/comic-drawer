@@ -56,4 +56,4 @@ Current coverage: **96.62%** (excluding Canvas drawing logic)
 
 ## License
 
-MIT
+GPL-3.0
