@@ -4,9 +4,11 @@ import './Toolbar.css'
 interface ToolbarProps {
   currentTool: Tool
   onToolChange: (tool: Tool) => void
+  color: string
+  onColorChange: (color: string) => void
 }
 
-export default function Toolbar({ currentTool, onToolChange }: ToolbarProps) {
+export default function Toolbar({ currentTool, onToolChange, color, onColorChange }: ToolbarProps) {
   const tools: { name: Tool; icon: string; label: string }[] = [
     { name: 'pen', icon: '✏️', label: 'Pen' },
     { name: 'eraser', icon: '🧹', label: 'Eraser' },
@@ -28,6 +30,16 @@ export default function Toolbar({ currentTool, onToolChange }: ToolbarProps) {
           <span className="tool-label">{tool.label}</span>
         </button>
       ))}
+      <div className="color-selector">
+        <label htmlFor="color-picker">Color:</label>
+        <input
+          id="color-picker"
+          type="color"
+          value={color}
+          onChange={(e) => onColorChange(e.target.value)}
+          title="Select drawing color"
+        />
+      </div>
     </div>
   )
 }

@@ -18,6 +18,7 @@ export interface PanelData {
 
 function App() {
   const [currentTool, setCurrentTool] = useState<Tool>('pen')
+  const [selectedColor, setSelectedColor] = useState<string>('#000000')
   const [selectedPanel, setSelectedPanel] = useState<number>(0)
   const [panels, setPanels] = useState<PanelData[]>([
     { id: 0, data: null, layout: { rows: 1, columns: [1] } }
@@ -51,7 +52,9 @@ function App() {
       <main>
         <Toolbar 
           currentTool={currentTool} 
-          onToolChange={setCurrentTool} 
+          onToolChange={setCurrentTool}
+          color={selectedColor}
+          onColorChange={setSelectedColor}
         />
         <PanelLayout 
           panels={panels}
@@ -61,6 +64,7 @@ function App() {
         />
         <Canvas 
           tool={currentTool} 
+          color={selectedColor}
           panelData={panels[selectedPanel].data}
           layout={panels[selectedPanel].layout}
           onCanvasChange={handleCanvasChange}

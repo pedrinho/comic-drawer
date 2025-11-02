@@ -9,6 +9,7 @@ describe('Canvas', () => {
     render(
       <Canvas
         tool="pen"
+        color="#000000"
         panelData={null}
         layout={{ rows: 1, columns: [1] }}
         onCanvasChange={onCanvasChange}
@@ -23,6 +24,7 @@ describe('Canvas', () => {
     render(
       <Canvas
         tool="pen"
+        color="#000000"
         panelData={null}
         layout={{ rows: 1, columns: [1] }}
         onCanvasChange={onCanvasChange}
@@ -38,6 +40,7 @@ describe('Canvas', () => {
     render(
       <Canvas
         tool="pen"
+        color="#000000"
         panelData={null}
         layout={{ rows: 2, columns: [2, 3] }}
         onCanvasChange={onCanvasChange}
@@ -53,6 +56,7 @@ describe('Canvas', () => {
     const { rerender } = render(
       <Canvas
         tool="pen"
+        color="#000000"
         panelData={null}
         layout={{ rows: 1, columns: [1] }}
         onCanvasChange={onCanvasChange}
@@ -62,6 +66,7 @@ describe('Canvas', () => {
     rerender(
       <Canvas
         tool="pen"
+        color="#000000"
         panelData={null}
         layout={{ rows: 2, columns: [2, 2] }}
         onCanvasChange={onCanvasChange}

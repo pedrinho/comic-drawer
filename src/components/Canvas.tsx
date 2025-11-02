@@ -4,12 +4,13 @@ import './Canvas.css'
 
 interface CanvasProps {
   tool: Tool
+  color: string
   panelData: ImageData | null
   layout: { rows: number; columns: number[] }
   onCanvasChange: (data: ImageData) => void
 }
 
-export default function Canvas({ tool, panelData, layout, onCanvasChange }: CanvasProps) {
+export default function Canvas({ tool, color, panelData, layout, onCanvasChange }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [startPos, setStartPos] = useState({ x: 0, y: 0 })
@@ -72,8 +73,8 @@ export default function Canvas({ tool, panelData, layout, onCanvasChange }: Canv
     // Set drawing styles
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
-    ctx.strokeStyle = '#000000'
-    ctx.fillStyle = '#000000'
+    ctx.strokeStyle = color
+    ctx.fillStyle = color
     ctx.lineWidth = 2
 
     // Restore saved data if available
@@ -83,7 +84,7 @@ export default function Canvas({ tool, panelData, layout, onCanvasChange }: Canv
 
     // Draw grid on top (always visible)
     drawGrid(ctx)
-  }, [panelData, layout, drawGrid])
+  }, [panelData, layout, drawGrid, color])
 
   const getMousePos = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
