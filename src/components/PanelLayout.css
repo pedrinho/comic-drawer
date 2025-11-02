@@ -1,0 +1,58 @@
+.panel-layout {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  min-width: 150px;
+}
+
+.panel-layout h3 {
+  margin-bottom: 1rem;
+  color: #333;
+  font-size: 1.1rem;
+}
+
+.panels-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.panel {
+  padding: 1rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: white;
+  text-align: center;
+}
+
+.panel:hover {
+  border-color: #667eea;
+  transform: scale(1.02);
+}
+
+.panel.selected {
+  border-color: #667eea;
+  background: #eef2ff;
+  font-weight: 600;
+}
+
+.add-panel-btn {
+  padding: 1rem;
+  border: 2px dashed #999;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #667eea;
+  font-weight: 600;
+}
+
+.add-panel-btn:hover {
+  border-color: #667eea;
+  background: #eef2ff;
+}

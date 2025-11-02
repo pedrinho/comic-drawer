@@ -1,0 +1,74 @@
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, it, expect, vi } from 'vitest'
+import Canvas from './Canvas'
+
+describe('Canvas', () => {
+  it('renders canvas element', () => {
+    const onCanvasChange = vi.fn()
+    render(
+      <Canvas
+        tool="pen"
+        panelData={null}
+        layout={{ rows: 1, columns: [1] }}
+        onCanvasChange={onCanvasChange}
+      />
+    )
+
+    expect(document.querySelector('canvas')).toBeInTheDocument()
+  })
+
+  it('renders canvas with default grid layout', () => {
+    const onCanvasChange = vi.fn()
+    render(
+      <Canvas
+        tool="pen"
+        panelData={null}
+        layout={{ rows: 1, columns: [1] }}
+        onCanvasChange={onCanvasChange}
+      />
+    )
+
+    const canvas = document.querySelector('canvas')
+    expect(canvas).toBeInTheDocument()
+  })
+
+  it('renders canvas with custom grid layout', () => {
+    const onCanvasChange = vi.fn()
+    render(
+      <Canvas
+        tool="pen"
+        panelData={null}
+        layout={{ rows: 2, columns: [2, 3] }}
+        onCanvasChange={onCanvasChange}
+      />
+    )
+
+    const canvas = document.querySelector('canvas')
+    expect(canvas).toBeInTheDocument()
+  })
+
+  it('updates when layout changes', () => {
+    const onCanvasChange = vi.fn()
+    const { rerender } = render(
+      <Canvas
+        tool="pen"
+        panelData={null}
+        layout={{ rows: 1, columns: [1] }}
+        onCanvasChange={onCanvasChange}
+      />
+    )
+
+    rerender(
+      <Canvas
+        tool="pen"
+        panelData={null}
+        layout={{ rows: 2, columns: [2, 2] }}
+        onCanvasChange={onCanvasChange}
+      />
+    )
+
+    const canvas = document.querySelector('canvas')
+    expect(canvas).toBeInTheDocument()
+  })
+})
