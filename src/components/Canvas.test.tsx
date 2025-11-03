@@ -92,4 +92,20 @@ describe('Canvas', () => {
     const canvas = document.querySelector('canvas')
     expect(canvas).toBeInTheDocument()
   })
+
+  it('renders canvas with text tool', () => {
+    const onCanvasChange = vi.fn()
+    render(
+      <Canvas
+        tool="text"
+        color="#000000"
+        panelData={null}
+        layout={{ rows: 1, columns: [1] }}
+        onCanvasChange={onCanvasChange}
+      />
+    )
+
+    const canvas = document.querySelector('canvas')
+    expect(canvas).toBeInTheDocument()
+  })
 })

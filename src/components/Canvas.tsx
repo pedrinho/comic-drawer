@@ -16,6 +16,10 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
   const [startPos, setStartPos] = useState({ x: 0, y: 0 })
   const lastSaveRef = useRef<number>(0)
   const savedImageRef = useRef<ImageData | null>(null)
+  const [textInputPos, setTextInputPos] = useState<{ x: number; y: number } | null>(null)
+  const [textInputScreenPos, setTextInputScreenPos] = useState<{ x: number; y: number } | null>(null)
+  const [textInput, setTextInput] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     ctx.save()
@@ -192,6 +196,18 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
       // Save immediately after fill
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
       onCanvasChange(imageData)
+    } else if (tool === 'text') {
+      // Show text input at clicked position
+      setTextInputPos({ x: pos.x, y: pos.y })
+      // Get screen position for the input
+      const rect = canvas.getBoundingClientRect()
+      setTextInputScreenPos({ 
+        x: rect.left + (pos.x * rect.width / canvas.width), 
+        y: rect.top + (pos.y * rect.height / canvas.height)
+      })
+      setTextInput('')
+      setIsDrawing(false)
+      setTimeout(() => inputRef.current?.focus(), 0)
     } else if (tool === 'rect' || tool === 'ellipse') {
       // Save the current canvas state for live preview
       savedImageRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height)
@@ -276,6 +292,35 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
     }
   }
 
+  const handleTextSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && textInput && textInputPos) {
+      const canvas = canvasRef.current
+      const ctx = canvas?.getContext('2d')
+      if (!canvas || !ctx) return
+
+      // Draw the text on canvas
+      ctx.fillStyle = color
+      ctx.font = '24px Arial'
+      ctx.fillText(textInput, textInputPos.x, textInputPos.y)
+
+      // Redraw grid on top
+      drawGrid(ctx)
+
+      // Save the canvas
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      onCanvasChange(imageData)
+
+      // Hide input
+      setTextInputPos(null)
+      setTextInputScreenPos(null)
+      setTextInput('')
+    } else if (e.key === 'Escape') {
+      setTextInputPos(null)
+      setTextInputScreenPos(null)
+      setTextInput('')
+    }
+  }
+
   return (
     <div className="canvas-container">
       <canvas
@@ -286,6 +331,28 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
         onMouseUp={stopDrawing}
         onMouseLeave={stopDrawing}
       />
+      {textInputPos && textInputScreenPos && (
+        <input
+          ref={inputRef}
+          type="text"
+          value={textInput}
+          onChange={(e) => setTextInput(e.target.value)}
+          onKeyDown={handleTextSubmit}
+          style={{
+            position: 'fixed',
+            left: `${textInputScreenPos.x}px`,
+            top: `${textInputScreenPos.y}px`,
+            border: '1px solid #667eea',
+            borderRadius: '4px',
+            padding: '4px 8px',
+            fontSize: '24px',
+            fontFamily: 'Arial',
+            outline: 'none',
+            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+            zIndex: 1000,
+          }}
+        />
+      )}
     </div>
   )
 }
