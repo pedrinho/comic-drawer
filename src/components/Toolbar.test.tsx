@@ -44,7 +44,14 @@ describe('Toolbar', () => {
     expect(screen.getByText('🧹')).toBeInTheDocument()
     expect(screen.getByText('⬜')).toBeInTheDocument()
     expect(screen.getByText('⭕')).toBeInTheDocument()
+    expect(screen.getByText('🪣')).toBeInTheDocument()
     expect(screen.getByText('💬')).toBeInTheDocument()
+  })
+
+  it('renders fill tool', () => {
+    render(<Toolbar {...defaultProps} />)
+
+    expect(screen.getByText('Fill')).toBeInTheDocument()
   })
 
   it('renders color picker', () => {

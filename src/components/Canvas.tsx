@@ -80,6 +80,10 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
     // Restore saved data if available
     if (panelData) {
       ctx.putImageData(panelData, 0, 0)
+    } else {
+      // Clear canvas with white if no saved data
+      ctx.fillStyle = 'white'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
     }
 
     // Draw grid on top (always visible)
@@ -100,6 +104,70 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
     }
   }
 
+  const floodFill = (ctx: CanvasRenderingContext2D, x: number, y: number, fillColor: string) => {
+    const canvas = ctx.canvas
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const data = imageData.data
+    const width = canvas.width
+    const height = canvas.height
+
+    // Get target color at the clicked point
+    const clickedIndex = (Math.floor(y) * width + Math.floor(x)) * 4
+    const targetR = data[clickedIndex]
+    const targetG = data[clickedIndex + 1]
+    const targetB = data[clickedIndex + 2]
+
+    // Parse fill color
+    const fillR = parseInt(fillColor.slice(1, 3), 16)
+    const fillG = parseInt(fillColor.slice(3, 5), 16)
+    const fillB = parseInt(fillColor.slice(5, 7), 16)
+
+    // Helper function to check if a pixel matches the target color
+    const matchesTargetColor = (r: number, g: number, b: number) => {
+      const tolerance = 10 // Allow small differences for antialiasing
+      return Math.abs(r - targetR) <= tolerance && 
+             Math.abs(g - targetG) <= tolerance && 
+             Math.abs(b - targetB) <= tolerance
+    }
+
+    // Stack-based flood fill
+    const stack: Array<[number, number]> = [[Math.floor(x), Math.floor(y)]]
+    const visited = new Set<string>()
+
+    while (stack.length > 0) {
+      const [px, py] = stack.pop()!
+      const key = `${px},${py}`
+
+      if (visited.has(key) || px < 0 || px >= width || py < 0 || py >= height) {
+        continue
+      }
+
+      visited.add(key)
+
+      const index = (py * width + px) * 4
+      const r = data[index]
+      const g = data[index + 1]
+      const b = data[index + 2]
+
+      // Fill pixels that match the target color (where we clicked)
+      if (matchesTargetColor(r, g, b)) {
+        // Fill this pixel
+        data[index] = fillR
+        data[index + 1] = fillG
+        data[index + 2] = fillB
+
+        // Add neighbors to stack
+        stack.push([px + 1, py])
+        stack.push([px - 1, py])
+        stack.push([px, py + 1])
+        stack.push([px, py - 1])
+      }
+    }
+
+    // Put the modified image data back
+    ctx.putImageData(imageData, 0, 0)
+  }
+
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     const ctx = canvas?.getContext('2d')
@@ -112,6 +180,18 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
     if (tool === 'pen') {
       ctx.beginPath()
       ctx.moveTo(pos.x, pos.y)
+    } else if (tool === 'fill') {
+      // Fill tool is instant on click
+      floodFill(ctx, pos.x, pos.y, color)
+      
+      // Redraw grid on top after fill
+      drawGrid(ctx)
+      
+      setIsDrawing(false)
+      
+      // Save immediately after fill
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      onCanvasChange(imageData)
     } else if (tool === 'rect' || tool === 'ellipse') {
       // Save the current canvas state for live preview
       savedImageRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height)

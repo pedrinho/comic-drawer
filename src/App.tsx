@@ -5,7 +5,7 @@ import Toolbar from './components/Toolbar'
 import PanelLayout from './components/PanelLayout'
 import PanelLayoutModal from './components/PanelLayoutModal'
 
-export type Tool = 'pen' | 'eraser' | 'rect' | 'ellipse' | 'text'
+export type Tool = 'pen' | 'eraser' | 'rect' | 'ellipse' | 'text' | 'fill'
 
 export interface PanelData {
   id: number

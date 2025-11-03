@@ -14,6 +14,7 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     { name: 'eraser', icon: '🧹', label: 'Eraser' },
     { name: 'rect', icon: '⬜', label: 'Rectangle' },
     { name: 'ellipse', icon: '⭕', label: 'Circle' },
+    { name: 'fill', icon: '🪣', label: 'Fill' },
     { name: 'text', icon: '💬', label: 'Text' },
   ]
 
