@@ -31,8 +31,7 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     ctx.save()
     ctx.strokeStyle = '#667eea'
-    ctx.lineWidth = 2
-    ctx.setLineDash([5, 5])
+    ctx.lineWidth = 3
 
     const totalRows = layout.rows
     let currentY = 0
@@ -43,29 +42,16 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
       const columnWidth = 1200 / columnsInRow
       let currentX = 0
 
-      // Draw horizontal lines (including borders)
-      ctx.beginPath()
-      ctx.moveTo(0, currentY)
-      ctx.lineTo(1200, currentY)
-      ctx.stroke()
-
-      // Draw vertical lines for this row (including borders)
+      // Draw rectangle for each cell in the row
       for (let col = 0; col < columnsInRow; col++) {
         ctx.beginPath()
-        ctx.moveTo(currentX, currentY)
-        ctx.lineTo(currentX, currentY + rowHeight)
+        ctx.rect(currentX, currentY, columnWidth, rowHeight)
         ctx.stroke()
         currentX += columnWidth
       }
 
       currentY += rowHeight
     }
-
-    // Draw bottom border
-    ctx.beginPath()
-    ctx.moveTo(0, currentY)
-    ctx.lineTo(1200, currentY)
-    ctx.stroke()
 
     ctx.restore()
   }, [layout])
