@@ -34,23 +34,27 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
     ctx.lineWidth = 3
 
     const totalRows = layout.rows
-    let currentY = 0
+    const gutter = 4 // Space between panels
+    const canvasWidth = 1200
+    const canvasHeight = 800
 
     for (let row = 0; row < totalRows; row++) {
       const columnsInRow = layout.columns[row] || 1
-      const rowHeight = 800 / totalRows
-      const columnWidth = 1200 / columnsInRow
-      let currentX = 0
+      const rowHeight = canvasHeight / totalRows
+      const columnWidth = canvasWidth / columnsInRow
+      const panelWidth = columnWidth - gutter
+      const panelHeight = rowHeight - gutter
+      
+      let currentX = gutter / 2
+      const currentY = (row * rowHeight) + gutter / 2
 
-      // Draw rectangle for each cell in the row
+      // Draw rectangle for each cell in the row with gutters
       for (let col = 0; col < columnsInRow; col++) {
         ctx.beginPath()
-        ctx.rect(currentX, currentY, columnWidth, rowHeight)
+        ctx.rect(currentX, currentY, panelWidth, panelHeight)
         ctx.stroke()
         currentX += columnWidth
       }
-
-      currentY += rowHeight
     }
 
     ctx.restore()
