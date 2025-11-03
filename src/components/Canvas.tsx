@@ -1,20 +1,20 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Tool } from '../App'
+import { Tool, Shape } from '../App'
 import './Canvas.css'
 
 interface CanvasProps {
   tool: Tool
+  shape?: Shape
   color: string
   panelData: ImageData | null
   layout: { rows: number; columns: number[] }
   onCanvasChange: (data: ImageData) => void
 }
 
-export default function Canvas({ tool, color, panelData, layout, onCanvasChange }: CanvasProps) {
+export default function Canvas({ tool, shape, color, panelData, layout, onCanvasChange }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [startPos, setStartPos] = useState({ x: 0, y: 0 })
-  const lastSaveRef = useRef<number>(0)
   const savedImageRef = useRef<ImageData | null>(null)
   const [textInputPos, setTextInputPos] = useState<{ x: number; y: number } | null>(null)
   const [textInputScreenPos, setTextInputScreenPos] = useState<{ x: number; y: number } | null>(null)
@@ -40,8 +40,6 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
 
     for (let row = 0; row < totalRows; row++) {
       const columnsInRow = layout.columns[row] || 1
-      const rowHeight = canvasHeight / totalRows
-      const columnWidth = canvasWidth / columnsInRow
       
       // Calculate spacing: gutter on each side + gutters between cells
       const totalVerticalGutters = gutter * 2 + (totalRows - 1) * gutter
@@ -209,10 +207,161 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
       setTextInput('')
       setIsDrawing(false)
       setTimeout(() => inputRef.current?.focus(), 0)
-    } else if (tool === 'rect' || tool === 'ellipse' || tool === 'balloon') {
+    } else if (tool === 'shapes' || tool === 'balloon') {
       // Save the current canvas state for live preview
       savedImageRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height)
     }
+  }
+
+  const drawShape = (ctx: CanvasRenderingContext2D, shape: Shape, startX: number, startY: number, endX: number, endY: number) => {
+    const width = endX - startX
+    const height = endY - startY
+    const centerX = (startX + endX) / 2
+    const centerY = (startY + endY) / 2
+    const radiusX = Math.abs(width) / 2
+    const radiusY = Math.abs(height) / 2
+
+    ctx.beginPath()
+    switch (shape) {
+      case 'rectangle':
+        ctx.rect(startX, startY, width, height)
+        break
+      case 'circle':
+        ctx.ellipse(centerX, centerY, Math.min(radiusX, radiusY), Math.min(radiusX, radiusY), 0, 0, 2 * Math.PI)
+        break
+      case 'triangle':
+        ctx.moveTo(centerX, startY)
+        ctx.lineTo(startX, endY)
+        ctx.lineTo(endX, endY)
+        ctx.closePath()
+        break
+      case 'star':
+        const spikes = 5
+        const outerRadius = Math.min(radiusX, radiusY)
+        const innerRadius = outerRadius * 0.5
+        for (let i = 0; i < spikes * 2; i++) {
+          const radius = i % 2 === 0 ? outerRadius : innerRadius
+          const angle = (i * Math.PI) / spikes - Math.PI / 2
+          const x = centerX + radius * Math.cos(angle)
+          const y = centerY + radius * Math.sin(angle)
+          if (i === 0) ctx.moveTo(x, y)
+          else ctx.lineTo(x, y)
+        }
+        ctx.closePath()
+        break
+      case 'heart':
+        const heartSize = Math.min(radiusX, radiusY)
+        // Start at top center
+        ctx.moveTo(centerX, centerY)
+        // Left lobe
+        ctx.bezierCurveTo(
+          centerX, centerY - heartSize * 0.25,
+          centerX - heartSize * 0.25, centerY - heartSize * 0.5,
+          centerX - heartSize * 0.5, centerY - heartSize * 0.5
+        )
+        ctx.bezierCurveTo(
+          centerX - heartSize * 0.75, centerY - heartSize * 0.5,
+          centerX - heartSize * 0.75, centerY,
+          centerX - heartSize * 0.5, centerY + heartSize * 0.25
+        )
+        // Bottom point
+        ctx.bezierCurveTo(
+          centerX - heartSize * 0.25, centerY + heartSize * 0.5,
+          centerX, centerY + heartSize * 0.6,
+          centerX, centerY + heartSize * 0.6
+        )
+        // Right lobe
+        ctx.bezierCurveTo(
+          centerX, centerY + heartSize * 0.6,
+          centerX + heartSize * 0.25, centerY + heartSize * 0.5,
+          centerX + heartSize * 0.5, centerY + heartSize * 0.25
+        )
+        ctx.bezierCurveTo(
+          centerX + heartSize * 0.75, centerY,
+          centerX + heartSize * 0.75, centerY - heartSize * 0.5,
+          centerX + heartSize * 0.5, centerY - heartSize * 0.5
+        )
+        ctx.bezierCurveTo(
+          centerX + heartSize * 0.25, centerY - heartSize * 0.5,
+          centerX, centerY - heartSize * 0.25,
+          centerX, centerY
+        )
+        ctx.closePath()
+        break
+      case 'diamond':
+        ctx.moveTo(centerX, startY)
+        ctx.lineTo(endX, centerY)
+        ctx.lineTo(centerX, endY)
+        ctx.lineTo(startX, centerY)
+        ctx.closePath()
+        break
+      case 'hexagon':
+        for (let i = 0; i < 6; i++) {
+          const angle = (i * Math.PI) / 3
+          const x = centerX + radiusX * Math.cos(angle)
+          const y = centerY + radiusY * Math.sin(angle)
+          if (i === 0) ctx.moveTo(x, y)
+          else ctx.lineTo(x, y)
+        }
+        ctx.closePath()
+        break
+      case 'pentagon':
+        for (let i = 0; i < 5; i++) {
+          const angle = (i * 2 * Math.PI) / 5 - Math.PI / 2
+          const x = centerX + radiusX * Math.cos(angle)
+          const y = centerY + radiusY * Math.sin(angle)
+          if (i === 0) ctx.moveTo(x, y)
+          else ctx.lineTo(x, y)
+        }
+        ctx.closePath()
+        break
+      case 'arrow':
+        ctx.moveTo(startX, centerY)
+        ctx.lineTo(endX - radiusX * 0.3, centerY)
+        ctx.lineTo(endX - radiusX * 0.3, startY)
+        ctx.lineTo(endX, centerY)
+        ctx.lineTo(endX - radiusX * 0.3, endY)
+        ctx.lineTo(endX - radiusX * 0.3, centerY)
+        ctx.closePath()
+        break
+      case 'cross':
+        const armWidth = Math.min(radiusX, radiusY) * 0.2
+        ctx.moveTo(centerX - armWidth, startY)
+        ctx.lineTo(centerX + armWidth, startY)
+        ctx.lineTo(centerX + armWidth, centerY - armWidth)
+        ctx.lineTo(endX, centerY - armWidth)
+        ctx.lineTo(endX, centerY + armWidth)
+        ctx.lineTo(centerX + armWidth, centerY + armWidth)
+        ctx.lineTo(centerX + armWidth, endY)
+        ctx.lineTo(centerX - armWidth, endY)
+        ctx.lineTo(centerX - armWidth, centerY + armWidth)
+        ctx.lineTo(startX, centerY + armWidth)
+        ctx.lineTo(startX, centerY - armWidth)
+        ctx.lineTo(centerX - armWidth, centerY - armWidth)
+        ctx.closePath()
+        break
+      case 'heptagon':
+        for (let i = 0; i < 7; i++) {
+          const angle = (i * 2 * Math.PI) / 7 - Math.PI / 2
+          const x = centerX + radiusX * Math.cos(angle)
+          const y = centerY + radiusY * Math.sin(angle)
+          if (i === 0) ctx.moveTo(x, y)
+          else ctx.lineTo(x, y)
+        }
+        ctx.closePath()
+        break
+      case 'octagon':
+        for (let i = 0; i < 8; i++) {
+          const angle = (i * Math.PI) / 4
+          const x = centerX + radiusX * Math.cos(angle)
+          const y = centerY + radiusY * Math.sin(angle)
+          if (i === 0) ctx.moveTo(x, y)
+          else ctx.lineTo(x, y)
+        }
+        ctx.closePath()
+        break
+    }
+    ctx.stroke()
   }
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -234,20 +383,16 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
       ctx.lineTo(pos.x, pos.y)
       ctx.stroke()
       ctx.restore()
-    } else if (tool === 'rect' || tool === 'ellipse' || tool === 'balloon') {
+    } else if (tool === 'shapes' || tool === 'balloon') {
       // Restore saved canvas and draw preview
       if (savedImageRef.current) {
         ctx.putImageData(savedImageRef.current, 0, 0)
       }
       drawGrid(ctx)
       
-      if (tool === 'rect') {
-        ctx.beginPath()
-        const width = pos.x - startPos.x
-        const height = pos.y - startPos.y
-        ctx.rect(startPos.x, startPos.y, width, height)
-        ctx.stroke()
-      } else if (tool === 'ellipse') {
+      if (tool === 'shapes' && shape) {
+        drawShape(ctx, shape, startPos.x, startPos.y, pos.x, pos.y)
+      } else if (tool === 'balloon') {
         ctx.beginPath()
         const radiusX = Math.abs(pos.x - startPos.x) / 2
         const radiusY = Math.abs(pos.y - startPos.y) / 2
@@ -255,25 +400,17 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
         const centerY = (startPos.y + pos.y) / 2
         ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI)
         ctx.stroke()
-    } else if (tool === 'balloon') {
-      ctx.beginPath()
-      const radiusX = Math.abs(pos.x - startPos.x) / 2
-      const radiusY = Math.abs(pos.y - startPos.y) / 2
-      const centerX = (startPos.x + pos.x) / 2
-      const centerY = (startPos.y + pos.y) / 2
-      ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI)
-      ctx.stroke()
-      
-      // Draw balloon tail (small triangle pointing down)
-      const tailY = centerY + radiusY
-      ctx.beginPath()
-      ctx.moveTo(centerX, tailY)
-      ctx.lineTo(centerX - 15, tailY + 20)
-      ctx.lineTo(centerX + 15, tailY + 20)
-      ctx.closePath()
-      ctx.fillStyle = color
-      ctx.fill()
-      ctx.stroke()
+        
+        // Draw balloon tail (small triangle pointing down)
+        const tailY = centerY + radiusY
+        ctx.beginPath()
+        ctx.moveTo(centerX, tailY)
+        ctx.lineTo(centerX - 15, tailY + 20)
+        ctx.lineTo(centerX + 15, tailY + 20)
+        ctx.closePath()
+        ctx.fillStyle = color
+        ctx.fill()
+        ctx.stroke()
       }
     }
   }
@@ -287,20 +424,8 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
 
     const pos = getMousePos(e)
 
-    if (tool === 'rect') {
-      ctx.beginPath()
-      const width = pos.x - startPos.x
-      const height = pos.y - startPos.y
-      ctx.rect(startPos.x, startPos.y, width, height)
-      ctx.stroke()
-    } else if (tool === 'ellipse') {
-      ctx.beginPath()
-      const radiusX = Math.abs(pos.x - startPos.x) / 2
-      const radiusY = Math.abs(pos.y - startPos.y) / 2
-      const centerX = (startPos.x + pos.x) / 2
-      const centerY = (startPos.y + pos.y) / 2
-      ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI)
-      ctx.stroke()
+    if (tool === 'shapes' && shape) {
+      drawShape(ctx, shape, startPos.x, startPos.y, pos.x, pos.y)
     } else if (tool === 'balloon') {
       // Draw balloon oval
       ctx.beginPath()
@@ -425,3 +550,4 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
     </div>
   )
 }
+

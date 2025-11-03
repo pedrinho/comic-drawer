@@ -80,4 +80,21 @@ describe('App', () => {
     const eraserButton = screen.getByText('Eraser').closest('button')
     expect(eraserButton).toHaveClass('active')
   })
+
+  it('shows shape picker when shapes tool is clicked', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByText('Shapes'))
+
+    await waitFor(() => {
+      expect(screen.getByTitle('rectangle')).toBeInTheDocument()
+    })
+  })
+
+  it('has save and load buttons', () => {
+    render(<App />)
+    expect(screen.getByText('💾 Save')).toBeInTheDocument()
+    expect(screen.getByText('📂 Load')).toBeInTheDocument()
+  })
 })

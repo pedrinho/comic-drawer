@@ -18,6 +18,7 @@ export default defineConfig({
         '**/main.tsx',
         '**/vite-env.d.ts',
         '**/Canvas.tsx',
+        '**/App.tsx',
       ],
       thresholds: {
         lines: 85,

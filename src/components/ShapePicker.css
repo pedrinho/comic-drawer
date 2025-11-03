@@ -1,0 +1,33 @@
+.shape-picker-inline {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  padding: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.shape-btn-inline {
+  aspect-ratio: 1;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  padding: 0;
+}
+
+.shape-btn-inline:hover {
+  border-color: #667eea;
+  background: #eef2ff;
+  transform: scale(1.05);
+}
+
+.shape-btn-inline.selected {
+  border-color: #667eea;
+  background: #eef2ff;
+}
+

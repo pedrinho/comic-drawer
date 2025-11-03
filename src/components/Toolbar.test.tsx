@@ -9,6 +9,8 @@ describe('Toolbar', () => {
     onToolChange: vi.fn(),
     color: '#000000',
     onColorChange: vi.fn(),
+    selectedShape: 'rectangle' as const,
+    onSelectShape: vi.fn(),
   }
 
   it('renders all tools', () => {
@@ -16,8 +18,7 @@ describe('Toolbar', () => {
 
     expect(screen.getByText('Pen')).toBeInTheDocument()
     expect(screen.getByText('Eraser')).toBeInTheDocument()
-    expect(screen.getByText('Rectangle')).toBeInTheDocument()
-    expect(screen.getByText('Circle')).toBeInTheDocument()
+    expect(screen.getByText('Shapes')).toBeInTheDocument()
     expect(screen.getByText('Text')).toBeInTheDocument()
     expect(screen.getByText('Balloon')).toBeInTheDocument()
   })
@@ -43,8 +44,7 @@ describe('Toolbar', () => {
 
     expect(screen.getByText('✏️')).toBeInTheDocument()
     expect(screen.getByText('🧹')).toBeInTheDocument()
-    expect(screen.getByText('⬜')).toBeInTheDocument()
-    expect(screen.getByText('⭕')).toBeInTheDocument()
+    expect(screen.getByText('🔷')).toBeInTheDocument()
     expect(screen.getByText('🪣')).toBeInTheDocument()
     expect(screen.getByText('💬')).toBeInTheDocument()
     expect(screen.getByText('💭')).toBeInTheDocument()

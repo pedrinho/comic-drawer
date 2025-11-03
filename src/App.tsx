@@ -5,7 +5,8 @@ import Toolbar from './components/Toolbar'
 import PanelLayout from './components/PanelLayout'
 import PanelLayoutModal from './components/PanelLayoutModal'
 
-export type Tool = 'pen' | 'eraser' | 'rect' | 'ellipse' | 'text' | 'fill' | 'balloon'
+export type Tool = 'pen' | 'eraser' | 'shapes' | 'text' | 'fill' | 'balloon'
+export type Shape = 'rectangle' | 'circle' | 'triangle' | 'star' | 'heart' | 'diamond' | 'hexagon' | 'pentagon' | 'arrow' | 'cross' | 'heptagon' | 'octagon'
 
 export interface PanelData {
   id: number
@@ -32,6 +33,7 @@ interface ComicFile {
 
 function App() {
   const [currentTool, setCurrentTool] = useState<Tool>('pen')
+  const [selectedShape, setSelectedShape] = useState<Shape>('rectangle')
   const [selectedColor, setSelectedColor] = useState<string>('#000000')
   const [selectedPanel, setSelectedPanel] = useState<number>(0)
   const [panels, setPanels] = useState<PanelData[]>([
@@ -172,6 +174,8 @@ function App() {
           onToolChange={setCurrentTool}
           color={selectedColor}
           onColorChange={setSelectedColor}
+          selectedShape={selectedShape}
+          onSelectShape={setSelectedShape}
         />
         <PanelLayout 
           panels={panels}
@@ -181,6 +185,7 @@ function App() {
         />
         <Canvas 
           tool={currentTool} 
+          shape={selectedShape}
           color={selectedColor}
           panelData={panels[selectedPanel].data}
           layout={panels[selectedPanel].layout}

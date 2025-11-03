@@ -4,9 +4,12 @@ A web-based application for creating comics! Draw panels, add dialogue, and let 
 
 ## Features
 
-- ✏️ **Drawing Tools**: Pen, eraser, shapes, and text
-- 📐 **Panel Layout**: Multiple comic panels
-- 💾 **Save & Export**: Download your comics
+- ✏️ **Drawing Tools**: Pen, eraser, and text
+- 🔷 **Shapes**: 10 different shapes (rectangle, circle, triangle, star, heart, diamond, hexagon, pentagon, arrow, cross)
+- 💬 **Speech Balloons**: Add dialogue bubbles with text
+- 🪣 **Fill Tool**: Fill shapes and areas with color
+- 📐 **Panel Layout**: Customizable comic panel layouts
+- 💾 **Save & Load**: Save your comics in .cd format and load them later
 - 🎨 **Beautiful UI**: Modern, kid-friendly interface
 
 ## Getting Started
@@ -43,13 +46,18 @@ Run tests with coverage:
 npm run test:coverage
 ```
 
-Current coverage: **96.62%** (excluding Canvas drawing logic)
+Current coverage: **97.2%** (excluding Canvas drawing logic and DOM APIs)
+
+## Credits
+
+This project is inspired by my sons, Pedro and Paulo ❤️ They love to paint comics and that's why I started to develop this project.
+
+This project is almost 100% developed by Cursor (AI pair programming assistant).
 
 ## Future Enhancements
 
 - Layer support
 - Undo/redo
-- More shapes and tools
 - Cloud save
 - Comic templates
 - Export to PDF
