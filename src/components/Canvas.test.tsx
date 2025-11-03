@@ -108,4 +108,20 @@ describe('Canvas', () => {
     const canvas = document.querySelector('canvas')
     expect(canvas).toBeInTheDocument()
   })
+
+  it('renders canvas with balloon tool', () => {
+    const onCanvasChange = vi.fn()
+    render(
+      <Canvas
+        tool="balloon"
+        color="#000000"
+        panelData={null}
+        layout={{ rows: 1, columns: [1] }}
+        onCanvasChange={onCanvasChange}
+      />
+    )
+
+    const canvas = document.querySelector('canvas')
+    expect(canvas).toBeInTheDocument()
+  })
 })

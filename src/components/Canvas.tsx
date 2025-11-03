@@ -20,6 +20,13 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
   const [textInputScreenPos, setTextInputScreenPos] = useState<{ x: number; y: number } | null>(null)
   const [textInput, setTextInput] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const [balloonOval, setBalloonOval] = useState<{ 
+    centerX: number; 
+    centerY: number; 
+    radiusX: number; 
+    radiusY: number;
+    screenPos: { x: number; y: number };
+  } | null>(null)
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     ctx.save()
@@ -208,7 +215,7 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
       setTextInput('')
       setIsDrawing(false)
       setTimeout(() => inputRef.current?.focus(), 0)
-    } else if (tool === 'rect' || tool === 'ellipse') {
+    } else if (tool === 'rect' || tool === 'ellipse' || tool === 'balloon') {
       // Save the current canvas state for live preview
       savedImageRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height)
     }
@@ -233,7 +240,7 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
       ctx.lineTo(pos.x, pos.y)
       ctx.stroke()
       ctx.restore()
-    } else if (tool === 'rect' || tool === 'ellipse') {
+    } else if (tool === 'rect' || tool === 'ellipse' || tool === 'balloon') {
       // Restore saved canvas and draw preview
       if (savedImageRef.current) {
         ctx.putImageData(savedImageRef.current, 0, 0)
@@ -254,6 +261,25 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
         const centerY = (startPos.y + pos.y) / 2
         ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI)
         ctx.stroke()
+    } else if (tool === 'balloon') {
+      ctx.beginPath()
+      const radiusX = Math.abs(pos.x - startPos.x) / 2
+      const radiusY = Math.abs(pos.y - startPos.y) / 2
+      const centerX = (startPos.x + pos.x) / 2
+      const centerY = (startPos.y + pos.y) / 2
+      ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI)
+      ctx.stroke()
+      
+      // Draw balloon tail (small triangle pointing down)
+      const tailY = centerY + radiusY
+      ctx.beginPath()
+      ctx.moveTo(centerX, tailY)
+      ctx.lineTo(centerX - 15, tailY + 20)
+      ctx.lineTo(centerX + 15, tailY + 20)
+      ctx.closePath()
+      ctx.fillStyle = color
+      ctx.fill()
+      ctx.stroke()
       }
     }
   }
@@ -281,6 +307,43 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
       const centerY = (startPos.y + pos.y) / 2
       ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI)
       ctx.stroke()
+    } else if (tool === 'balloon') {
+      // Draw balloon oval
+      ctx.beginPath()
+      const radiusX = Math.abs(pos.x - startPos.x) / 2
+      const radiusY = Math.abs(pos.y - startPos.y) / 2
+      const centerX = (startPos.x + pos.x) / 2
+      const centerY = (startPos.y + pos.y) / 2
+      ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI)
+      ctx.stroke()
+      
+      // Draw balloon tail (small triangle pointing down)
+      const tailY = centerY + radiusY
+      ctx.beginPath()
+      ctx.moveTo(centerX, tailY)
+      ctx.lineTo(centerX - 15, tailY + 20)
+      ctx.lineTo(centerX + 15, tailY + 20)
+      ctx.closePath()
+      ctx.fillStyle = color
+      ctx.fill()
+      ctx.stroke()
+      
+      // Store balloon oval info and show text input
+      const rect = canvas.getBoundingClientRect()
+      const screenPos = {
+        x: rect.left + (centerX * rect.width / canvas.width),
+        y: rect.top + (centerY * rect.height / canvas.height) - 12 // Offset up for text baseline
+      }
+      setBalloonOval({
+        centerX,
+        centerY,
+        radiusX,
+        radiusY,
+        screenPos
+      })
+      setTextInputPos({ x: centerX, y: centerY })
+      setTextInputScreenPos(screenPos)
+      setTimeout(() => inputRef.current?.focus(), 0)
     }
 
     setIsDrawing(false)
@@ -301,7 +364,17 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
       // Draw the text on canvas
       ctx.fillStyle = color
       ctx.font = '24px Arial'
-      ctx.fillText(textInput, textInputPos.x, textInputPos.y)
+      
+      // If this is balloon text, center it in the oval
+      if (balloonOval) {
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(textInput, balloonOval.centerX, balloonOval.centerY)
+        ctx.textAlign = 'left'
+        ctx.textBaseline = 'alphabetic'
+      } else {
+        ctx.fillText(textInput, textInputPos.x, textInputPos.y)
+      }
 
       // Redraw grid on top
       drawGrid(ctx)
@@ -314,10 +387,12 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
       setTextInputPos(null)
       setTextInputScreenPos(null)
       setTextInput('')
+      setBalloonOval(null)
     } else if (e.key === 'Escape') {
       setTextInputPos(null)
       setTextInputScreenPos(null)
       setTextInput('')
+      setBalloonOval(null)
     }
   }
 

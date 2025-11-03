@@ -19,6 +19,7 @@ describe('Toolbar', () => {
     expect(screen.getByText('Rectangle')).toBeInTheDocument()
     expect(screen.getByText('Circle')).toBeInTheDocument()
     expect(screen.getByText('Text')).toBeInTheDocument()
+    expect(screen.getByText('Balloon')).toBeInTheDocument()
   })
 
   it('highlights the current tool', () => {
@@ -46,6 +47,7 @@ describe('Toolbar', () => {
     expect(screen.getByText('⭕')).toBeInTheDocument()
     expect(screen.getByText('🪣')).toBeInTheDocument()
     expect(screen.getByText('💬')).toBeInTheDocument()
+    expect(screen.getByText('💭')).toBeInTheDocument()
   })
 
   it('renders fill tool', () => {

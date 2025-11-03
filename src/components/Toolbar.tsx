@@ -16,6 +16,7 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     { name: 'ellipse', icon: '⭕', label: 'Circle' },
     { name: 'fill', icon: '🪣', label: 'Fill' },
     { name: 'text', icon: '💬', label: 'Text' },
+    { name: 'balloon', icon: '💭', label: 'Balloon' },
   ]
 
   return (
