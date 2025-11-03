@@ -30,11 +30,11 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     ctx.save()
-    ctx.strokeStyle = '#667eea'
+    ctx.strokeStyle = '#000000'
     ctx.lineWidth = 3
 
     const totalRows = layout.rows
-    const gutter = 4 // Space between panels
+    const gutter = 12 // Space between panels (and around edges)
     const canvasWidth = 1200
     const canvasHeight = 800
 
@@ -42,18 +42,22 @@ export default function Canvas({ tool, color, panelData, layout, onCanvasChange 
       const columnsInRow = layout.columns[row] || 1
       const rowHeight = canvasHeight / totalRows
       const columnWidth = canvasWidth / columnsInRow
-      const panelWidth = columnWidth - gutter
-      const panelHeight = rowHeight - gutter
       
-      let currentX = gutter / 2
-      const currentY = (row * rowHeight) + gutter / 2
+      // Calculate spacing: gutter on each side + gutters between cells
+      const totalVerticalGutters = gutter * 2 + (totalRows - 1) * gutter
+      const totalHorizontalGutters = gutter * 2 + (columnsInRow - 1) * gutter
+      const panelHeight = (canvasHeight - totalVerticalGutters) / totalRows
+      const panelWidth = (canvasWidth - totalHorizontalGutters) / columnsInRow
+      
+      let currentX = gutter
+      const currentY = gutter + (row * (panelHeight + gutter))
 
-      // Draw rectangle for each cell in the row with gutters
+      // Draw rectangle for each cell in the row
       for (let col = 0; col < columnsInRow; col++) {
         ctx.beginPath()
         ctx.rect(currentX, currentY, panelWidth, panelHeight)
         ctx.stroke()
-        currentX += columnWidth
+        currentX += panelWidth + gutter
       }
     }
 
