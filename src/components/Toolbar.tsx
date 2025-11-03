@@ -1,7 +1,8 @@
-import { Tool, Shape } from '../App'
+import { Tool, Shape, PenType } from '../App'
 import './Toolbar.css'
-import React from 'react'
+import React, { useState } from 'react'
 import ShapePicker from './ShapePicker'
+import PenPicker from './PenPicker'
 
 interface ToolbarProps {
   currentTool: Tool
@@ -10,9 +11,13 @@ interface ToolbarProps {
   onColorChange: (color: string) => void
   selectedShape: Shape
   onSelectShape: (shape: Shape) => void
+  selectedPenType: PenType
+  onSelectPenType: (penType: PenType) => void
 }
 
-export default function Toolbar({ currentTool, onToolChange, color, onColorChange, selectedShape, onSelectShape }: ToolbarProps) {
+export default function Toolbar({ currentTool, onToolChange, color, onColorChange, selectedShape, onSelectShape, selectedPenType, onSelectPenType }: ToolbarProps) {
+  const [showPenSubmenu, setShowPenSubmenu] = useState(false)
+  const [showShapesSubmenu, setShowShapesSubmenu] = useState(false)
   const tools: { name: Tool; icon: string; label: string }[] = [
     { name: 'pen', icon: '✏️', label: 'Pen' },
     { name: 'eraser', icon: '🧹', label: 'Eraser' },
@@ -24,10 +29,32 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
 
   const handleShapeButtonClick = () => {
     if (currentTool === 'shapes') {
-      onToolChange('pen')
+      // Toggle submenu
+      setShowShapesSubmenu(!showShapesSubmenu)
+      setShowPenSubmenu(false)
     } else {
       onToolChange('shapes')
+      setShowShapesSubmenu(true)
+      setShowPenSubmenu(false)
     }
+  }
+
+  const handlePenButtonClick = () => {
+    if (currentTool === 'pen') {
+      // Toggle submenu
+      setShowPenSubmenu(!showPenSubmenu)
+      setShowShapesSubmenu(false)
+    } else {
+      onToolChange('pen')
+      setShowPenSubmenu(true)
+      setShowShapesSubmenu(false)
+    }
+  }
+
+  const handleOtherToolClick = (tool: Tool) => {
+    onToolChange(tool)
+    setShowPenSubmenu(false)
+    setShowShapesSubmenu(false)
   }
 
   return (
@@ -36,13 +63,20 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
         <React.Fragment key={tool.name}>
           <button
             className={`tool-btn ${currentTool === tool.name ? 'active' : ''}`}
-            onClick={tool.name === 'shapes' ? handleShapeButtonClick : () => onToolChange(tool.name)}
+            onClick={tool.name === 'shapes' ? handleShapeButtonClick : tool.name === 'pen' ? handlePenButtonClick : () => handleOtherToolClick(tool.name)}
             title={tool.label}
           >
             <span className="tool-icon">{tool.icon}</span>
             <span className="tool-label">{tool.label}</span>
           </button>
-          {tool.name === 'shapes' && currentTool === 'shapes' && (
+          {tool.name === 'pen' && currentTool === 'pen' && showPenSubmenu && (
+            <PenPicker
+              isOpen={true}
+              selectedPenType={selectedPenType}
+              onSelectPenType={onSelectPenType}
+            />
+          )}
+          {tool.name === 'shapes' && currentTool === 'shapes' && showShapesSubmenu && (
             <ShapePicker
               isOpen={true}
               selectedShape={selectedShape}

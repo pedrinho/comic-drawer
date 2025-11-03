@@ -11,6 +11,8 @@ describe('Toolbar', () => {
     onColorChange: vi.fn(),
     selectedShape: 'rectangle' as const,
     onSelectShape: vi.fn(),
+    selectedPenType: 'medium' as const,
+    onSelectPenType: vi.fn(),
   }
 
   it('renders all tools', () => {
@@ -42,7 +44,8 @@ describe('Toolbar', () => {
   it('shows correct tool icons', () => {
     render(<Toolbar {...defaultProps} />)
 
-    expect(screen.getByText('✏️')).toBeInTheDocument()
+    const toolIcons = screen.getAllByText('✏️')
+    expect(toolIcons.length).toBeGreaterThan(0)
     expect(screen.getByText('🧹')).toBeInTheDocument()
     expect(screen.getByText('🔷')).toBeInTheDocument()
     expect(screen.getByText('🪣')).toBeInTheDocument()

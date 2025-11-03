@@ -1,17 +1,31 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Tool, Shape } from '../App'
+import { Tool, Shape, PenType } from '../App'
 import './Canvas.css'
 
 interface CanvasProps {
   tool: Tool
   shape?: Shape
+  penType?: PenType
   color: string
   panelData: ImageData | null
   layout: { rows: number; columns: number[] }
   onCanvasChange: (data: ImageData) => void
 }
 
-export default function Canvas({ tool, shape, color, panelData, layout, onCanvasChange }: CanvasProps) {
+const getPenWidth = (penType?: PenType): number => {
+  if (!penType) return 2
+  switch (penType) {
+    case 'fine': return 1
+    case 'small': return 2
+    case 'medium': return 4
+    case 'large': return 6
+    case 'thick': return 8
+    case 'verythick': return 12
+    default: return 2
+  }
+}
+
+export default function Canvas({ tool, shape, penType, color, panelData, layout, onCanvasChange }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [startPos, setStartPos] = useState({ x: 0, y: 0 })
@@ -78,7 +92,7 @@ export default function Canvas({ tool, shape, color, panelData, layout, onCanvas
     ctx.lineJoin = 'round'
     ctx.strokeStyle = color
     ctx.fillStyle = color
-    ctx.lineWidth = 2
+    ctx.lineWidth = getPenWidth(penType)
 
     // Restore saved data if available
     if (panelData) {
@@ -91,7 +105,7 @@ export default function Canvas({ tool, shape, color, panelData, layout, onCanvas
 
     // Draw grid on top (always visible)
     drawGrid(ctx)
-  }, [panelData, layout, drawGrid, color])
+  }, [panelData, layout, drawGrid, color, penType])
 
   const getMousePos = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current

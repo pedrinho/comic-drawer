@@ -92,6 +92,17 @@ describe('App', () => {
     })
   })
 
+  it('shows pen picker when pen tool is clicked', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByText('Pen'))
+
+    await waitFor(() => {
+      expect(screen.getByTitle('Fine')).toBeInTheDocument()
+    })
+  })
+
   it('has save and load buttons', () => {
     render(<App />)
     expect(screen.getByText('💾 Save')).toBeInTheDocument()
