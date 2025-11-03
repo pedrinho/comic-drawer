@@ -157,10 +157,10 @@ function App() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h1>🎨 Comic Drawer</h1>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button onClick={handleSave} style={{ padding: '0.5rem 1rem', fontSize: '1rem', cursor: 'pointer' }}>
+            <button onClick={handleSave} style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', cursor: 'pointer' }}>
               💾 Save
             </button>
-            <button onClick={handleLoad} style={{ padding: '0.5rem 1rem', fontSize: '1rem', cursor: 'pointer' }}>
+            <button onClick={handleLoad} style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', cursor: 'pointer' }}>
               📂 Load
             </button>
           </div>

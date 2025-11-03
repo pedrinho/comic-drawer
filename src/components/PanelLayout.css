@@ -21,13 +21,14 @@
 }
 
 .panel {
-  padding: 1rem;
+  padding: 0.5rem;
   border: 2px solid #e0e0e0;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
   background: white;
   text-align: center;
+  font-size: 0.9rem;
 }
 
 .panel:hover {
@@ -36,13 +37,11 @@
 }
 
 .panel.selected {
-  border-color: #667eea;
-  background: #eef2ff;
   font-weight: 600;
 }
 
 .add-panel-btn {
-  padding: 1rem;
+  padding: 0.5rem;
   border: 2px dashed #999;
   border-radius: 8px;
   background: white;
@@ -50,6 +49,7 @@
   transition: all 0.2s ease;
   color: #667eea;
   font-weight: 600;
+  font-size: 0.9rem;
 }
 
 .add-panel-btn:hover {
