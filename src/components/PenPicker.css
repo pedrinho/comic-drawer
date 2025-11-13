@@ -1,9 +1,9 @@
 .pen-picker-inline {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.5rem;
-  padding: 0.5rem;
-  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.4rem 0.25rem 0.25rem;
+  margin-top: 0.35rem;
   width: 100%;
   box-sizing: border-box;
   align-self: stretch;
@@ -16,13 +16,11 @@
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 0.2rem;
-  padding: 0.35rem 0.25rem;
+  justify-content: flex-start;
+  gap: 0.65rem;
+  padding: 0.4rem 0.6rem;
   min-width: 0;
-  height: 3.25rem;
 }
 
 .pen-btn-inline:hover {
@@ -37,16 +35,18 @@
 }
 
 .pen-preview {
-  width: 54%;
+  flex: 1;
+  min-width: 2.75rem;
   border-radius: 999px;
   background: linear-gradient(90deg, #000, #000);
 }
 
 .pen-label {
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   color: #2d3142;
-  text-align: center;
-  line-height: 1;
-  white-space: normal;
+  font-weight: 500;
+  min-width: 3.75rem;
+  line-height: 1.1;
+  white-space: nowrap;
 }
 

@@ -28,11 +28,11 @@ export default function PenPicker({ isOpen, selectedPenType, onSelectPenType }: 
           onClick={() => onSelectPenType(penType.name)}
           title={penType.label}
         >
+          <span className="pen-label">{penType.label}</span>
           <span
             className="pen-preview"
             style={{ height: `${penType.thickness}px` }}
           />
-          <span className="pen-label">{penType.label}</span>
         </button>
       ))}
     </div>
