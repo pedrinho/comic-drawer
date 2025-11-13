@@ -2,6 +2,29 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { Tool, Shape, PenType } from '../App'
 import './Canvas.css'
 
+interface SelectionRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+type SelectionHandle =
+  | 'top-left'
+  | 'top-center'
+  | 'top-right'
+  | 'middle-left'
+  | 'middle-right'
+  | 'bottom-left'
+  | 'bottom-center'
+  | 'bottom-right'
+
+interface ShapeRegion {
+  id: number
+  rect: SelectionRect
+  contentPixelCount: number
+}
+
 interface CanvasProps {
   tool: Tool
   shape?: Shape
@@ -25,11 +48,153 @@ const getPenWidth = (penType?: PenType): number => {
   }
 }
 
+const normalizeRect = (start: { x: number; y: number }, end: { x: number; y: number }): SelectionRect => {
+  const x = Math.min(start.x, end.x)
+  const y = Math.min(start.y, end.y)
+  const width = Math.abs(start.x - end.x)
+  const height = Math.abs(start.y - end.y)
+  return { x, y, width, height }
+}
+
+const pointInRect = (point: { x: number; y: number }, rect: SelectionRect) => {
+  return (
+    point.x >= rect.x &&
+    point.x <= rect.x + rect.width &&
+    point.y >= rect.y &&
+    point.y <= rect.y + rect.height
+  )
+}
+
+const clamp = (value: number, min: number, max: number) => {
+  return Math.min(Math.max(value, min), max)
+}
+
+const MIN_CONTENT_PIXELS = 12
+const CONTENT_RETAIN_RATIO = 0.4
+
+const clampRectToCanvas = (rect: SelectionRect, canvasWidth: number, canvasHeight: number): SelectionRect => {
+  const clampedWidth = Math.min(rect.width, canvasWidth)
+  const clampedHeight = Math.min(rect.height, canvasHeight)
+
+  return {
+    x: clamp(rect.x, 0, Math.max(0, canvasWidth - clampedWidth)),
+    y: clamp(rect.y, 0, Math.max(0, canvasHeight - clampedHeight)),
+    width: clampedWidth,
+    height: clampedHeight,
+  }
+}
+
+const expandRect = (rect: SelectionRect, padding: number, canvasWidth: number, canvasHeight: number): SelectionRect => {
+  const expanded = {
+    x: rect.x - padding,
+    y: rect.y - padding,
+    width: rect.width + padding * 2,
+    height: rect.height + padding * 2,
+  }
+
+  return clampRectToCanvas(expanded, canvasWidth, canvasHeight)
+}
+
+const countContentPixels = (imageData: ImageData) => {
+  const data = imageData.data
+  let count = 0
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i]
+    const g = data[i + 1]
+    const b = data[i + 2]
+    const a = data[i + 3]
+    if (a !== 0 && (r < 250 || g < 250 || b < 250)) {
+      count++
+    }
+  }
+  return count
+}
+
+const imageDataHasContent = (imageData: ImageData) => {
+  return countContentPixels(imageData) > 0
+}
+
+const getHandleAtPoint = (point: { x: number; y: number }, rect: SelectionRect, handleSize = 8): SelectionHandle | null => {
+  const half = handleSize / 2
+  const handles: Array<{ handle: SelectionHandle; x: number; y: number }> = [
+    { handle: 'top-left', x: rect.x, y: rect.y },
+    { handle: 'top-center', x: rect.x + rect.width / 2, y: rect.y },
+    { handle: 'top-right', x: rect.x + rect.width, y: rect.y },
+    { handle: 'middle-left', x: rect.x, y: rect.y + rect.height / 2 },
+    { handle: 'middle-right', x: rect.x + rect.width, y: rect.y + rect.height / 2 },
+    { handle: 'bottom-left', x: rect.x, y: rect.y + rect.height },
+    { handle: 'bottom-center', x: rect.x + rect.width / 2, y: rect.y + rect.height },
+    { handle: 'bottom-right', x: rect.x + rect.width, y: rect.y + rect.height },
+  ]
+
+  for (const handle of handles) {
+    if (
+      point.x >= handle.x - half &&
+      point.x <= handle.x + half &&
+      point.y >= handle.y - half &&
+      point.y <= handle.y + half
+    ) {
+      return handle.handle
+    }
+  }
+
+  return null
+}
+
+const drawSelectionOutline = (ctx: CanvasRenderingContext2D, rect: SelectionRect) => {
+  ctx.save()
+  ctx.strokeStyle = '#4c6ef5'
+  ctx.lineWidth = 1.5
+  ctx.setLineDash([6, 4])
+  ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.width, rect.height)
+  ctx.restore()
+}
+
+const drawSelectionHandles = (ctx: CanvasRenderingContext2D, rect: SelectionRect) => {
+  const handleSize = 8
+  const half = handleSize / 2
+  const positions = [
+    { x: rect.x, y: rect.y },
+    { x: rect.x + rect.width / 2, y: rect.y },
+    { x: rect.x + rect.width, y: rect.y },
+    { x: rect.x, y: rect.y + rect.height / 2 },
+    { x: rect.x + rect.width, y: rect.y + rect.height / 2 },
+    { x: rect.x, y: rect.y + rect.height },
+    { x: rect.x + rect.width / 2, y: rect.y + rect.height },
+    { x: rect.x + rect.width, y: rect.y + rect.height },
+  ]
+
+  ctx.save()
+  ctx.setLineDash([])
+  ctx.fillStyle = '#ffffff'
+  ctx.strokeStyle = '#4c6ef5'
+  ctx.lineWidth = 1
+  positions.forEach((pos) => {
+    ctx.beginPath()
+    ctx.rect(pos.x - half, pos.y - half, handleSize, handleSize)
+    ctx.fill()
+    ctx.stroke()
+  })
+  ctx.restore()
+}
+
 export default function Canvas({ tool, shape, penType, color, panelData, layout, onCanvasChange }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [startPos, setStartPos] = useState({ x: 0, y: 0 })
   const savedImageRef = useRef<ImageData | null>(null)
+  const shapeRegionsRef = useRef<ShapeRegion[]>([])
+  const shapeIdCounterRef = useRef(0)
+  const activeShapeIndexRef = useRef<number | null>(null)
+  const selectionRectRef = useRef<SelectionRect | null>(null)
+  const selectionOriginalImageRef = useRef<ImageData | null>(null)
+  const selectionBaseImageRef = useRef<ImageData | null>(null)
+  const selectionImageRef = useRef<ImageData | null>(null)
+  const isSelectingRef = useRef(false)
+  const isDraggingSelectionRef = useRef(false)
+  const selectionStartRef = useRef({ x: 0, y: 0 })
+  const dragOffsetRef = useRef({ x: 0, y: 0 })
+  const resizeHandleRef = useRef<SelectionHandle | null>(null)
   const [textInputPos, setTextInputPos] = useState<{ x: number; y: number } | null>(null)
   const [textInputScreenPos, setTextInputScreenPos] = useState<{ x: number; y: number } | null>(null)
   const [textInput, setTextInput] = useState('')
@@ -75,6 +240,149 @@ export default function Canvas({ tool, shape, penType, color, panelData, layout,
 
     ctx.restore()
   }, [layout])
+
+  const findShapeIndexAtPoint = useCallback((point: { x: number; y: number }) => {
+    for (let i = shapeRegionsRef.current.length - 1; i >= 0; i--) {
+      const region = shapeRegionsRef.current[i]
+      if (pointInRect(point, region.rect)) {
+        return i
+      }
+    }
+    return -1
+  }, [])
+
+  const prepareShapeSelection = useCallback(
+    (shapeIndex: number, clickPos: { x: number; y: number }): boolean => {
+      const canvas = canvasRef.current
+      const ctx = canvas?.getContext('2d')
+      if (!canvas || !ctx) return false
+
+      const region = shapeRegionsRef.current[shapeIndex]
+      if (!region) return false
+
+      const imageData = ctx.getImageData(region.rect.x, region.rect.y, region.rect.width, region.rect.height)
+      const contentPixels = countContentPixels(imageData)
+      if (
+        contentPixels < MIN_CONTENT_PIXELS ||
+        (region.contentPixelCount > 0 && contentPixels < region.contentPixelCount * CONTENT_RETAIN_RATIO)
+      ) {
+        shapeRegionsRef.current.splice(shapeIndex, 1)
+        selectionRectRef.current = null
+        selectionImageRef.current = null
+        activeShapeIndexRef.current = null
+        selectionBaseImageRef.current = null
+        selectionOriginalImageRef.current = null
+        resizeHandleRef.current = null
+        return false
+      }
+
+      selectionRectRef.current = { ...region.rect }
+      selectionImageRef.current = imageData
+      shapeRegionsRef.current[shapeIndex] = {
+        ...region,
+        contentPixelCount: contentPixels,
+      }
+      selectionOriginalImageRef.current = null
+
+      ctx.save()
+      ctx.fillStyle = 'white'
+      ctx.fillRect(region.rect.x, region.rect.y, region.rect.width, region.rect.height)
+      ctx.restore()
+      drawGrid(ctx)
+
+      selectionBaseImageRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height)
+
+      if (selectionImageRef.current) {
+        ctx.putImageData(selectionImageRef.current, region.rect.x, region.rect.y)
+        drawSelectionOutline(ctx, region.rect)
+        drawSelectionHandles(ctx, region.rect)
+      }
+
+      activeShapeIndexRef.current = shapeIndex
+      isSelectingRef.current = false
+      isDraggingSelectionRef.current = true
+      dragOffsetRef.current = {
+        x: clickPos.x - region.rect.x,
+        y: clickPos.y - region.rect.y,
+      }
+      resizeHandleRef.current = getHandleAtPoint(clickPos, region.rect)
+      return true
+    },
+    [drawGrid]
+  )
+
+  const updateActiveShapeRegion = useCallback(
+    (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, rect: SelectionRect, selectionImage?: ImageData | null) => {
+      const activeIndex = activeShapeIndexRef.current
+      if (typeof activeIndex !== 'number') return
+
+      const region = shapeRegionsRef.current[activeIndex]
+      if (!region) {
+        activeShapeIndexRef.current = null
+        return
+      }
+
+      const clampedRect = clampRectToCanvas(rect, canvas.width, canvas.height)
+      let contentPixels = 0
+
+      if (selectionImage) {
+        contentPixels = countContentPixels(selectionImage)
+      } else {
+        const snapshot = ctx.getImageData(clampedRect.x, clampedRect.y, clampedRect.width, clampedRect.height)
+        contentPixels = countContentPixels(snapshot)
+      }
+
+      shapeRegionsRef.current[activeIndex] = {
+        ...region,
+        rect: clampedRect,
+        contentPixelCount: Math.max(contentPixels, MIN_CONTENT_PIXELS),
+      }
+    },
+    []
+  )
+
+  const commitSelection = useCallback(() => {
+    const canvas = canvasRef.current
+    const ctx = canvas?.getContext('2d')
+    if (!canvas || !ctx) return
+
+    if (!selectionImageRef.current || !selectionRectRef.current || !selectionBaseImageRef.current) {
+      selectionImageRef.current = null
+      selectionBaseImageRef.current = null
+      selectionOriginalImageRef.current = null
+      selectionRectRef.current = null
+      isSelectingRef.current = false
+      isDraggingSelectionRef.current = false
+      activeShapeIndexRef.current = null
+      resizeHandleRef.current = null
+      return
+    }
+
+    ctx.putImageData(selectionBaseImageRef.current, 0, 0)
+    const rect = selectionRectRef.current
+    ctx.putImageData(selectionImageRef.current, rect.x, rect.y)
+    drawGrid(ctx)
+
+    updateActiveShapeRegion(canvas, ctx, rect, selectionImageRef.current)
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    onCanvasChange(imageData)
+
+    selectionImageRef.current = null
+    selectionBaseImageRef.current = null
+    selectionOriginalImageRef.current = null
+    selectionRectRef.current = null
+    isSelectingRef.current = false
+    isDraggingSelectionRef.current = false
+    activeShapeIndexRef.current = null
+    resizeHandleRef.current = null
+  }, [drawGrid, onCanvasChange, updateActiveShapeRegion])
+
+  useEffect(() => {
+    if (tool !== 'select') {
+      commitSelection()
+    }
+  }, [tool, commitSelection])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -191,6 +499,47 @@ export default function Canvas({ tool, shape, penType, color, panelData, layout,
     if (!canvas || !ctx) return
 
     const pos = getMousePos(e)
+
+    if (tool === 'select') {
+      setIsDrawing(true)
+
+      if (
+        selectionRectRef.current &&
+        selectionImageRef.current &&
+        selectionBaseImageRef.current &&
+        pointInRect(pos, selectionRectRef.current)
+      ) {
+        isDraggingSelectionRef.current = true
+        dragOffsetRef.current = {
+          x: pos.x - selectionRectRef.current.x,
+          y: pos.y - selectionRectRef.current.y,
+        }
+        resizeHandleRef.current = getHandleAtPoint(pos, selectionRectRef.current)
+        return
+      }
+
+      const shapeIndex = findShapeIndexAtPoint(pos)
+      if (shapeIndex !== -1) {
+        commitSelection()
+        if (prepareShapeSelection(shapeIndex, pos)) {
+          return
+        }
+      }
+
+      commitSelection()
+      selectionRectRef.current = null
+      selectionImageRef.current = null
+      selectionBaseImageRef.current = null
+      selectionOriginalImageRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      selectionStartRef.current = pos
+      isSelectingRef.current = true
+      activeShapeIndexRef.current = null
+      resizeHandleRef.current = null
+      return
+    }
+
+    commitSelection()
+
     setStartPos(pos)
     setIsDrawing(true)
 
@@ -198,32 +547,26 @@ export default function Canvas({ tool, shape, penType, color, panelData, layout,
       ctx.beginPath()
       ctx.moveTo(pos.x, pos.y)
     } else if (tool === 'fill') {
-      // Fill tool is instant on click
       floodFill(ctx, pos.x, pos.y, color)
-      
-      // Redraw grid on top after fill
       drawGrid(ctx)
-      
       setIsDrawing(false)
-      
-      // Save immediately after fill
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
       onCanvasChange(imageData)
     } else if (tool === 'text') {
-      // Show text input at clicked position
       setTextInputPos({ x: pos.x, y: pos.y })
-      // Get screen position for the input
       const rect = canvas.getBoundingClientRect()
-      setTextInputScreenPos({ 
-        x: rect.left + (pos.x * rect.width / canvas.width), 
-        y: rect.top + (pos.y * rect.height / canvas.height)
+      setTextInputScreenPos({
+        x: rect.left + (pos.x * rect.width) / canvas.width,
+        y: rect.top + (pos.y * rect.height) / canvas.height,
       })
       setTextInput('')
       setIsDrawing(false)
       setTimeout(() => inputRef.current?.focus(), 0)
     } else if (tool === 'shapes' || tool === 'balloon') {
-      // Save the current canvas state for live preview
       savedImageRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    } else if (tool === 'eraser') {
+      ctx.beginPath()
+      ctx.moveTo(pos.x, pos.y)
     }
   }
 
@@ -387,6 +730,34 @@ export default function Canvas({ tool, shape, penType, color, panelData, layout,
 
     const pos = getMousePos(e)
 
+    if (tool === 'select') {
+      if (isSelectingRef.current && selectionOriginalImageRef.current) {
+        ctx.putImageData(selectionOriginalImageRef.current, 0, 0)
+        const rect = normalizeRect(selectionStartRef.current, pos)
+        selectionRectRef.current = rect
+        drawSelectionOutline(ctx, rect)
+        drawSelectionHandles(ctx, rect)
+      } else if (
+        isDraggingSelectionRef.current &&
+        selectionBaseImageRef.current &&
+        selectionImageRef.current &&
+        selectionRectRef.current
+      ) {
+        ctx.putImageData(selectionBaseImageRef.current, 0, 0)
+        const rect = selectionRectRef.current
+        const newRect: SelectionRect = {
+          ...rect,
+          x: clamp(pos.x - dragOffsetRef.current.x, 0, canvas.width - rect.width),
+          y: clamp(pos.y - dragOffsetRef.current.y, 0, canvas.height - rect.height),
+        }
+        selectionRectRef.current = newRect
+        ctx.putImageData(selectionImageRef.current, newRect.x, newRect.y)
+        drawSelectionOutline(ctx, newRect)
+        drawSelectionHandles(ctx, newRect)
+      }
+      return
+    }
+
     if (tool === 'pen') {
       ctx.lineTo(pos.x, pos.y)
       ctx.stroke()
@@ -398,12 +769,11 @@ export default function Canvas({ tool, shape, penType, color, panelData, layout,
       ctx.stroke()
       ctx.restore()
     } else if (tool === 'shapes' || tool === 'balloon') {
-      // Restore saved canvas and draw preview
       if (savedImageRef.current) {
         ctx.putImageData(savedImageRef.current, 0, 0)
       }
       drawGrid(ctx)
-      
+
       if (tool === 'shapes' && shape) {
         drawShape(ctx, shape, startPos.x, startPos.y, pos.x, pos.y)
       } else if (tool === 'balloon') {
@@ -414,8 +784,7 @@ export default function Canvas({ tool, shape, penType, color, panelData, layout,
         const centerY = (startPos.y + pos.y) / 2
         ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI)
         ctx.stroke()
-        
-        // Draw balloon tail (small triangle pointing down)
+
         const tailY = centerY + radiusY
         ctx.beginPath()
         ctx.moveTo(centerX, tailY)
@@ -430,18 +799,106 @@ export default function Canvas({ tool, shape, penType, color, panelData, layout,
   }
 
   const stopDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return
-
     const canvas = canvasRef.current
     const ctx = canvas?.getContext('2d')
-    if (!canvas || !ctx) return
+    if (!canvas || !ctx) {
+      setIsDrawing(false)
+      return
+    }
+
+    if (tool === 'select') {
+      if (!isDrawing) {
+        return
+      }
+
+      const pos = getMousePos(e)
+
+      if (isSelectingRef.current && selectionOriginalImageRef.current) {
+        const rect = normalizeRect(selectionStartRef.current, pos)
+        isSelectingRef.current = false
+        setIsDrawing(false)
+
+        if (rect.width < 3 || rect.height < 3) {
+          ctx.putImageData(selectionOriginalImageRef.current, 0, 0)
+          drawGrid(ctx)
+          selectionOriginalImageRef.current = null
+          selectionRectRef.current = null
+          return
+        }
+
+        selectionRectRef.current = rect
+
+        const tempCanvas = document.createElement('canvas')
+        tempCanvas.width = canvas.width
+        tempCanvas.height = canvas.height
+        const tempCtx = tempCanvas.getContext('2d')
+        if (tempCtx) {
+          tempCtx.putImageData(selectionOriginalImageRef.current, 0, 0)
+          selectionImageRef.current = tempCtx.getImageData(rect.x, rect.y, rect.width, rect.height)
+        }
+
+        ctx.putImageData(selectionOriginalImageRef.current, 0, 0)
+        ctx.save()
+        ctx.fillStyle = 'white'
+        ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
+        ctx.restore()
+        drawGrid(ctx)
+
+        selectionBaseImageRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height)
+
+        if (selectionImageRef.current) {
+          ctx.putImageData(selectionImageRef.current, rect.x, rect.y)
+          drawSelectionOutline(ctx, rect)
+          drawSelectionHandles(ctx, rect)
+        }
+
+        selectionOriginalImageRef.current = null
+        return
+      }
+
+      if (isDraggingSelectionRef.current) {
+        isDraggingSelectionRef.current = false
+        setIsDrawing(false)
+
+        if (selectionBaseImageRef.current && selectionImageRef.current && selectionRectRef.current) {
+          ctx.putImageData(selectionBaseImageRef.current, 0, 0)
+          const rect = selectionRectRef.current
+          ctx.putImageData(selectionImageRef.current, rect.x, rect.y)
+          drawSelectionOutline(ctx, rect)
+          drawSelectionHandles(ctx, rect)
+          updateActiveShapeRegion(canvas, ctx, rect, selectionImageRef.current)
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+          onCanvasChange(imageData)
+        }
+        return
+      }
+
+      setIsDrawing(false)
+      return
+    }
+
+    if (!isDrawing) {
+      return
+    }
 
     const pos = getMousePos(e)
 
     if (tool === 'shapes' && shape) {
       drawShape(ctx, shape, startPos.x, startPos.y, pos.x, pos.y)
+      const rawRect = normalizeRect(startPos, pos)
+      const paddedRect = expandRect(rawRect, 6, canvas.width, canvas.height)
+      if (paddedRect.width > 0 && paddedRect.height > 0) {
+        const snapshot = ctx.getImageData(paddedRect.x, paddedRect.y, paddedRect.width, paddedRect.height)
+        const contentPixels = countContentPixels(snapshot)
+        if (contentPixels >= MIN_CONTENT_PIXELS) {
+          shapeRegionsRef.current.push({
+            id: shapeIdCounterRef.current++,
+            rect: paddedRect,
+            contentPixelCount: contentPixels,
+          })
+        }
+      }
     } else if (tool === 'balloon') {
-      // Draw balloon oval
       ctx.beginPath()
       const radiusX = Math.abs(pos.x - startPos.x) / 2
       const radiusY = Math.abs(pos.y - startPos.y) / 2
@@ -449,8 +906,7 @@ export default function Canvas({ tool, shape, penType, color, panelData, layout,
       const centerY = (startPos.y + pos.y) / 2
       ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI)
       ctx.stroke()
-      
-      // Draw balloon tail (small triangle pointing down)
+
       const tailY = centerY + radiusY
       ctx.beginPath()
       ctx.moveTo(centerX, tailY)
@@ -460,19 +916,18 @@ export default function Canvas({ tool, shape, penType, color, panelData, layout,
       ctx.fillStyle = color
       ctx.fill()
       ctx.stroke()
-      
-      // Store balloon oval info and show text input
+
       const rect = canvas.getBoundingClientRect()
       const screenPos = {
-        x: rect.left + (centerX * rect.width / canvas.width),
-        y: rect.top + (centerY * rect.height / canvas.height) - 12 // Offset up for text baseline
+        x: rect.left + (centerX * rect.width) / canvas.width,
+        y: rect.top + (centerY * rect.height) / canvas.height - 12,
       }
       setBalloonOval({
         centerX,
         centerY,
         radiusX,
         radiusY,
-        screenPos
+        screenPos,
       })
       setTextInputPos({ x: centerX, y: centerY })
       setTextInputScreenPos(screenPos)
@@ -480,12 +935,9 @@ export default function Canvas({ tool, shape, penType, color, panelData, layout,
     }
 
     setIsDrawing(false)
-    
-    // Save the current canvas state
-    if (canvas && ctx) {
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-      onCanvasChange(imageData)
-    }
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    onCanvasChange(imageData)
   }
 
   const handleTextSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {

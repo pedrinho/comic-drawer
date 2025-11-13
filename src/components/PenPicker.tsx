@@ -10,13 +10,13 @@ interface PenPickerProps {
 export default function PenPicker({ isOpen, selectedPenType, onSelectPenType }: PenPickerProps) {
   if (!isOpen) return null
 
-  const penTypes: { name: PenType; icon: string; label: string }[] = [
-    { name: 'fine', icon: '•', label: 'Fine' },
-    { name: 'small', icon: '●', label: 'Small' },
-    { name: 'medium', icon: '⬤', label: 'Medium' },
-    { name: 'large', icon: '●', label: 'Large' },
-    { name: 'thick', icon: '⬤', label: 'Thick' },
-    { name: 'verythick', icon: '⬤', label: 'Very Thick' },
+  const penTypes: { name: PenType; label: string; thickness: number }[] = [
+    { name: 'fine', label: 'Fine', thickness: 2 },
+    { name: 'small', label: 'Small', thickness: 4 },
+    { name: 'medium', label: 'Medium', thickness: 6 },
+    { name: 'large', label: 'Large', thickness: 8 },
+    { name: 'thick', label: 'Thick', thickness: 10 },
+    { name: 'verythick', label: 'Very Thick', thickness: 12 },
   ]
 
   return (
@@ -28,7 +28,11 @@ export default function PenPicker({ isOpen, selectedPenType, onSelectPenType }: 
           onClick={() => onSelectPenType(penType.name)}
           title={penType.label}
         >
-          {penType.icon}
+          <span
+            className="pen-preview"
+            style={{ height: `${penType.thickness}px` }}
+          />
+          <span className="pen-label">{penType.label}</span>
         </button>
       ))}
     </div>

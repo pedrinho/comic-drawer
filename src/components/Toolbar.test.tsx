@@ -18,6 +18,7 @@ describe('Toolbar', () => {
   it('renders all tools', () => {
     render(<Toolbar {...defaultProps} />)
 
+    expect(screen.getByText('Select')).toBeInTheDocument()
     expect(screen.getByText('Pen')).toBeInTheDocument()
     expect(screen.getByText('Eraser')).toBeInTheDocument()
     expect(screen.getByText('Shapes')).toBeInTheDocument()
@@ -46,6 +47,7 @@ describe('Toolbar', () => {
 
     const toolIcons = screen.getAllByText('✏️')
     expect(toolIcons.length).toBeGreaterThan(0)
+    expect(screen.getByText('🖱️')).toBeInTheDocument()
     expect(screen.getByText('🧹')).toBeInTheDocument()
     expect(screen.getByText('🔷')).toBeInTheDocument()
     expect(screen.getByText('🪣')).toBeInTheDocument()

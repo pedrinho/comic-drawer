@@ -1,6 +1,6 @@
 import { Tool, Shape, PenType } from '../App'
 import './Toolbar.css'
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import ShapePicker from './ShapePicker'
 import PenPicker from './PenPicker'
 
@@ -19,6 +19,7 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
   const [showPenSubmenu, setShowPenSubmenu] = useState(false)
   const [showShapesSubmenu, setShowShapesSubmenu] = useState(false)
   const tools: { name: Tool; icon: string; label: string }[] = [
+    { name: 'select', icon: '🖱️', label: 'Select' },
     { name: 'pen', icon: '✏️', label: 'Pen' },
     { name: 'eraser', icon: '🧹', label: 'Eraser' },
     { name: 'shapes', icon: '🔷', label: 'Shapes' },
@@ -26,6 +27,15 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     { name: 'text', icon: '💬', label: 'Text' },
     { name: 'balloon', icon: '💭', label: 'Balloon' },
   ]
+
+  useEffect(() => {
+    if (currentTool !== 'pen') {
+      setShowPenSubmenu(false)
+    }
+    if (currentTool !== 'shapes') {
+      setShowShapesSubmenu(false)
+    }
+  }, [currentTool])
 
   const handleShapeButtonClick = () => {
     if (currentTool === 'shapes') {

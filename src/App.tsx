@@ -5,7 +5,7 @@ import Toolbar from './components/Toolbar'
 import PanelLayout from './components/PanelLayout'
 import PanelLayoutModal from './components/PanelLayoutModal'
 
-export type Tool = 'pen' | 'eraser' | 'shapes' | 'text' | 'fill' | 'balloon'
+export type Tool = 'select' | 'pen' | 'eraser' | 'shapes' | 'text' | 'fill' | 'balloon'
 export type Shape = 'rectangle' | 'circle' | 'triangle' | 'star' | 'heart' | 'diamond' | 'hexagon' | 'pentagon' | 'arrow' | 'cross' | 'heptagon' | 'octagon'
 export type PenType = 'fine' | 'small' | 'medium' | 'large' | 'thick' | 'verythick'
 
