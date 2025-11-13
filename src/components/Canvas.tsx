@@ -110,10 +110,6 @@ const countContentPixels = (imageData: ImageData) => {
   return count
 }
 
-const imageDataHasContent = (imageData: ImageData) => {
-  return countContentPixels(imageData) > 0
-}
-
 const getHandleAtPoint = (point: { x: number; y: number }, rect: SelectionRect, handleSize = 8): SelectionHandle | null => {
   const half = handleSize / 2
   const handles: Array<{ handle: SelectionHandle; x: number; y: number }> = [
