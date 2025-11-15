@@ -392,6 +392,7 @@ export default function Canvas({ tool, shape, penType, color, panelData, layout,
     canvas.height = 800
 
     // Set drawing styles
+    ctx.globalCompositeOperation = 'source-over'
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
     ctx.strokeStyle = color
@@ -426,6 +427,9 @@ export default function Canvas({ tool, shape, penType, color, panelData, layout,
   }
 
   const floodFill = (ctx: CanvasRenderingContext2D, x: number, y: number, fillColor: string) => {
+    // Ensure we're using source-over for fill
+    ctx.globalCompositeOperation = 'source-over'
+    
     const canvas = ctx.canvas
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
     const data = imageData.data
@@ -437,18 +441,28 @@ export default function Canvas({ tool, shape, penType, color, panelData, layout,
     const targetR = data[clickedIndex]
     const targetG = data[clickedIndex + 1]
     const targetB = data[clickedIndex + 2]
+    const targetA = data[clickedIndex + 3]
 
     // Parse fill color
     const fillR = parseInt(fillColor.slice(1, 3), 16)
     const fillG = parseInt(fillColor.slice(3, 5), 16)
     const fillB = parseInt(fillColor.slice(5, 7), 16)
 
-    // Helper function to check if a pixel matches the target color
-    const matchesTargetColor = (r: number, g: number, b: number) => {
+    // Helper function to check if a pixel matches the target color (including alpha for erased areas)
+    const matchesTargetColor = (r: number, g: number, b: number, a: number) => {
       const tolerance = 10 // Allow small differences for antialiasing
+      const alphaTolerance = 5 // Tolerance for alpha channel
+      
+      // If target is transparent (erased), match transparent pixels
+      if (targetA < alphaTolerance) {
+        return a < alphaTolerance
+      }
+      
+      // If target is opaque, match RGB values and ensure alpha is similar
       return Math.abs(r - targetR) <= tolerance && 
              Math.abs(g - targetG) <= tolerance && 
-             Math.abs(b - targetB) <= tolerance
+             Math.abs(b - targetB) <= tolerance &&
+             Math.abs(a - targetA) <= alphaTolerance
     }
 
     // Stack-based flood fill
@@ -469,13 +483,15 @@ export default function Canvas({ tool, shape, penType, color, panelData, layout,
       const r = data[index]
       const g = data[index + 1]
       const b = data[index + 2]
+      const a = data[index + 3]
 
       // Fill pixels that match the target color (where we clicked)
-      if (matchesTargetColor(r, g, b)) {
+      if (matchesTargetColor(r, g, b, a)) {
         // Fill this pixel
         data[index] = fillR
         data[index + 1] = fillG
         data[index + 2] = fillB
+        data[index + 3] = 255 // Set alpha to opaque
 
         // Add neighbors to stack
         stack.push([px + 1, py])
@@ -540,6 +556,8 @@ export default function Canvas({ tool, shape, penType, color, panelData, layout,
     setIsDrawing(true)
 
     if (tool === 'pen') {
+      // Ensure we can draw over erased areas
+      ctx.globalCompositeOperation = 'source-over'
       ctx.beginPath()
       ctx.moveTo(pos.x, pos.y)
     } else if (tool === 'fill') {
@@ -755,6 +773,8 @@ export default function Canvas({ tool, shape, penType, color, panelData, layout,
     }
 
     if (tool === 'pen') {
+      // Ensure we can draw over erased areas
+      ctx.globalCompositeOperation = 'source-over'
       ctx.lineTo(pos.x, pos.y)
       ctx.stroke()
     } else if (tool === 'eraser') {
@@ -764,6 +784,8 @@ export default function Canvas({ tool, shape, penType, color, panelData, layout,
       ctx.lineTo(pos.x, pos.y)
       ctx.stroke()
       ctx.restore()
+      // Explicitly reset composite operation for next drawing
+      ctx.globalCompositeOperation = 'source-over'
     } else if (tool === 'shapes' || tool === 'balloon') {
       if (savedImageRef.current) {
         ctx.putImageData(savedImageRef.current, 0, 0)
