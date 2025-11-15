@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import jsPDF from 'jspdf'
 import './App.css'
 import Canvas from './components/Canvas'
@@ -33,6 +33,13 @@ interface ComicFile {
   panels: SavedPanel[]
 }
 
+interface PanelHistory {
+  undo: ImageData[]
+  redo: ImageData[]
+}
+
+const MAX_HISTORY = 10
+
 function App() {
   const [currentTool, setCurrentTool] = useState<Tool>('pen')
   const [selectedShape, setSelectedShape] = useState<Shape>('rectangle')
@@ -43,6 +50,9 @@ function App() {
     { id: 0, data: null, layout: { rows: 1, columns: [1] } }
   ])
   const [showModal, setShowModal] = useState(false)
+  
+  // History for each panel: Map<panelIndex, {undo: ImageData[], redo: ImageData[]}>
+  const historyRef = useRef<Map<number, PanelHistory>>(new Map())
 
   const addPanel = () => {
     setShowModal(true)
@@ -52,11 +62,134 @@ function App() {
     setPanels([...panels, { id: panels.length, data: null, layout: { rows, columns } }])
   }
 
-  const handleCanvasChange = (data: ImageData) => {
+  // Helper to get or initialize history for a panel
+  const getPanelHistory = (panelIndex: number): PanelHistory => {
+    if (!historyRef.current.has(panelIndex)) {
+      historyRef.current.set(panelIndex, { undo: [], redo: [] })
+    }
+    return historyRef.current.get(panelIndex)!
+  }
+
+  // Save current state to history before making changes
+  const saveToHistory = (panelIndex: number, currentData: ImageData | null) => {
+    const history = getPanelHistory(panelIndex)
+    const canvasWidth = 1200
+    const canvasHeight = 800
+    
+    let stateToSave: ImageData | null = null
+    
+    if (currentData) {
+      // Clone the existing ImageData for history
+      const canvas = document.createElement('canvas')
+      canvas.width = currentData.width
+      canvas.height = currentData.height
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        ctx.putImageData(currentData, 0, 0)
+        stateToSave = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      }
+    } else {
+      // If canvas is empty, create a blank white canvas as the initial state
+      const canvas = document.createElement('canvas')
+      canvas.width = canvasWidth
+      canvas.height = canvasHeight
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        ctx.fillStyle = 'white'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+        stateToSave = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      }
+    }
+    
+    if (stateToSave) {
+      // Add to undo stack
+      history.undo.push(stateToSave)
+      
+      // Limit to MAX_HISTORY
+      if (history.undo.length > MAX_HISTORY) {
+        history.undo.shift()
+      }
+      
+      // Clear redo stack when new action is performed
+      history.redo = []
+    }
+  }
+
+  const handleCanvasChange = (data: ImageData, skipHistory = false) => {
+    if (!skipHistory) {
+      // Save current state to history before making changes
+      const currentData = panels[selectedPanel].data
+      saveToHistory(selectedPanel, currentData)
+    }
+    
     const updatedPanels = [...panels]
     updatedPanels[selectedPanel].data = data
     setPanels(updatedPanels)
   }
+
+  const handleUndo = useCallback(() => {
+    const history = getPanelHistory(selectedPanel)
+    const currentData = panels[selectedPanel].data
+    
+    if (history.undo.length === 0) {
+      return // Nothing to undo
+    }
+    
+    // Move current state to redo stack if it exists
+    if (currentData) {
+      const canvas = document.createElement('canvas')
+      canvas.width = currentData.width
+      canvas.height = currentData.height
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        ctx.putImageData(currentData, 0, 0)
+        const clonedData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        
+        history.redo.push(clonedData)
+        if (history.redo.length > MAX_HISTORY) {
+          history.redo.shift()
+        }
+      }
+    }
+    
+    // Restore previous state from undo stack
+    const previousState = history.undo.pop()!
+    const updatedPanels = [...panels]
+    updatedPanels[selectedPanel].data = previousState
+    setPanels(updatedPanels)
+  }, [selectedPanel, panels])
+
+  const handleRedo = useCallback(() => {
+    const history = getPanelHistory(selectedPanel)
+    const currentData = panels[selectedPanel].data
+    
+    if (history.redo.length === 0) {
+      return // Nothing to redo
+    }
+    
+    // Move current state to undo stack if it exists
+    if (currentData) {
+      const canvas = document.createElement('canvas')
+      canvas.width = currentData.width
+      canvas.height = currentData.height
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        ctx.putImageData(currentData, 0, 0)
+        const clonedData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        
+        history.undo.push(clonedData)
+        if (history.undo.length > MAX_HISTORY) {
+          history.undo.shift()
+        }
+      }
+    }
+    
+    // Restore next state from redo stack
+    const nextState = history.redo.pop()!
+    const updatedPanels = [...panels]
+    updatedPanels[selectedPanel].data = nextState
+    setPanels(updatedPanels)
+  }, [selectedPanel, panels])
 
   const handlePanelSwitch = (index: number) => {
     // Save current canvas before switching
@@ -313,12 +446,60 @@ function App() {
     }
   }
 
+  // Keyboard shortcuts for undo/redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+Z or Cmd+Z for undo
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        handleUndo()
+      }
+      // Ctrl+Shift+Z or Cmd+Shift+Z for redo
+      else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z') {
+        e.preventDefault()
+        handleRedo()
+      }
+      // Ctrl+Y or Cmd+Y for redo (alternative)
+      else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        e.preventDefault()
+        handleRedo()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [handleUndo, handleRedo])
+
+  // Initialize history when panels change or panel is switched
+  useEffect(() => {
+    // Initialize history for new panels
+    panels.forEach((_, index) => {
+      getPanelHistory(index)
+    })
+  }, [panels.length])
+
   return (
     <div className="app">
       <header>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h1>🎨 Comic Drawer</h1>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button 
+              onClick={handleUndo} 
+              style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', cursor: 'pointer' }}
+              title="Undo (Ctrl+Z)"
+            >
+              ↶ Undo
+            </button>
+            <button 
+              onClick={handleRedo} 
+              style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', cursor: 'pointer' }}
+              title="Redo (Ctrl+Shift+Z)"
+            >
+              ↷ Redo
+            </button>
             <button onClick={handleSave} style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', cursor: 'pointer' }}>
               💾 Save
             </button>

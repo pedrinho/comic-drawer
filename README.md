@@ -12,6 +12,7 @@ A web-based application for creating comics! Draw panels, add dialogue, and let 
 - 💾 **Save & Load**: Save your comics in .cd format and load them later
 - 📄 **Export to PDF**: Export your comic panels as a PDF file (each panel becomes one page)
 - 🖱️ **Shape Selection**: Select and move drawn shapes with the select tool
+- ↶ **Undo/Redo**: Undo and redo the last 10 actions (keyboard shortcuts: Ctrl+Z / Ctrl+Shift+Z)
 - 🎨 **Beautiful UI**: Modern, kid-friendly interface
 
 ## Getting Started
@@ -59,7 +60,6 @@ This project is almost 100% developed by Cursor (AI pair programming assistant).
 ## Future Enhancements
 
 - Layer support
-- Undo/redo
 - Cloud save
 - Comic templates
 
