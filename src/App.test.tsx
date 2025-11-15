@@ -103,9 +103,10 @@ describe('App', () => {
     })
   })
 
-  it('has save and load buttons', () => {
+  it('has save, load, and export PDF buttons', () => {
     render(<App />)
     expect(screen.getByText('💾 Save')).toBeInTheDocument()
     expect(screen.getByText('📂 Load')).toBeInTheDocument()
+    expect(screen.getByText('📄 Export PDF')).toBeInTheDocument()
   })
 })

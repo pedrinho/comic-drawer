@@ -10,6 +10,8 @@ A web-based application for creating comics! Draw panels, add dialogue, and let 
 - 🪣 **Fill Tool**: Fill shapes and areas with color
 - 📐 **Panel Layout**: Customizable comic panel layouts
 - 💾 **Save & Load**: Save your comics in .cd format and load them later
+- 📄 **Export to PDF**: Export your comic panels as a PDF file (each panel becomes one page)
+- 🖱️ **Shape Selection**: Select and move drawn shapes with the select tool
 - 🎨 **Beautiful UI**: Modern, kid-friendly interface
 
 ## Getting Started
@@ -60,7 +62,6 @@ This project is almost 100% developed by Cursor (AI pair programming assistant).
 - Undo/redo
 - Cloud save
 - Comic templates
-- Export to PDF
 
 ## License
 

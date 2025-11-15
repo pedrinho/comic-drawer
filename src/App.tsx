@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import jsPDF from 'jspdf'
 import './App.css'
 import Canvas from './components/Canvas'
 import Toolbar from './components/Toolbar'
@@ -155,6 +156,136 @@ function App() {
     })
   }
 
+  // Helper function to draw grid on canvas (matching Canvas component)
+  const drawGrid = (ctx: CanvasRenderingContext2D, layout: { rows: number; columns: number[] }) => {
+    ctx.save()
+    ctx.strokeStyle = '#000000'
+    ctx.lineWidth = 3
+
+    const totalRows = layout.rows
+    const gutter = 12 // Space between panels (and around edges)
+    const canvasWidth = 1200
+    const canvasHeight = 800
+
+    for (let row = 0; row < totalRows; row++) {
+      const columnsInRow = layout.columns[row] || 1
+      
+      // Calculate spacing: gutter on each side + gutters between cells
+      const totalVerticalGutters = gutter * 2 + (totalRows - 1) * gutter
+      const totalHorizontalGutters = gutter * 2 + (columnsInRow - 1) * gutter
+      const panelHeight = (canvasHeight - totalVerticalGutters) / totalRows
+      const panelWidth = (canvasWidth - totalHorizontalGutters) / columnsInRow
+      
+      let currentX = gutter
+      const currentY = gutter + (row * (panelHeight + gutter))
+
+      // Draw rectangle for each cell in the row
+      for (let col = 0; col < columnsInRow; col++) {
+        ctx.beginPath()
+        ctx.rect(currentX, currentY, panelWidth, panelHeight)
+        ctx.stroke()
+        currentX += panelWidth + gutter
+      }
+    }
+
+    ctx.restore()
+  }
+
+  // Helper function to render panel to canvas with grid
+  const renderPanelToCanvas = (panel: PanelData): HTMLCanvasElement | null => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 1200
+    canvas.height = 800
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+
+    // Fill with white background
+    ctx.fillStyle = 'white'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+    // Draw panel data if available
+    if (panel.data) {
+      ctx.putImageData(panel.data, 0, 0)
+    }
+
+    // Draw grid on top
+    drawGrid(ctx, panel.layout)
+
+    return canvas
+  }
+
+  const handleExportPDF = async () => {
+    if (panels.length === 0) {
+      alert('No panels to export')
+      return
+    }
+
+    try {
+      // Create a new PDF document (A4 size in landscape for better panel fit)
+      // A4 in mm: 297 x 210, but we'll use landscape: 210 x 297
+      // Canvas is 1200x800, so we'll scale it to fit
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4',
+      })
+
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const pdfHeight = pdf.internal.pageSize.getHeight()
+
+      // Render each panel as a separate page
+      for (let i = 0; i < panels.length; i++) {
+        const panel = panels[i]
+        const canvas = renderPanelToCanvas(panel)
+        
+        if (!canvas) {
+          console.error(`Failed to render panel ${i + 1}`)
+          continue
+        }
+
+        // Convert canvas to image
+        const imgData = canvas.toDataURL('image/png')
+        
+        // Add new page for each panel except the first
+        if (i > 0) {
+          pdf.addPage()
+        }
+
+        // Calculate scaling to fit the page while maintaining aspect ratio
+        const canvasAspectRatio = canvas.width / canvas.height
+        const pdfAspectRatio = pdfWidth / pdfHeight
+
+        let imgWidth: number
+        let imgHeight: number
+        let x: number
+        let y: number
+
+        if (canvasAspectRatio > pdfAspectRatio) {
+          // Canvas is wider, fit to width
+          imgWidth = pdfWidth - 20 // 10mm margin on each side
+          imgHeight = imgWidth / canvasAspectRatio
+          x = 10
+          y = (pdfHeight - imgHeight) / 2
+        } else {
+          // Canvas is taller, fit to height
+          imgHeight = pdfHeight - 20 // 10mm margin on top and bottom
+          imgWidth = imgHeight * canvasAspectRatio
+          x = (pdfWidth - imgWidth) / 2
+          y = 10
+        }
+
+        // Add image to PDF
+        pdf.addImage(imgData, 'PNG', x, y, imgWidth, imgHeight)
+      }
+
+      // Save the PDF
+      pdf.save('comic.pdf')
+    } catch (error) {
+      console.error('Error exporting PDF:', error)
+      alert('Error exporting PDF. Please try again.')
+    }
+  }
+
   return (
     <div className="app">
       <header>
@@ -166,6 +297,9 @@ function App() {
             </button>
             <button onClick={handleLoad} style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', cursor: 'pointer' }}>
               📂 Load
+            </button>
+            <button onClick={handleExportPDF} style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', cursor: 'pointer' }}>
+              📄 Export PDF
             </button>
           </div>
         </div>
