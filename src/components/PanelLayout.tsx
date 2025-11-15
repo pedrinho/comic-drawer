@@ -6,20 +6,36 @@ interface PanelLayoutProps {
   selectedPanel: number
   onPanelSelect: (index: number) => void
   onAddPanel: () => void
+  onDeletePanel: (index: number) => void
 }
 
-export default function PanelLayout({ panels, selectedPanel, onPanelSelect, onAddPanel }: PanelLayoutProps) {
+export default function PanelLayout({ panels, selectedPanel, onPanelSelect, onAddPanel, onDeletePanel }: PanelLayoutProps) {
+  const handleDeleteClick = (e: React.MouseEvent, index: number) => {
+    e.stopPropagation() // Prevent panel selection when clicking delete
+    onDeletePanel(index)
+  }
+
   return (
     <div className="panel-layout">
       <h3>Panels</h3>
       <div className="panels-container">
-        {panels.map((panel, index) => (
+        {panels.map((_, index) => (
           <div
-            key={panel.id}
+            key={index}
             className={`panel ${index === selectedPanel ? 'selected' : ''}`}
             onClick={() => onPanelSelect(index)}
           >
-            Panel {index + 1}
+            <span>Panel {index + 1}</span>
+            {panels.length > 1 && (
+              <button
+                className="panel-delete-btn"
+                title="Delete Panel"
+                onClick={(e) => handleDeleteClick(e, index)}
+                aria-label="Delete panel"
+              >
+                ×
+              </button>
+            )}
           </div>
         ))}
         <button className="add-panel-btn" title="Add Panel" onClick={onAddPanel}>

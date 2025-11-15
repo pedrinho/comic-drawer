@@ -63,6 +63,33 @@ function App() {
     setSelectedPanel(index)
   }
 
+  const handleDeletePanel = (index: number) => {
+    // Don't allow deleting the last panel
+    if (panels.length <= 1) {
+      return
+    }
+
+    // Ask for confirmation before deleting
+    const confirmed = window.confirm(`Are you sure you want to delete Panel ${index + 1}? This action cannot be undone.`)
+    if (!confirmed) {
+      return
+    }
+
+    // Remove the panel
+    const updatedPanels = panels.filter((_, i) => i !== index)
+    setPanels(updatedPanels)
+
+    // Adjust selected panel if necessary
+    if (selectedPanel >= updatedPanels.length) {
+      // If we deleted the last panel, select the new last panel
+      setSelectedPanel(updatedPanels.length - 1)
+    } else if (selectedPanel > index) {
+      // If we deleted a panel before the selected one, adjust index
+      setSelectedPanel(selectedPanel - 1)
+    }
+    // If we deleted a panel after the selected one, no adjustment needed
+  }
+
   const handleSave = () => {
     // Convert ImageData to base64 for each panel
     const savedPanels: SavedPanel[] = panels.map(panel => ({
@@ -320,6 +347,7 @@ function App() {
           selectedPanel={selectedPanel}
           onPanelSelect={handlePanelSwitch}
           onAddPanel={addPanel}
+          onDeletePanel={handleDeletePanel}
         />
         <Canvas 
           tool={currentTool} 
