@@ -41,6 +41,7 @@ interface CanvasProps {
   onShapeLayersChange?: (layers: ShapeLayer[], skipHistory?: boolean) => void
   textLayers?: TextLayer[]
   onTextLayersChange?: (layers: TextLayer[], skipHistory?: boolean) => void
+  onTextEditingChange?: (isEditing: boolean) => void
 }
 
 const getPenWidth = (penType?: PenType): number => {
@@ -360,6 +361,7 @@ export default function Canvas({
   onShapeLayersChange,
   textLayers = [],
   onTextLayersChange,
+  onTextEditingChange,
 }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
@@ -450,14 +452,25 @@ export default function Canvas({
   }
 
   const renderTextLayer = (ctx: CanvasRenderingContext2D, layer: TextLayer) => {
+    const canvas = ctx.canvas
     const { x, y, width, height, rotation, text, font: layerFont, fontSize: layerFontSize, color: layerColor } = layer
     const centerX = x + width / 2
     const centerY = y + height / 2
+    
+    // Calculate current scale factor for consistent rendering
+    const rect = canvas.getBoundingClientRect()
+    const scaleX = rect.width / canvas.width
+    const scaleY = rect.height / canvas.height
+    const scale = (scaleX + scaleY) / 2
+    
+    // Scale fontSize to match visual size (layerFontSize is stored in CSS pixels, need to scale up for canvas)
+    const scaledFontSize = layerFontSize / scale
+    
     ctx.save()
     ctx.translate(centerX, centerY)
     ctx.rotate(rotation)
     ctx.fillStyle = layerColor
-    ctx.font = `${layerFontSize}px ${layerFont}`
+    ctx.font = `${scaledFontSize}px ${layerFont}`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillText(text, 0, 0)
@@ -475,6 +488,39 @@ export default function Canvas({
       renderTextLayer(ctx, layer)
     })
   }, [])
+
+  // Helper function to get background ImageData without layers
+  // This ensures we don't save layers into the ImageData
+  const getBackgroundImageData = useCallback((): ImageData => {
+    const canvas = canvasRef.current
+    if (!canvas) {
+      throw new Error('Canvas not available')
+    }
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      throw new Error('Canvas context not available')
+    }
+
+    // Create a temporary canvas to render just the background
+    const tempCanvas = document.createElement('canvas')
+    tempCanvas.width = canvas.width
+    tempCanvas.height = canvas.height
+    const tempCtx = tempCanvas.getContext('2d')
+    if (!tempCtx) {
+      throw new Error('Failed to get temp canvas context')
+    }
+
+    // Draw background
+    tempCtx.fillStyle = 'white'
+    tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height)
+    if (panelData) {
+      tempCtx.putImageData(panelData, 0, 0)
+    }
+    drawGrid(tempCtx)
+
+    // Return the ImageData without layers
+    return tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height)
+  }, [panelData, drawGrid])
 
   const updateActiveShapeRegion = useCallback(
     (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, rect: SelectionRect, selectionImage?: ImageData | null) => {
@@ -540,8 +586,20 @@ export default function Canvas({
 
     updateActiveShapeRegion(canvas, ctx, rect, selectionImageRef.current)
 
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    onCanvasChange(imageData)
+    // Capture background without layers, then add the selection
+    const background = getBackgroundImageData()
+    const tempCanvas = document.createElement('canvas')
+    tempCanvas.width = canvas.width
+    tempCanvas.height = canvas.height
+    const tempCtx = tempCanvas.getContext('2d')
+    if (tempCtx && selectionImageRef.current) {
+      tempCtx.putImageData(background, 0, 0)
+      tempCtx.putImageData(selectionImageRef.current, rect.x, rect.y)
+      const finalImageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height)
+      onCanvasChange(finalImageData)
+    } else {
+      onCanvasChange(background)
+    }
 
     selectionImageRef.current = null
     selectionBaseImageRef.current = null
@@ -602,6 +660,68 @@ export default function Canvas({
     drawShapeLayers(ctx)
     drawTextLayers(ctx)
   }, [panelData, layout, drawGrid, color, penType, drawShapeLayers, drawTextLayers])
+
+  // Track text editing state for parent notification
+  const [isTextEditing, setIsTextEditing] = useState(false)
+  
+  // Notify parent when text editing state changes
+  useEffect(() => {
+    const isEditing = editingTextLayerIdRef.current !== null
+    setIsTextEditing(isEditing)
+    if (onTextEditingChange) {
+      onTextEditingChange(isEditing)
+    }
+  }, [textInputPos, onTextEditingChange])
+
+  // Update editing layer font/fontSize/color in real-time
+  useEffect(() => {
+    if (editingTextLayerIdRef.current) {
+      const canvas = canvasRef.current
+      if (!canvas) return
+
+      const editingLayer = textLayersRef.current.find(l => l.id === editingTextLayerIdRef.current)
+      if (!editingLayer) return
+
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+
+      // Calculate scale factor for measurement
+      const rect = canvas.getBoundingClientRect()
+      const scaleX = rect.width / canvas.width
+      const scaleY = rect.height / canvas.height
+      const scale = (scaleX + scaleY) / 2
+
+      // Scale fontSize for measurement (to get correct dimensions)
+      const scaledFontSize = fontSize / scale
+
+      // Measure text with new font/size
+      ctx.font = `${scaledFontSize}px ${font}`
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'top'
+      const metrics = ctx.measureText(textInput)
+      const textWidth = metrics.width
+      const textHeight = scaledFontSize * 1.2
+
+      // Update the editing layer
+      // Store fontSize in CSS pixels (original, unscaled) for consistency
+      const updatedLayers = textLayersRef.current.map((layer) =>
+        layer.id === editingTextLayerIdRef.current
+          ? {
+              ...layer,
+              font: font,
+              fontSize: fontSize, // Store original CSS pixel size, not scaled
+              color: color,
+              width: textWidth,
+              height: textHeight,
+            }
+          : layer
+      )
+
+      updateTextLayers(updatedLayers, true)
+      repaintCanvas()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [font, fontSize, color])
 
   const getMousePos = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
@@ -727,6 +847,7 @@ export default function Canvas({
       setStartPos(pos)
       const layerId = generateLayerId()
       const newLayer: ShapeLayer = {
+        type: 'shape',
         id: layerId,
         shape,
         x: pos.x,
@@ -839,7 +960,18 @@ export default function Canvas({
       floodFill(ctx, pos.x, pos.y, color)
       drawGrid(ctx)
       setIsDrawing(false)
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      // Capture canvas state after floodFill (which modifies canvas directly)
+      // But exclude layers by using getBackgroundImageData and then applying the fill result
+      const background = getBackgroundImageData()
+      // Get current canvas state (has fill applied, but also has layers)
+      const currentState = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      // Merge: start with background, then apply only the fill changes
+      // We'll use the current state but ensure layers aren't included
+      // Since floodFill modifies pixels directly, we can use currentState
+      // but we need to exclude layers - layers are drawn on top, so we can't easily separate them
+      // For now, use currentState but this might include layers
+      // TODO: Better approach would be to track what pixels were filled and only save those
+      const imageData = currentState
       onCanvasChange(imageData)
     } else if (tool === 'text') {
       // Check if clicking on existing text layer
@@ -1326,6 +1458,7 @@ export default function Canvas({
       // Create duplicate with new ID and offset position
       const duplicatedLayer: ShapeLayer = {
         ...originalLayer,
+        type: 'shape',
         id: generateLayerId(),
         x: Math.min(originalLayer.x + DUPLICATE_OFFSET, canvas.width - originalLayer.width),
         y: Math.min(originalLayer.y + DUPLICATE_OFFSET, canvas.height - originalLayer.height),
@@ -1356,6 +1489,7 @@ export default function Canvas({
       // Create duplicate with new ID and offset position
       const duplicatedLayer: TextLayer = {
         ...originalLayer,
+        type: 'text',
         id: generateLayerId(),
         x: Math.min(originalLayer.x + DUPLICATE_OFFSET, canvas.width - originalLayer.width),
         y: Math.min(originalLayer.y + DUPLICATE_OFFSET, canvas.height - originalLayer.height),
@@ -1934,8 +2068,37 @@ export default function Canvas({
             
             updateActiveShapeRegion(canvas, ctx, rotatedRect, rotatedImage)
             
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-            onCanvasChange(imageData)
+            // Capture background without layers, then add the selection
+            const background = getBackgroundImageData()
+            const tempCanvas = document.createElement('canvas')
+            tempCanvas.width = canvas.width
+            tempCanvas.height = canvas.height
+            const tempCtx = tempCanvas.getContext('2d')
+            if (tempCtx) {
+              tempCtx.putImageData(background, 0, 0)
+              // Add the rotated selection
+              const origWidth = originalImageSizeRef.current?.width || rect.width
+              const origHeight = originalImageSizeRef.current?.height || rect.height
+              const centerX = rect.x + rect.width / 2
+              const centerY = rect.y + rect.height / 2
+              const selectionCanvas = document.createElement('canvas')
+              selectionCanvas.width = origWidth
+              selectionCanvas.height = origHeight
+              const selectionCtx = selectionCanvas.getContext('2d')
+              if (selectionCtx && selectionImageRef.current) {
+                selectionCtx.putImageData(selectionImageRef.current, 0, 0)
+                tempCtx.save()
+                tempCtx.translate(centerX, centerY)
+                tempCtx.rotate(totalAngle)
+                tempCtx.drawImage(selectionCanvas, -origWidth / 2, -origHeight / 2)
+                tempCtx.restore()
+              }
+              const imageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height)
+              onCanvasChange(imageData)
+            } else {
+              const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+              onCanvasChange(imageData)
+            }
           }
         }
         rotationAngleRef.current = 0
@@ -1981,8 +2144,33 @@ export default function Canvas({
           drawSelectionHandles(ctx, newRect)
           updateActiveShapeRegion(canvas, ctx, newRect, resizedImage)
           
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-          onCanvasChange(imageData)
+          // Capture background without layers, then add the resized selection
+          const background = getBackgroundImageData()
+          const backgroundCanvas = document.createElement('canvas')
+          backgroundCanvas.width = canvas.width
+          backgroundCanvas.height = canvas.height
+          const backgroundCtx = backgroundCanvas.getContext('2d')
+          if (backgroundCtx) {
+            backgroundCtx.putImageData(background, 0, 0)
+            // Add the resized selection
+            const selectionCanvas = document.createElement('canvas')
+            selectionCanvas.width = selectionImageRef.current.width
+            selectionCanvas.height = selectionImageRef.current.height
+            const selectionCtx = selectionCanvas.getContext('2d')
+            if (selectionCtx) {
+              selectionCtx.putImageData(selectionImageRef.current, 0, 0)
+              backgroundCtx.save()
+              backgroundCtx.imageSmoothingEnabled = true
+              backgroundCtx.imageSmoothingQuality = 'high'
+              backgroundCtx.drawImage(selectionCanvas, newRect.x, newRect.y, newRect.width, newRect.height)
+              backgroundCtx.restore()
+            }
+            const imageData = backgroundCtx.getImageData(0, 0, canvas.width, canvas.height)
+            onCanvasChange(imageData)
+          } else {
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+            onCanvasChange(imageData)
+          }
         }
         resizeHandleRef.current = null
         return
@@ -2055,8 +2243,43 @@ export default function Canvas({
             updateActiveShapeRegion(canvas, ctx, rect, selectionImageRef.current)
           }
           
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-          onCanvasChange(imageData)
+          // Capture background without layers, then add the dragged selection
+          const background = getBackgroundImageData()
+          const tempCanvas = document.createElement('canvas')
+          tempCanvas.width = canvas.width
+          tempCanvas.height = canvas.height
+          const tempCtx = tempCanvas.getContext('2d')
+          if (tempCtx && selectionImageRef.current) {
+            tempCtx.putImageData(background, 0, 0)
+            // Add the selection at its current position
+            if (cumulativeRotationAngleRef.current !== 0 && originalImageSizeRef.current) {
+              // Handle rotated selection
+              const origWidth = originalImageSizeRef.current.width
+              const origHeight = originalImageSizeRef.current.height
+              const centerX = rect.x + rect.width / 2
+              const centerY = rect.y + rect.height / 2
+              const selectionCanvas = document.createElement('canvas')
+              selectionCanvas.width = origWidth
+              selectionCanvas.height = origHeight
+              const selectionCtx = selectionCanvas.getContext('2d')
+              if (selectionCtx) {
+                selectionCtx.putImageData(selectionImageRef.current, 0, 0)
+                tempCtx.save()
+                tempCtx.translate(centerX, centerY)
+                tempCtx.rotate(cumulativeRotationAngleRef.current)
+                tempCtx.drawImage(selectionCanvas, -origWidth / 2, -origHeight / 2)
+                tempCtx.restore()
+              }
+            } else {
+              // Handle non-rotated selection
+              tempCtx.putImageData(selectionImageRef.current, rect.x, rect.y)
+            }
+            const imageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height)
+            onCanvasChange(imageData)
+          } else {
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+            onCanvasChange(imageData)
+          }
         }
         return
       }
@@ -2124,8 +2347,85 @@ export default function Canvas({
 
     setIsDrawing(false)
 
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    onCanvasChange(imageData)
+    // Capture pen/eraser strokes without layers
+    // The canvas currently has: background + layers + pen strokes
+    // We want to save: background + pen strokes (without layers)
+    // Solution: Get background, then extract only the pen stroke pixels from current canvas
+    const background = getBackgroundImageData()
+    const currentState = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    
+    // Create a new ImageData with background, then add only pen strokes
+    const tempCanvas = document.createElement('canvas')
+    tempCanvas.width = canvas.width
+    tempCanvas.height = canvas.height
+    const tempCtx = tempCanvas.getContext('2d')
+    if (tempCtx) {
+      // Start with clean background
+      tempCtx.putImageData(background, 0, 0)
+      
+      // Extract pen strokes by comparing current state with background
+      // For each pixel, if it's different from background and not a layer pixel, keep it
+      const bgData = background.data
+      const currData = currentState.data
+      const resultData = new Uint8ClampedArray(bgData)
+      
+      // Get layer bounds to exclude layer pixels
+      const layerBounds = new Set<string>()
+      shapeLayersRef.current.forEach(layer => {
+        for (let y = Math.floor(layer.y); y < Math.ceil(layer.y + layer.height); y++) {
+          for (let x = Math.floor(layer.x); x < Math.ceil(layer.x + layer.width); x++) {
+            if (x >= 0 && x < canvas.width && y >= 0 && y < canvas.height) {
+              layerBounds.add(`${x},${y}`)
+            }
+          }
+        }
+      })
+      textLayersRef.current.forEach(layer => {
+        for (let y = Math.floor(layer.y); y < Math.ceil(layer.y + layer.height); y++) {
+          for (let x = Math.floor(layer.x); x < Math.ceil(layer.x + layer.width); x++) {
+            if (x >= 0 && x < canvas.width && y >= 0 && y < canvas.height) {
+              layerBounds.add(`${x},${y}`)
+            }
+          }
+        }
+      })
+      
+      // Copy pen strokes (pixels that differ from background and aren't in layer bounds)
+      for (let i = 0; i < currData.length; i += 4) {
+        const x = (i / 4) % canvas.width
+        const y = Math.floor((i / 4) / canvas.width)
+        const pixelKey = `${x},${y}`
+        
+        // If pixel is different from background and not in a layer area, it's a pen stroke
+        if (!layerBounds.has(pixelKey)) {
+          const bgR = bgData[i]
+          const bgG = bgData[i + 1]
+          const bgB = bgData[i + 2]
+          const bgA = bgData[i + 3]
+          const currR = currData[i]
+          const currG = currData[i + 1]
+          const currB = currData[i + 2]
+          const currA = currData[i + 3]
+          
+          // If pixel differs significantly from background, it's a pen stroke
+          if (Math.abs(bgR - currR) > 5 || Math.abs(bgG - currG) > 5 || 
+              Math.abs(bgB - currB) > 5 || Math.abs(bgA - currA) > 5) {
+            resultData[i] = currR
+            resultData[i + 1] = currG
+            resultData[i + 2] = currB
+            resultData[i + 3] = currA
+          }
+        }
+      }
+      
+      const finalImageData = new ImageData(resultData, canvas.width, canvas.height)
+      tempCtx.putImageData(finalImageData, 0, 0)
+      const imageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height)
+      onCanvasChange(imageData)
+    } else {
+      // Fallback: use current state (may include layers, but better than nothing)
+      onCanvasChange(currentState)
+    }
   }
 
   const handleTextSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -2142,20 +2442,33 @@ export default function Canvas({
       if (editingTextLayerIdRef.current) {
         const existingLayer = textLayersRef.current.find(l => l.id === editingTextLayerIdRef.current)
         if (existingLayer) {
-          // Measure text to determine new width and height
-          ctx.font = `${existingLayer.fontSize}px ${existingLayer.font}`
+          // Calculate scale factor for measurement
+          const rect = canvas.getBoundingClientRect()
+          const scaleX = rect.width / canvas.width
+          const scaleY = rect.height / canvas.height
+          const scale = (scaleX + scaleY) / 2
+          
+          // Scale fontSize for measurement (to get correct dimensions)
+          const scaledFontSize = fontSize / scale
+          
+          // Measure text to determine new width and height using current font settings
+          ctx.font = `${scaledFontSize}px ${font}`
           ctx.textAlign = 'left'
           ctx.textBaseline = 'top'
           const metrics = ctx.measureText(textInput)
           const textWidth = metrics.width
-          const textHeight = existingLayer.fontSize * 1.2
+          const textHeight = scaledFontSize * 1.2
 
-          // Update existing layer
+          // Update existing layer with current font/fontSize/color settings
+          // Store fontSize in CSS pixels (original, unscaled) for consistency
           const updatedLayers = textLayersRef.current.map((layer) =>
             layer.id === editingTextLayerIdRef.current
               ? {
                   ...layer,
                   text: textInput,
+                  font: font,
+                  fontSize: fontSize, // Store original CSS pixel size, not scaled
+                  color: color,
                   width: textWidth,
                   height: textHeight,
                 }
@@ -2192,12 +2505,21 @@ export default function Canvas({
       }
 
       // Measure text to determine width and height
-      ctx.font = `${fontSize}px ${font}`
+      // Calculate scale factor to measure text correctly
+      const rect = canvas.getBoundingClientRect()
+      const scaleX = rect.width / canvas.width
+      const scaleY = rect.height / canvas.height
+      const scale = (scaleX + scaleY) / 2
+      
+      // Scale fontSize for measurement (to get correct dimensions)
+      const scaledFontSize = fontSize / scale
+      
+      ctx.font = `${scaledFontSize}px ${font}`
       ctx.textAlign = 'left'
       ctx.textBaseline = 'top'
       const metrics = ctx.measureText(textInput)
       const textWidth = metrics.width
-      const textHeight = fontSize * 1.2 // Approximate line height
+      const textHeight = scaledFontSize * 1.2 // Approximate line height
 
       // Calculate position and size
       let textX: number
@@ -2220,8 +2542,10 @@ export default function Canvas({
       }
 
       // Create text layer
+      // Store fontSize in CSS pixels (original, unscaled) for consistency
       const layerId = generateLayerId()
       const newLayer: TextLayer = {
+        type: 'text',
         id: layerId,
         text: textInput,
         x: textX,
@@ -2230,7 +2554,7 @@ export default function Canvas({
         height: textH,
         rotation: 0,
         font: font,
-        fontSize: fontSize,
+        fontSize: fontSize, // Store original CSS pixel size, not scaled
         color: color,
       }
 
@@ -2274,9 +2598,11 @@ export default function Canvas({
         const editingLayer = editingTextLayerIdRef.current 
           ? textLayersRef.current.find(l => l.id === editingTextLayerIdRef.current)
           : null
-        const inputFontSize = editingLayer ? editingLayer.fontSize : fontSize
-        const inputFont = editingLayer ? editingLayer.font : font
-        const inputColor = editingLayer ? editingLayer.color : color
+        // When editing, use current font/fontSize/color props (they update the layer in real-time)
+        // When creating new text, use the props directly
+        const inputFont = editingLayer ? font : font
+        const inputFontSize = fontSize // Always use current fontSize prop (CSS pixels)
+        const inputColor = editingLayer ? color : color
         
         return (
           <input

@@ -5,7 +5,7 @@ import Canvas from './components/Canvas'
 import Toolbar from './components/Toolbar'
 import PanelLayout from './components/PanelLayout'
 import PanelLayoutModal from './components/PanelLayoutModal'
-import { ShapeLayer, TextLayer } from './types/layers'
+import { ShapeLayer, TextLayer, migrateLayers } from './types/layers'
 import { traceShapePath, drawGrid as drawGridUtil, debugLog, debugError, debugWarn, cloneImageData, createBlankImageData } from './utils/canvasUtils'
 
 export type Tool = 'select' | 'pen' | 'eraser' | 'shapes' | 'objectShapes' | 'text' | 'fill' | 'balloon'
@@ -71,14 +71,25 @@ const renderShapeLayerOnContext = (ctx: CanvasRenderingContext2D, layer: ShapeLa
 }
 
 const renderTextLayerOnContext = (ctx: CanvasRenderingContext2D, layer: TextLayer) => {
+  const canvas = ctx.canvas
   const { x, y, width, height, rotation, text, font, fontSize, color } = layer
   const centerX = x + width / 2
   const centerY = y + height / 2
+  
+  // Calculate current scale factor for consistent rendering
+  const rect = canvas.getBoundingClientRect()
+  const scaleX = rect.width / canvas.width
+  const scaleY = rect.height / canvas.height
+  const scale = (scaleX + scaleY) / 2
+  
+  // Scale fontSize to match visual size (fontSize is stored in CSS pixels, need to scale up for canvas)
+  const scaledFontSize = fontSize / scale
+  
   ctx.save()
   ctx.translate(centerX, centerY)
   ctx.rotate(rotation)
   ctx.fillStyle = color
-  ctx.font = `${fontSize}px ${font}`
+  ctx.font = `${scaledFontSize}px ${font}`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillText(text, 0, 0)
@@ -92,6 +103,7 @@ function App() {
   const [selectedColor, setSelectedColor] = useState<string>('#000000')
   const [selectedFont, setSelectedFont] = useState<string>('Arial')
   const [selectedFontSize, setSelectedFontSize] = useState<number>(24)
+  const [isTextEditing, setIsTextEditing] = useState<boolean>(false)
   const [selectedPanel, setSelectedPanel] = useState<number>(0)
   const selectedPanelRef = useRef<number>(0)
   const [panels, setPanels] = useState<PanelData[]>([
@@ -433,8 +445,9 @@ function App() {
               id: panel.id,
               data: panel.data ? await base64ToImageData(panel.data) : null,
               layout: panel.layout,
-              shapeLayers: panel.shapeLayers ?? [],
-              textLayers: panel.textLayers ?? []
+              // Migrate layers to ensure they have the 'type' field
+              shapeLayers: migrateLayers(panel.shapeLayers ?? []) as ShapeLayer[],
+              textLayers: migrateLayers(panel.textLayers ?? []) as TextLayer[]
             }))
           )
 
@@ -681,6 +694,7 @@ function App() {
           onFontChange={setSelectedFont}
           fontSize={selectedFontSize}
           onFontSizeChange={setSelectedFontSize}
+          isTextEditing={isTextEditing}
         />
         <PanelLayout 
           panels={panels}
@@ -704,6 +718,7 @@ function App() {
             onCanvasChange={handleCanvasChange}
             onShapeLayersChange={handleShapeLayersChange}
             onTextLayersChange={handleTextLayersChange}
+            onTextEditingChange={setIsTextEditing}
             key={selectedPanel}
           />
         )}

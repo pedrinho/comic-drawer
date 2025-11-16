@@ -131,6 +131,7 @@ describe('Canvas', () => {
       const onShapeLayersChange = vi.fn()
       const shapeLayers: ShapeLayer[] = [
         {
+          type: 'shape',
           id: 'shape-1',
           shape: 'rectangle',
           x: 100,
@@ -182,6 +183,7 @@ describe('Canvas', () => {
       const onTextLayersChange = vi.fn()
       const textLayers: TextLayer[] = [
         {
+          type: 'text',
           id: 'text-1',
           text: 'Test',
           x: 100,
@@ -233,6 +235,7 @@ describe('Canvas', () => {
       const onShapeLayersChange = vi.fn()
       const shapeLayers: ShapeLayer[] = [
         {
+          type: 'shape',
           id: 'shape-1',
           shape: 'rectangle',
           x: 100,
@@ -293,6 +296,7 @@ describe('Canvas', () => {
       const onTextLayersChange = vi.fn()
       const textLayers: TextLayer[] = [
         {
+          type: 'text',
           id: 'text-1',
           text: 'Test',
           x: 100,
@@ -352,6 +356,7 @@ describe('Canvas', () => {
       const onShapeLayersChange = vi.fn()
       const shapeLayers: ShapeLayer[] = [
         {
+          type: 'shape',
           id: 'shape-1',
           shape: 'rectangle',
           x: 100,
@@ -402,6 +407,7 @@ describe('Canvas', () => {
       const onTextLayersChange = vi.fn()
       const textLayers: TextLayer[] = [
         {
+          type: 'text',
           id: 'text-1',
           text: 'Test',
           x: 100,
@@ -451,6 +457,7 @@ describe('Canvas', () => {
     it('does not show delete button when tool is not select', () => {
       const shapeLayers: ShapeLayer[] = [
         {
+          type: 'shape',
           id: 'shape-1',
           shape: 'rectangle',
           x: 100,
@@ -486,6 +493,7 @@ describe('Canvas', () => {
       const onShapeLayersChange = vi.fn()
       const shapeLayers: ShapeLayer[] = [
         {
+          type: 'shape',
           id: 'shape-1',
           shape: 'rectangle',
           x: 100,
@@ -537,6 +545,7 @@ describe('Canvas', () => {
       const onTextLayersChange = vi.fn()
       const textLayers: TextLayer[] = [
         {
+          type: 'text',
           id: 'text-1',
           text: 'Test',
           x: 100,
@@ -665,6 +674,7 @@ describe('Canvas', () => {
       const onTextLayersChange = vi.fn()
       const textLayers: TextLayer[] = [
         {
+          type: 'text',
           id: 'text-1',
           text: 'Test',
           x: 100,
@@ -743,6 +753,7 @@ describe('Canvas', () => {
       // Place shape near the right edge of canvas (width 1200)
       const shapeLayers: ShapeLayer[] = [
         {
+          type: 'shape',
           id: 'shape-1',
           shape: 'rectangle',
           x: 1150, // Near right edge
@@ -807,6 +818,7 @@ describe('Canvas', () => {
     it('does not show duplicate button when tool is not select', () => {
       const shapeLayers: ShapeLayer[] = [
         {
+          type: 'shape',
           id: 'shape-1',
           shape: 'rectangle',
           x: 100,

@@ -59,6 +59,11 @@ This project is inspired by my sons, Pedro and Paulo ❤️ They love to paint c
 
 This project is almost 100% developed by Cursor (AI pair programming assistant).
 
+## Known Issues
+
+- **Text Duplication After Editing**: After editing text and pressing Enter, the text may appear duplicated. The original text becomes part of the background and is not selectable. This is a known issue that needs to be addressed.
+- **Object Duplication After Loading**: After loading a saved file, moving objects may cause duplication. The original appears as part of the background and is not selectable. This is a known issue that needs to be addressed.
+
 ## Future Enhancements
 
 - Layer support

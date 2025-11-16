@@ -18,9 +18,10 @@ interface ToolbarProps {
   onFontChange: (font: string) => void
   fontSize: number
   onFontSizeChange: (fontSize: number) => void
+  isTextEditing?: boolean
 }
 
-export default function Toolbar({ currentTool, onToolChange, color, onColorChange, selectedShape, onSelectShape, selectedPenType, onSelectPenType, font, onFontChange, fontSize, onFontSizeChange }: ToolbarProps) {
+export default function Toolbar({ currentTool, onToolChange, color, onColorChange, selectedShape, onSelectShape, selectedPenType, onSelectPenType, font, onFontChange, fontSize, onFontSizeChange, isTextEditing = false }: ToolbarProps) {
   const [showPenSubmenu, setShowPenSubmenu] = useState(false)
   const [showShapesSubmenu, setShowShapesSubmenu] = useState(false)
   const [showTextSubmenu, setShowTextSubmenu] = useState(false)
@@ -42,10 +43,13 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     if (currentTool !== 'shapes' && currentTool !== 'objectShapes') {
       setShowShapesSubmenu(false)
     }
-    if (currentTool !== 'text' && currentTool !== 'balloon') {
+    // Show text submenu when editing text or when text/balloon tool is active
+    if (currentTool !== 'text' && currentTool !== 'balloon' && !isTextEditing) {
       setShowTextSubmenu(false)
+    } else if (isTextEditing) {
+      setShowTextSubmenu(true)
     }
-  }, [currentTool])
+  }, [currentTool, isTextEditing])
 
   const handleShapeToolClick = (toolName: Tool) => {
     if (currentTool === toolName) {
@@ -148,7 +152,7 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
               onSelectShape={onSelectShape}
             />
           )}
-          {tool.name === 'text' && (currentTool === 'text' || currentTool === 'balloon') && showTextSubmenu && (
+          {tool.name === 'text' && ((currentTool === 'text' || currentTool === 'balloon' || isTextEditing) && showTextSubmenu) && (
             <FontPicker
               isOpen={true}
               font={font}
