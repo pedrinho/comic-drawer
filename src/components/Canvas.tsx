@@ -108,27 +108,55 @@ const countContentPixels = (imageData: ImageData) => {
   return count
 }
 
-const getHandleAtPoint = (point: { x: number; y: number }, rect: SelectionRect, handleSize = 8): SelectionHandle | null => {
+const getHandleAtPoint = (point: { x: number; y: number }, rect: SelectionRect, handleSize = 8, rotation: number = 0): SelectionHandle | null => {
   const half = handleSize / 2
-  const handles: Array<{ handle: SelectionHandle; x: number; y: number }> = [
-    { handle: 'top-left', x: rect.x, y: rect.y },
-    { handle: 'top-center', x: rect.x + rect.width / 2, y: rect.y },
-    { handle: 'top-right', x: rect.x + rect.width, y: rect.y },
-    { handle: 'middle-left', x: rect.x, y: rect.y + rect.height / 2 },
-    { handle: 'middle-right', x: rect.x + rect.width, y: rect.y + rect.height / 2 },
-    { handle: 'bottom-left', x: rect.x, y: rect.y + rect.height },
-    { handle: 'bottom-center', x: rect.x + rect.width / 2, y: rect.y + rect.height },
-    { handle: 'bottom-right', x: rect.x + rect.width, y: rect.y + rect.height },
+  const centerX = rect.x + rect.width / 2
+  const centerY = rect.y + rect.height / 2
+  
+  // Base positions relative to center (same order as drawSelectionHandles)
+  const basePositions = [
+    { x: -rect.width / 2, y: -rect.height / 2 },      // top-left
+    { x: 0, y: -rect.height / 2 },                    // top-center
+    { x: rect.width / 2, y: -rect.height / 2 },       // top-right
+    { x: -rect.width / 2, y: 0 },                     // middle-left
+    { x: rect.width / 2, y: 0 },                      // middle-right
+    { x: -rect.width / 2, y: rect.height / 2 },       // bottom-left
+    { x: 0, y: rect.height / 2 },                      // bottom-center
+    { x: rect.width / 2, y: rect.height / 2 },        // bottom-right
   ]
+  
+  const handleTypes: SelectionHandle[] = [
+    'top-left',
+    'top-center',
+    'top-right',
+    'middle-left',
+    'middle-right',
+    'bottom-left',
+    'bottom-center',
+    'bottom-right',
+  ]
+  
+  // Rotate positions if needed (same logic as drawSelectionHandles)
+  const positions = rotation === 0
+    ? basePositions.map(p => ({ x: centerX + p.x, y: centerY + p.y }))
+    : basePositions.map(p => {
+        const rotatedX = p.x * Math.cos(rotation) - p.y * Math.sin(rotation)
+        const rotatedY = p.x * Math.sin(rotation) + p.y * Math.cos(rotation)
+        return { x: centerX + rotatedX, y: centerY + rotatedY }
+      })
 
-  for (const handle of handles) {
-    if (
-      point.x >= handle.x - half &&
-      point.x <= handle.x + half &&
-      point.y >= handle.y - half &&
-      point.y <= handle.y + half
-    ) {
-      return handle.handle
+  for (let i = 0; i < positions.length; i++) {
+    const pos = positions[i]
+    const handleType = handleTypes[i]
+    if (pos && handleType) {
+      if (
+        point.x >= pos.x - half &&
+        point.x <= pos.x + half &&
+        point.y >= pos.y - half &&
+        point.y <= pos.y + half
+      ) {
+        return handleType
+      }
     }
   }
 
@@ -1020,7 +1048,7 @@ export default function Canvas({
         shapeRotationStartAngleRef.current = clickAngle
         shapeRotationBaseAngleRef.current = hitLayer.rotation
       } else {
-        const handle = allowResizeHandles ? getHandleAtPoint(point, layerRect) : null
+        const handle = allowResizeHandles ? getHandleAtPoint(point, layerRect, 8, hitLayer.rotation) : null
         if (handle) {
           // Resize - save history before starting resize
           if (onShapeLayersChange) {
@@ -1086,7 +1114,7 @@ export default function Canvas({
         textRotationStartAngleRef.current = clickAngle
         textRotationBaseAngleRef.current = hitLayer.rotation
       } else {
-        const handle = allowResizeHandles ? getHandleAtPoint(point, layerRect) : null
+        const handle = allowResizeHandles ? getHandleAtPoint(point, layerRect, 8, hitLayer.rotation) : null
         if (handle) {
           // Resize - save history before starting resize
           if (onTextLayersChange) {
