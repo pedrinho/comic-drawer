@@ -1020,6 +1020,57 @@ export default function Canvas({
 
   const beginShapeLayerInteraction = useCallback(
     (point: { x: number; y: number }, allowResizeHandles = true): boolean => {
+      // First, check if we're clicking on handles of the currently selected layer
+      // This allows clicking on edge handles even if they're outside the bounding box
+      if (allowResizeHandles && activeShapeLayerIdRef.current) {
+        const selectedLayer = shapeLayersRef.current.find(l => l.id === activeShapeLayerIdRef.current)
+        if (selectedLayer) {
+          const layerRect: SelectionRect = {
+            x: selectedLayer.x,
+            y: selectedLayer.y,
+            width: selectedLayer.width,
+            height: selectedLayer.height,
+          }
+
+          // Check rotation handle first (has priority)
+          if (isRotationHandle(point, layerRect, 10, selectedLayer.rotation)) {
+            // Save history before starting rotation
+            if (onShapeLayersChange) {
+              onShapeLayersChange([...shapeLayersRef.current], false)
+            }
+            isRotatingShapeLayerRef.current = true
+            isDraggingShapeLayerRef.current = false
+            isResizingShapeLayerRef.current = false
+            const centerX = layerRect.x + layerRect.width / 2
+            const centerY = layerRect.y + layerRect.height / 2
+            rotationCenterRef.current = { x: centerX, y: centerY }
+            const clickAngle = calculateRotationAngle(rotationCenterRef.current, point)
+            shapeRotationStartAngleRef.current = clickAngle
+            shapeRotationBaseAngleRef.current = selectedLayer.rotation
+            repaintCanvas()
+            return true
+          }
+
+          // Check resize handles
+          const handle = getHandleAtPoint(point, layerRect, 12, selectedLayer.rotation)
+          if (handle) {
+            // Save history before starting resize
+            if (onShapeLayersChange) {
+              onShapeLayersChange([...shapeLayersRef.current], false)
+            }
+            isResizingShapeLayerRef.current = true
+            isDraggingShapeLayerRef.current = false
+            isRotatingShapeLayerRef.current = false
+            shapeResizeHandleRef.current = handle
+            shapeResizeStartRectRef.current = { ...layerRect }
+            shapeResizeStartPosRef.current = { x: point.x, y: point.y }
+            repaintCanvas()
+            return true
+          }
+        }
+      }
+
+      // If no handle was hit, check if point hits any layer's bounding box
       const hitLayer = hitTestShapeLayers(point)
       if (!hitLayer) {
         return false
@@ -1086,6 +1137,57 @@ export default function Canvas({
 
   const beginTextLayerInteraction = useCallback(
     (point: { x: number; y: number }, allowResizeHandles = true): boolean => {
+      // First, check if we're clicking on handles of the currently selected layer
+      // This allows clicking on edge handles even if they're outside the bounding box
+      if (allowResizeHandles && activeTextLayerIdRef.current) {
+        const selectedLayer = textLayersRef.current.find(l => l.id === activeTextLayerIdRef.current)
+        if (selectedLayer) {
+          const layerRect: SelectionRect = {
+            x: selectedLayer.x,
+            y: selectedLayer.y,
+            width: selectedLayer.width,
+            height: selectedLayer.height,
+          }
+
+          // Check rotation handle first (has priority)
+          if (isRotationHandle(point, layerRect, 10, selectedLayer.rotation)) {
+            // Save history before starting rotation
+            if (onTextLayersChange) {
+              onTextLayersChange([...textLayersRef.current], false)
+            }
+            isRotatingTextLayerRef.current = true
+            isDraggingTextLayerRef.current = false
+            isResizingTextLayerRef.current = false
+            const centerX = layerRect.x + layerRect.width / 2
+            const centerY = layerRect.y + layerRect.height / 2
+            rotationCenterRef.current = { x: centerX, y: centerY }
+            const clickAngle = calculateRotationAngle(rotationCenterRef.current, point)
+            textRotationStartAngleRef.current = clickAngle
+            textRotationBaseAngleRef.current = selectedLayer.rotation
+            repaintCanvas()
+            return true
+          }
+
+          // Check resize handles
+          const handle = getHandleAtPoint(point, layerRect, 12, selectedLayer.rotation)
+          if (handle) {
+            // Save history before starting resize
+            if (onTextLayersChange) {
+              onTextLayersChange([...textLayersRef.current], false)
+            }
+            isResizingTextLayerRef.current = true
+            isDraggingTextLayerRef.current = false
+            isRotatingTextLayerRef.current = false
+            textResizeHandleRef.current = handle
+            textResizeStartRectRef.current = { ...layerRect }
+            textResizeStartPosRef.current = { x: point.x, y: point.y }
+            repaintCanvas()
+            return true
+          }
+        }
+      }
+
+      // If no handle was hit, check if point hits any layer's bounding box
       const hitLayer = hitTestTextLayers(point)
       if (!hitLayer) {
         return false
