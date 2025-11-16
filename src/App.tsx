@@ -37,9 +37,14 @@ interface ComicFile {
   panels: SavedPanel[]
 }
 
+interface PanelState {
+  data: ImageData | null
+  shapeLayers: ShapeLayer[]
+}
+
 interface PanelHistory {
-  undo: ImageData[]
-  redo: ImageData[]
+  undo: PanelState[]
+  redo: PanelState[]
 }
 
 const MAX_HISTORY = 10
@@ -68,6 +73,7 @@ function App() {
   const [selectedPenType, setSelectedPenType] = useState<PenType>('medium')
   const [selectedColor, setSelectedColor] = useState<string>('#000000')
   const [selectedPanel, setSelectedPanel] = useState<number>(0)
+  const selectedPanelRef = useRef<number>(0)
   const [panels, setPanels] = useState<PanelData[]>([
     { id: 0, data: null, layout: { rows: 1, columns: [1] }, shapeLayers: [] }
   ])
@@ -75,6 +81,11 @@ function App() {
   
   // History for each panel: Map<panelIndex, {undo: ImageData[], redo: ImageData[]}>
   const historyRef = useRef<Map<number, PanelHistory>>(new Map())
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    selectedPanelRef.current = selectedPanel
+  }, [selectedPanel])
 
   const addPanel = () => {
     debugLog('App', 'Adding new panel')
@@ -94,35 +105,41 @@ function App() {
     return historyRef.current.get(panelIndex)!
   }
 
+  // Deep clone shape layers for history
+  const cloneShapeLayers = (layers: ShapeLayer[]): ShapeLayer[] => {
+    return layers.map(layer => ({ ...layer }))
+  }
+
   // Save current state to history before making changes
-  const saveToHistory = (panelIndex: number, currentData: ImageData | null) => {
-    debugLog('App', 'Saving to history', { panelIndex, hasData: !!currentData })
+  const saveToHistory = (panelIndex: number, currentData: ImageData | null, currentShapeLayers: ShapeLayer[] = []) => {
+    debugLog('App', 'Saving to history', { panelIndex, hasData: !!currentData, shapeLayerCount: currentShapeLayers.length })
     const history = getPanelHistory(panelIndex)
     
-    let stateToSave: ImageData | null = null
+    let stateToSave: PanelState = {
+      data: null,
+      shapeLayers: cloneShapeLayers(currentShapeLayers)
+    }
     
     if (currentData) {
       // Clone the existing ImageData for history
-      stateToSave = cloneImageData(currentData)
+      stateToSave.data = cloneImageData(currentData)
     } else {
       // If canvas is empty, create a blank white canvas as the initial state
-      stateToSave = createBlankImageData()
+      stateToSave.data = createBlankImageData()
     }
     
-    if (stateToSave) {
-      // Add to undo stack
-      history.undo.push(stateToSave)
-      
-      // Limit to MAX_HISTORY
-      if (history.undo.length > MAX_HISTORY) {
-        history.undo.shift()
-        debugWarn('App', 'History limit reached, removing oldest state')
-      }
-      
-      // Clear redo stack when new action is performed
-      history.redo = []
-      debugLog('App', 'History saved', { undoStackSize: history.undo.length })
+    // Add to undo stack
+    history.undo.push(stateToSave)
+    
+    // Limit to MAX_HISTORY
+    if (history.undo.length > MAX_HISTORY) {
+      history.undo.shift()
+      debugWarn('App', 'History limit reached, removing oldest state')
     }
+    
+    // Clear redo stack when new action is performed
+    history.redo = []
+    debugLog('App', 'History saved', { undoStackSize: history.undo.length })
   }
 
   const handleCanvasChange = (data: ImageData, skipHistory = false) => {
@@ -133,7 +150,8 @@ function App() {
     if (!skipHistory) {
       // Save current state to history before making changes
       const currentData = panel.data
-      saveToHistory(selectedPanel, currentData)
+      const currentShapeLayers = panel.shapeLayers
+      saveToHistory(selectedPanel, currentData, currentShapeLayers)
     }
     
     const updatedPanels = [...panels]
@@ -144,38 +162,68 @@ function App() {
     }
   }
 
-  const handleShapeLayersChange = useCallback((layers: ShapeLayer[]) => {
+  const handleShapeLayersChange = useCallback((layers: ShapeLayer[], skipHistory = false) => {
+    debugLog('App', 'handleShapeLayersChange called', { 
+      newLayerCount: layers.length, 
+      skipHistory,
+      selectedPanel: selectedPanelRef.current 
+    })
     setPanels((prevPanels) => {
+      const currentPanelIndex = selectedPanelRef.current
       const nextPanels = [...prevPanels]
-      const panel = nextPanels[selectedPanel]
+      const panel = nextPanels[currentPanelIndex]
       if (!panel) {
+        debugWarn('App', 'Panel not found', { currentPanelIndex })
         return prevPanels
       }
-      nextPanels[selectedPanel] = { ...panel, shapeLayers: layers }
+      
+      if (!skipHistory) {
+        // Save current state to history before making changes
+        const currentData = panel.data
+        const currentShapeLayers = panel.shapeLayers
+        debugLog('App', 'Saving to history before shape change', { 
+          currentShapeLayerCount: currentShapeLayers.length,
+          newShapeLayerCount: layers.length,
+          panelIndex: currentPanelIndex
+        })
+        saveToHistory(currentPanelIndex, currentData, currentShapeLayers)
+      } else {
+        debugLog('App', 'Skipping history save')
+      }
+      
+      nextPanels[currentPanelIndex] = { ...panel, shapeLayers: layers }
       return nextPanels
     })
-  }, [selectedPanel])
+  }, [])
 
   const handleUndo = useCallback(() => {
-    debugLog('App', 'Undo requested', { selectedPanel })
+    debugLog('App', 'Undo requested', { selectedPanel, historySize: getPanelHistory(selectedPanel).undo.length })
     const panel = panels[selectedPanel]
     if (!panel) return
     
     const history = getPanelHistory(selectedPanel)
     const currentData = panel.data
+    const currentShapeLayers = panel.shapeLayers
+    
+    debugLog('App', 'Undo check', { 
+      undoStackLength: history.undo.length, 
+      currentShapeLayerCount: currentShapeLayers.length,
+      hasData: !!currentData 
+    })
     
     if (history.undo.length === 0) {
-      debugWarn('App', 'Nothing to undo')
+      debugWarn('App', 'Nothing to undo - history is empty')
       return // Nothing to undo
     }
     
-    // Move current state to redo stack if it exists
-    if (currentData) {
-      const clonedData = cloneImageData(currentData)
-      history.redo.push(clonedData)
-      if (history.redo.length > MAX_HISTORY) {
-        history.redo.shift()
-      }
+    // Move current state to redo stack
+    const currentState: PanelState = {
+      data: currentData ? cloneImageData(currentData) : null,
+      shapeLayers: cloneShapeLayers(currentShapeLayers)
+    }
+    history.redo.push(currentState)
+    if (history.redo.length > MAX_HISTORY) {
+      history.redo.shift()
     }
     
     // Restore previous state from undo stack
@@ -183,7 +231,8 @@ function App() {
     const updatedPanels = [...panels]
     const updatedPanel = updatedPanels[selectedPanel]
     if (updatedPanel) {
-      updatedPanel.data = previousState
+      updatedPanel.data = previousState.data
+      updatedPanel.shapeLayers = cloneShapeLayers(previousState.shapeLayers)
       setPanels(updatedPanels)
     }
   }, [selectedPanel, panels])
@@ -195,19 +244,21 @@ function App() {
     
     const history = getPanelHistory(selectedPanel)
     const currentData = panel.data
+    const currentShapeLayers = panel.shapeLayers
     
     if (history.redo.length === 0) {
       debugWarn('App', 'Nothing to redo')
       return // Nothing to redo
     }
     
-    // Move current state to undo stack if it exists
-    if (currentData) {
-      const clonedData = cloneImageData(currentData)
-      history.undo.push(clonedData)
-      if (history.undo.length > MAX_HISTORY) {
-        history.undo.shift()
-      }
+    // Move current state to undo stack
+    const currentState: PanelState = {
+      data: currentData ? cloneImageData(currentData) : null,
+      shapeLayers: cloneShapeLayers(currentShapeLayers)
+    }
+    history.undo.push(currentState)
+    if (history.undo.length > MAX_HISTORY) {
+      history.undo.shift()
     }
     
     // Restore next state from redo stack
@@ -215,7 +266,8 @@ function App() {
     const updatedPanels = [...panels]
     const updatedPanel = updatedPanels[selectedPanel]
     if (updatedPanel) {
-      updatedPanel.data = nextState
+      updatedPanel.data = nextState.data
+      updatedPanel.shapeLayers = cloneShapeLayers(nextState.shapeLayers)
       setPanels(updatedPanels)
     }
   }, [selectedPanel, panels])

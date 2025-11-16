@@ -36,7 +36,7 @@ interface CanvasProps {
   layout: { rows: number; columns: number[] }
   onCanvasChange: (data: ImageData) => void
   shapeLayers?: ShapeLayer[]
-  onShapeLayersChange?: (layers: ShapeLayer[]) => void
+  onShapeLayersChange?: (layers: ShapeLayer[], skipHistory?: boolean) => void
 }
 
 const getPenWidth = (penType?: PenType): number => {
@@ -637,7 +637,13 @@ export default function Canvas({
       }
       pendingShapeLayerIdRef.current = layerId
       isDrawingObjectShapeRef.current = true
-      updateShapeLayers([...shapeLayersRef.current, newLayer])
+      // Save history BEFORE creating the new shape
+      const currentLayers = [...shapeLayersRef.current]
+      if (onShapeLayersChange) {
+        onShapeLayersChange(currentLayers, false) // Save current state to history
+      }
+      // Now add the new layer without saving to history (skipHistory = true)
+      updateShapeLayers([...shapeLayersRef.current, newLayer], true)
       repaintCanvas()
       return
     }
@@ -648,7 +654,8 @@ export default function Canvas({
         const updatedLayers = shapeLayersRef.current.map((layer) =>
           layer.id === hitLayer.id ? { ...layer, fillColor: color } : layer
         )
-        updateShapeLayers(updatedLayers)
+        // Save history when filling a shape
+        updateShapeLayers(updatedLayers, false)
         repaintCanvas()
         setIsDrawing(false)
         return
@@ -769,11 +776,11 @@ export default function Canvas({
     }
   }, [panelData, drawGrid, drawShapeLayers])
 
-  const updateShapeLayers = useCallback((layers: ShapeLayer[]) => {
-    debugLog('Canvas', 'Updating shape layers', { layerCount: layers.length })
+  const updateShapeLayers = useCallback((layers: ShapeLayer[], skipHistory = false) => {
+    debugLog('Canvas', 'Updating shape layers', { layerCount: layers.length, skipHistory })
     shapeLayersRef.current = layers
     if (onShapeLayersChange) {
-      onShapeLayersChange(layers)
+      onShapeLayersChange(layers, skipHistory)
     }
   }, [onShapeLayersChange])
 
@@ -817,6 +824,10 @@ export default function Canvas({
 
       // Rotation handle has priority
       if (allowResizeHandles && isRotationHandle(point, layerRect, 10, hitLayer.rotation)) {
+        // Save history before starting rotation
+        if (onShapeLayersChange) {
+          onShapeLayersChange([...shapeLayersRef.current], false)
+        }
         isRotatingShapeLayerRef.current = true
         isDraggingShapeLayerRef.current = false
         isResizingShapeLayerRef.current = false
@@ -829,7 +840,10 @@ export default function Canvas({
       } else {
         const handle = allowResizeHandles ? getHandleAtPoint(point, layerRect) : null
         if (handle) {
-          // Resize
+          // Resize - save history before starting resize
+          if (onShapeLayersChange) {
+            onShapeLayersChange([...shapeLayersRef.current], false)
+          }
           isResizingShapeLayerRef.current = true
           isDraggingShapeLayerRef.current = false
           isRotatingShapeLayerRef.current = false
@@ -837,7 +851,10 @@ export default function Canvas({
           shapeResizeStartRectRef.current = { ...layerRect }
           shapeResizeStartPosRef.current = { x: point.x, y: point.y }
         } else {
-          // Drag
+          // Drag - save history before starting drag
+          if (onShapeLayersChange) {
+            onShapeLayersChange([...shapeLayersRef.current], false)
+          }
           isDraggingShapeLayerRef.current = true
           isResizingShapeLayerRef.current = false
           isRotatingShapeLayerRef.current = false
@@ -852,7 +869,7 @@ export default function Canvas({
       repaintCanvas()
       return true
     },
-    [hitTestShapeLayers, repaintCanvas]
+    [hitTestShapeLayers, repaintCanvas, onShapeLayersChange]
   )
 
   useEffect(() => {
@@ -884,7 +901,8 @@ export default function Canvas({
         ? { ...layer, x: layerX, y: layerY, width, height }
         : layer
     )
-    updateShapeLayers(updatedLayers)
+    // Skip history during drawing - we already saved when shape creation started
+    updateShapeLayers(updatedLayers, true)
     repaintCanvas()
       return
     }
@@ -899,7 +917,8 @@ export default function Canvas({
           ? { ...layer, rotation: shapeRotationBaseAngleRef.current + delta }
           : layer
       )
-      updateShapeLayers(updatedLayers)
+      // Skip history during rotation drag - history saved when rotation starts
+      updateShapeLayers(updatedLayers, true)
       repaintCanvas()
       return
     }
@@ -918,7 +937,8 @@ export default function Canvas({
             }
           : layer
       )
-      updateShapeLayers(updatedLayers)
+      // Skip history during resize drag - history saved when resize starts
+      updateShapeLayers(updatedLayers, true)
       repaintCanvas()
       return
     }
@@ -933,7 +953,8 @@ export default function Canvas({
             }
           : layer
       )
-      updateShapeLayers(updatedLayers)
+      // Skip history during drag - history saved when drag starts
+      updateShapeLayers(updatedLayers, true)
       repaintCanvas()
       return
     }
