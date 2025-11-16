@@ -108,8 +108,10 @@ const countContentPixels = (imageData: ImageData) => {
   return count
 }
 
-const getHandleAtPoint = (point: { x: number; y: number }, rect: SelectionRect, handleSize = 8, rotation: number = 0): SelectionHandle | null => {
-  const half = handleSize / 2
+const getHandleAtPoint = (point: { x: number; y: number }, rect: SelectionRect, handleSize = 12, rotation: number = 0): SelectionHandle | null => {
+  // Use larger hit area than visual handle for easier clicking
+  const hitAreaSize = handleSize + 4 // 16 pixels hit area for 12px visual handle
+  const half = hitAreaSize / 2
   const centerX = rect.x + rect.width / 2
   const centerY = rect.y + rect.height / 2
   
@@ -284,7 +286,7 @@ const drawSelectionOutline = (ctx: CanvasRenderingContext2D, rect: SelectionRect
 }
 
 const drawSelectionHandles = (ctx: CanvasRenderingContext2D, rect: SelectionRect, rotation: number = 0) => {
-  const handleSize = 8
+  const handleSize = 12
   const half = handleSize / 2
   const centerX = rect.x + rect.width / 2
   const centerY = rect.y + rect.height / 2
@@ -1048,7 +1050,7 @@ export default function Canvas({
         shapeRotationStartAngleRef.current = clickAngle
         shapeRotationBaseAngleRef.current = hitLayer.rotation
       } else {
-        const handle = allowResizeHandles ? getHandleAtPoint(point, layerRect, 8, hitLayer.rotation) : null
+        const handle = allowResizeHandles ? getHandleAtPoint(point, layerRect, 12, hitLayer.rotation) : null
         if (handle) {
           // Resize - save history before starting resize
           if (onShapeLayersChange) {
@@ -1114,7 +1116,7 @@ export default function Canvas({
         textRotationStartAngleRef.current = clickAngle
         textRotationBaseAngleRef.current = hitLayer.rotation
       } else {
-        const handle = allowResizeHandles ? getHandleAtPoint(point, layerRect, 8, hitLayer.rotation) : null
+        const handle = allowResizeHandles ? getHandleAtPoint(point, layerRect, 12, hitLayer.rotation) : null
         if (handle) {
           // Resize - save history before starting resize
           if (onTextLayersChange) {
