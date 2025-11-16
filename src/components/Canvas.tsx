@@ -884,16 +884,18 @@ export default function Canvas({
         drawSelectionOutline(ctx, layer, layer.rotation)
         drawSelectionHandles(ctx, layer, layer.rotation)
         // Position buttons above the selection, centered
+        // Position them higher to avoid rotation handle (which is 30px above center)
         const buttonX = layer.x + layer.width / 2
-        const buttonY = layer.y - 30 // Above the selection
+        const buttonY = layer.y - 45 // Higher up to avoid rotation handle
+        const buttonSpacing = 35 // Reduced spacing for smaller buttons
         // Delete button on the right
         setDeleteButtonPos({
-          x: rect.left + (buttonX + 50) * scaleX,
+          x: rect.left + (buttonX + buttonSpacing) * scaleX,
           y: rect.top + buttonY * scaleY,
         })
         // Duplicate button on the left
         setDuplicateButtonPos({
-          x: rect.left + (buttonX - 50) * scaleX,
+          x: rect.left + (buttonX - buttonSpacing) * scaleX,
           y: rect.top + buttonY * scaleY,
         })
       } else {
@@ -907,16 +909,18 @@ export default function Canvas({
         drawSelectionOutline(ctx, layer, layer.rotation)
         drawSelectionHandles(ctx, layer, layer.rotation)
         // Position buttons above the selection, centered
+        // Position them higher to avoid rotation handle (which is 30px above center)
         const buttonX = layer.x + layer.width / 2
-        const buttonY = layer.y - 30 // Above the selection
+        const buttonY = layer.y - 45 // Higher up to avoid rotation handle
+        const buttonSpacing = 35 // Reduced spacing for smaller buttons
         // Delete button on the right
         setDeleteButtonPos({
-          x: rect.left + (buttonX + 50) * scaleX,
+          x: rect.left + (buttonX + buttonSpacing) * scaleX,
           y: rect.top + buttonY * scaleY,
         })
         // Duplicate button on the left
         setDuplicateButtonPos({
-          x: rect.left + (buttonX - 50) * scaleX,
+          x: rect.left + (buttonX - buttonSpacing) * scaleX,
           y: rect.top + buttonY * scaleY,
         })
       } else {
@@ -2177,10 +2181,14 @@ export default function Canvas({
             backgroundColor: '#3b82f6',
             color: 'white',
             border: 'none',
-            borderRadius: '4px',
-            padding: '6px 12px',
+            borderRadius: '50%',
+            width: '28px',
+            height: '28px',
+            padding: '0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             fontSize: '14px',
-            fontWeight: 'bold',
             cursor: 'pointer',
             boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
             zIndex: 1001,
@@ -2194,7 +2202,7 @@ export default function Canvas({
           }}
           title="Duplicate"
         >
-          📋 Duplicate
+          📋
         </button>
       )}
       {deleteButtonPos && tool === 'select' && (activeShapeLayerIdRef.current || activeTextLayerIdRef.current) && (
@@ -2208,10 +2216,14 @@ export default function Canvas({
             backgroundColor: '#ef4444',
             color: 'white',
             border: 'none',
-            borderRadius: '4px',
-            padding: '6px 12px',
+            borderRadius: '50%',
+            width: '28px',
+            height: '28px',
+            padding: '0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             fontSize: '14px',
-            fontWeight: 'bold',
             cursor: 'pointer',
             boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
             zIndex: 1001,
@@ -2225,7 +2237,7 @@ export default function Canvas({
           }}
           title="Delete (Delete/Backspace)"
         >
-          🗑️ Delete
+          🗑️
         </button>
       )}
     </div>
