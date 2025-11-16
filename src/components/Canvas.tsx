@@ -704,7 +704,7 @@ export default function Canvas({
         width: 1,
         height: 1,
         rotation: 0,
-        strokeColor: '#000000',
+        strokeColor: color,
         strokeWidth: 2,
         fillColor: null,
       }
