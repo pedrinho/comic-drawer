@@ -5,7 +5,7 @@ import Canvas from './components/Canvas'
 import Toolbar from './components/Toolbar'
 import PanelLayout from './components/PanelLayout'
 import PanelLayoutModal from './components/PanelLayoutModal'
-import { ShapeLayer } from './types/layers'
+import { ShapeLayer, TextLayer } from './types/layers'
 import { traceShapePath, drawGrid as drawGridUtil, debugLog, debugError, debugWarn, cloneImageData, createBlankImageData } from './utils/canvasUtils'
 
 export type Tool = 'select' | 'pen' | 'eraser' | 'shapes' | 'objectShapes' | 'text' | 'fill' | 'balloon'
@@ -20,6 +20,7 @@ export interface PanelData {
     columns: number[]
   }
   shapeLayers: ShapeLayer[]
+  textLayers: TextLayer[]
 }
 
 interface SavedPanel {
@@ -30,6 +31,7 @@ interface SavedPanel {
     columns: number[]
   }
   shapeLayers?: ShapeLayer[]
+  textLayers?: TextLayer[]
 }
 
 interface ComicFile {
@@ -40,6 +42,7 @@ interface ComicFile {
 interface PanelState {
   data: ImageData | null
   shapeLayers: ShapeLayer[]
+  textLayers: TextLayer[]
 }
 
 interface PanelHistory {
@@ -67,15 +70,32 @@ const renderShapeLayerOnContext = (ctx: CanvasRenderingContext2D, layer: ShapeLa
   ctx.restore()
 }
 
+const renderTextLayerOnContext = (ctx: CanvasRenderingContext2D, layer: TextLayer) => {
+  const { x, y, width, height, rotation, text, font, fontSize, color } = layer
+  const centerX = x + width / 2
+  const centerY = y + height / 2
+  ctx.save()
+  ctx.translate(centerX, centerY)
+  ctx.rotate(rotation)
+  ctx.fillStyle = color
+  ctx.font = `${fontSize}px ${font}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(text, 0, 0)
+  ctx.restore()
+}
+
 function App() {
   const [currentTool, setCurrentTool] = useState<Tool>('pen')
   const [selectedShape, setSelectedShape] = useState<Shape>('rectangle')
   const [selectedPenType, setSelectedPenType] = useState<PenType>('medium')
   const [selectedColor, setSelectedColor] = useState<string>('#000000')
+  const [selectedFont, setSelectedFont] = useState<string>('Arial')
+  const [selectedFontSize, setSelectedFontSize] = useState<number>(24)
   const [selectedPanel, setSelectedPanel] = useState<number>(0)
   const selectedPanelRef = useRef<number>(0)
   const [panels, setPanels] = useState<PanelData[]>([
-    { id: 0, data: null, layout: { rows: 1, columns: [1] }, shapeLayers: [] }
+    { id: 0, data: null, layout: { rows: 1, columns: [1] }, shapeLayers: [], textLayers: [] }
   ])
   const [showModal, setShowModal] = useState(false)
   
@@ -94,7 +114,7 @@ function App() {
 
   const handlePanelLayoutConfirm = (rows: number, columns: number[]) => {
     debugLog('App', 'Panel layout confirmed', { rows, columns, newPanelId: panels.length })
-    setPanels([...panels, { id: panels.length, data: null, layout: { rows, columns }, shapeLayers: [] }])
+    setPanels([...panels, { id: panels.length, data: null, layout: { rows, columns }, shapeLayers: [], textLayers: [] }])
   }
 
   // Helper to get or initialize history for a panel
@@ -110,14 +130,20 @@ function App() {
     return layers.map(layer => ({ ...layer }))
   }
 
+  // Deep clone text layers for history
+  const cloneTextLayers = (layers: TextLayer[]): TextLayer[] => {
+    return layers.map(layer => ({ ...layer }))
+  }
+
   // Save current state to history before making changes
-  const saveToHistory = (panelIndex: number, currentData: ImageData | null, currentShapeLayers: ShapeLayer[] = []) => {
-    debugLog('App', 'Saving to history', { panelIndex, hasData: !!currentData, shapeLayerCount: currentShapeLayers.length })
+  const saveToHistory = (panelIndex: number, currentData: ImageData | null, currentShapeLayers: ShapeLayer[] = [], currentTextLayers: TextLayer[] = []) => {
+    debugLog('App', 'Saving to history', { panelIndex, hasData: !!currentData, shapeLayerCount: currentShapeLayers.length, textLayerCount: currentTextLayers.length })
     const history = getPanelHistory(panelIndex)
     
     let stateToSave: PanelState = {
       data: null,
-      shapeLayers: cloneShapeLayers(currentShapeLayers)
+      shapeLayers: cloneShapeLayers(currentShapeLayers),
+      textLayers: cloneTextLayers(currentTextLayers)
     }
     
     if (currentData) {
@@ -151,7 +177,8 @@ function App() {
       // Save current state to history before making changes
       const currentData = panel.data
       const currentShapeLayers = panel.shapeLayers
-      saveToHistory(selectedPanel, currentData, currentShapeLayers)
+      const currentTextLayers = panel.textLayers
+      saveToHistory(selectedPanel, currentData, currentShapeLayers, currentTextLayers)
     }
     
     const updatedPanels = [...panels]
@@ -181,17 +208,53 @@ function App() {
         // Save current state to history before making changes
         const currentData = panel.data
         const currentShapeLayers = panel.shapeLayers
+        const currentTextLayers = panel.textLayers
         debugLog('App', 'Saving to history before shape change', { 
           currentShapeLayerCount: currentShapeLayers.length,
           newShapeLayerCount: layers.length,
           panelIndex: currentPanelIndex
         })
-        saveToHistory(currentPanelIndex, currentData, currentShapeLayers)
+        saveToHistory(currentPanelIndex, currentData, currentShapeLayers, currentTextLayers)
       } else {
         debugLog('App', 'Skipping history save')
       }
       
       nextPanels[currentPanelIndex] = { ...panel, shapeLayers: layers }
+      return nextPanels
+    })
+  }, [])
+
+  const handleTextLayersChange = useCallback((layers: TextLayer[], skipHistory = false) => {
+    debugLog('App', 'handleTextLayersChange called', { 
+      newLayerCount: layers.length, 
+      skipHistory,
+      selectedPanel: selectedPanelRef.current 
+    })
+    setPanels((prevPanels) => {
+      const currentPanelIndex = selectedPanelRef.current
+      const nextPanels = [...prevPanels]
+      const panel = nextPanels[currentPanelIndex]
+      if (!panel) {
+        debugWarn('App', 'Panel not found', { currentPanelIndex })
+        return prevPanels
+      }
+      
+      if (!skipHistory) {
+        // Save current state to history before making changes
+        const currentData = panel.data
+        const currentShapeLayers = panel.shapeLayers
+        const currentTextLayers = panel.textLayers
+        debugLog('App', 'Saving to history before text change', { 
+          currentTextLayerCount: currentTextLayers.length,
+          newTextLayerCount: layers.length,
+          panelIndex: currentPanelIndex
+        })
+        saveToHistory(currentPanelIndex, currentData, currentShapeLayers, currentTextLayers)
+      } else {
+        debugLog('App', 'Skipping history save')
+      }
+      
+      nextPanels[currentPanelIndex] = { ...panel, textLayers: layers }
       return nextPanels
     })
   }, [])
@@ -204,10 +267,12 @@ function App() {
     const history = getPanelHistory(selectedPanel)
     const currentData = panel.data
     const currentShapeLayers = panel.shapeLayers
+    const currentTextLayers = panel.textLayers
     
     debugLog('App', 'Undo check', { 
       undoStackLength: history.undo.length, 
       currentShapeLayerCount: currentShapeLayers.length,
+      currentTextLayerCount: currentTextLayers.length,
       hasData: !!currentData 
     })
     
@@ -219,7 +284,8 @@ function App() {
     // Move current state to redo stack
     const currentState: PanelState = {
       data: currentData ? cloneImageData(currentData) : null,
-      shapeLayers: cloneShapeLayers(currentShapeLayers)
+      shapeLayers: cloneShapeLayers(currentShapeLayers),
+      textLayers: cloneTextLayers(currentTextLayers)
     }
     history.redo.push(currentState)
     if (history.redo.length > MAX_HISTORY) {
@@ -233,6 +299,7 @@ function App() {
     if (updatedPanel) {
       updatedPanel.data = previousState.data
       updatedPanel.shapeLayers = cloneShapeLayers(previousState.shapeLayers)
+      updatedPanel.textLayers = cloneTextLayers(previousState.textLayers)
       setPanels(updatedPanels)
     }
   }, [selectedPanel, panels])
@@ -245,6 +312,7 @@ function App() {
     const history = getPanelHistory(selectedPanel)
     const currentData = panel.data
     const currentShapeLayers = panel.shapeLayers
+    const currentTextLayers = panel.textLayers
     
     if (history.redo.length === 0) {
       debugWarn('App', 'Nothing to redo')
@@ -254,7 +322,8 @@ function App() {
     // Move current state to undo stack
     const currentState: PanelState = {
       data: currentData ? cloneImageData(currentData) : null,
-      shapeLayers: cloneShapeLayers(currentShapeLayers)
+      shapeLayers: cloneShapeLayers(currentShapeLayers),
+      textLayers: cloneTextLayers(currentTextLayers)
     }
     history.undo.push(currentState)
     if (history.undo.length > MAX_HISTORY) {
@@ -268,6 +337,7 @@ function App() {
     if (updatedPanel) {
       updatedPanel.data = nextState.data
       updatedPanel.shapeLayers = cloneShapeLayers(nextState.shapeLayers)
+      updatedPanel.textLayers = cloneTextLayers(nextState.textLayers)
       setPanels(updatedPanels)
     }
   }, [selectedPanel, panels])
@@ -315,7 +385,8 @@ function App() {
       id: panel.id,
       data: panel.data ? imageDataToBase64(panel.data) : null,
       layout: panel.layout,
-      shapeLayers: panel.shapeLayers
+      shapeLayers: panel.shapeLayers,
+      textLayers: panel.textLayers
     }))
 
     const comicFile: ComicFile = {
@@ -362,7 +433,8 @@ function App() {
               id: panel.id,
               data: panel.data ? await base64ToImageData(panel.data) : null,
               layout: panel.layout,
-              shapeLayers: panel.shapeLayers ?? []
+              shapeLayers: panel.shapeLayers ?? [],
+              textLayers: panel.textLayers ?? []
             }))
           )
 
@@ -437,6 +509,13 @@ function App() {
     if (panel.shapeLayers && panel.shapeLayers.length > 0) {
       panel.shapeLayers.forEach((layer) => {
         renderShapeLayerOnContext(ctx, layer)
+      })
+    }
+
+    // Draw text layers if any
+    if (panel.textLayers && panel.textLayers.length > 0) {
+      panel.textLayers.forEach((layer) => {
+        renderTextLayerOnContext(ctx, layer)
       })
     }
 
@@ -598,6 +677,10 @@ function App() {
           onSelectShape={setSelectedShape}
           selectedPenType={selectedPenType}
           onSelectPenType={setSelectedPenType}
+          font={selectedFont}
+          onFontChange={setSelectedFont}
+          fontSize={selectedFontSize}
+          onFontSizeChange={setSelectedFontSize}
         />
         <PanelLayout 
           panels={panels}
@@ -612,11 +695,15 @@ function App() {
             shape={selectedShape}
             penType={selectedPenType}
             color={selectedColor}
+            font={selectedFont}
+            fontSize={selectedFontSize}
             panelData={panels[selectedPanel]!.data}
             layout={panels[selectedPanel]!.layout}
             shapeLayers={panels[selectedPanel]!.shapeLayers}
+            textLayers={panels[selectedPanel]!.textLayers}
             onCanvasChange={handleCanvasChange}
             onShapeLayersChange={handleShapeLayersChange}
+            onTextLayersChange={handleTextLayersChange}
             key={selectedPanel}
           />
         )}

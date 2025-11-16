@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Tool, Shape, PenType } from '../App'
-import { ShapeLayer } from '../types/layers'
+import { ShapeLayer, TextLayer } from '../types/layers'
 import { traceShapePath, drawGrid as drawGridUtil, debugLog, debugError, debugWarn } from '../utils/canvasUtils'
 import './Canvas.css'
 
@@ -32,11 +32,15 @@ interface CanvasProps {
   shape?: Shape
   penType?: PenType
   color: string
+  font: string
+  fontSize: number
   panelData: ImageData | null
   layout: { rows: number; columns: number[] }
   onCanvasChange: (data: ImageData) => void
   shapeLayers?: ShapeLayer[]
   onShapeLayersChange?: (layers: ShapeLayer[], skipHistory?: boolean) => void
+  textLayers?: TextLayer[]
+  onTextLayersChange?: (layers: TextLayer[], skipHistory?: boolean) => void
 }
 
 const getPenWidth = (penType?: PenType): number => {
@@ -60,8 +64,6 @@ const normalizeRect = (start: { x: number; y: number }, end: { x: number; y: num
   return { x, y, width, height }
 }
 
-// Unused function - kept for potential future use
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const clamp = (value: number, min: number, max: number) => {
   return Math.min(Math.max(value, min), max)
 }
@@ -319,11 +321,15 @@ export default function Canvas({
   shape,
   penType,
   color,
+  font,
+  fontSize,
   panelData,
   layout,
   onCanvasChange,
   shapeLayers = [],
   onShapeLayersChange,
+  textLayers = [],
+  onTextLayersChange,
 }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
@@ -363,10 +369,24 @@ export default function Canvas({
   const shapeRotationBaseAngleRef = useRef(0)
   const isDrawingObjectShapeRef = useRef(false)
   const pendingShapeLayerIdRef = useRef<string | null>(null)
+  const textLayersRef = useRef<TextLayer[]>(textLayers)
+  const activeTextLayerIdRef = useRef<string | null>(null)
+  const isDraggingTextLayerRef = useRef(false)
+  const isResizingTextLayerRef = useRef(false)
+  const isRotatingTextLayerRef = useRef(false)
+  const textDragOffsetRef = useRef({ x: 0, y: 0 })
+  const textResizeHandleRef = useRef<SelectionHandle | null>(null)
+  const textResizeStartRectRef = useRef<SelectionRect | null>(null)
+  const textResizeStartPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
+  const textRotationStartAngleRef = useRef(0)
+  const textRotationBaseAngleRef = useRef(0)
   const [textInputPos, setTextInputPos] = useState<{ x: number; y: number } | null>(null)
   const [textInputScreenPos, setTextInputScreenPos] = useState<{ x: number; y: number } | null>(null)
   const [textInput, setTextInput] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const editingTextLayerIdRef = useRef<string | null>(null)
+  const lastClickTimeRef = useRef(0)
+  const lastClickPosRef = useRef<{ x: number; y: number } | null>(null)
   const [balloonOval, setBalloonOval] = useState<{ 
     centerX: number; 
     centerY: number; 
@@ -378,6 +398,51 @@ export default function Canvas({
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     drawGridUtil(ctx, layout)
   }, [layout])
+
+  const renderShapeLayer = (ctx: CanvasRenderingContext2D, layer: ShapeLayer) => {
+    const { x, y, width, height, rotation, strokeColor, strokeWidth, fillColor, shape: layerShape } = layer
+    const centerX = x + width / 2
+    const centerY = y + height / 2
+    ctx.save()
+    ctx.translate(centerX, centerY)
+    ctx.rotate(rotation)
+    traceShapePath(ctx, layerShape, -width / 2, -height / 2, width / 2, height / 2)
+    if (fillColor) {
+      ctx.fillStyle = fillColor
+      ctx.fill()
+    }
+    ctx.strokeStyle = strokeColor
+    ctx.lineWidth = strokeWidth
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  const renderTextLayer = (ctx: CanvasRenderingContext2D, layer: TextLayer) => {
+    const { x, y, width, height, rotation, text, font: layerFont, fontSize: layerFontSize, color: layerColor } = layer
+    const centerX = x + width / 2
+    const centerY = y + height / 2
+    ctx.save()
+    ctx.translate(centerX, centerY)
+    ctx.rotate(rotation)
+    ctx.fillStyle = layerColor
+    ctx.font = `${layerFontSize}px ${layerFont}`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(text, 0, 0)
+    ctx.restore()
+  }
+
+  const drawShapeLayers = useCallback((ctx: CanvasRenderingContext2D) => {
+    shapeLayersRef.current.forEach((layer) => {
+      renderShapeLayer(ctx, layer)
+    })
+  }, [])
+
+  const drawTextLayers = useCallback((ctx: CanvasRenderingContext2D) => {
+    textLayersRef.current.forEach((layer) => {
+      renderTextLayer(ctx, layer)
+    })
+  }, [])
 
   const updateActiveShapeRegion = useCallback(
     (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, rect: SelectionRect, selectionImage?: ImageData | null) => {
@@ -464,7 +529,12 @@ export default function Canvas({
   useEffect(() => {
     if (tool !== 'select') {
       commitSelection()
+      // Clear text layer selection when switching away from select tool
+      activeTextLayerIdRef.current = null
+      activeShapeLayerIdRef.current = null
+      repaintCanvas()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tool, commitSelection])
 
   useEffect(() => {
@@ -498,7 +568,8 @@ export default function Canvas({
     // Draw grid on top (always visible)
     drawGrid(ctx)
     drawShapeLayers(ctx)
-  }, [panelData, layout, drawGrid, color, penType])
+    drawTextLayers(ctx)
+  }, [panelData, layout, drawGrid, color, penType, drawShapeLayers, drawTextLayers])
 
   const getMousePos = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
@@ -663,19 +734,63 @@ export default function Canvas({
     }
 
     if (tool === 'select') {
-      if (beginShapeLayerInteraction(pos)) {
-        setIsDrawing(true)
+      // Check for double-click on text layer
+      const currentTime = Date.now()
+      const isDoubleClick = 
+        currentTime - lastClickTimeRef.current < 300 &&
+        lastClickPosRef.current &&
+        Math.abs(pos.x - lastClickPosRef.current.x) < 5 &&
+        Math.abs(pos.y - lastClickPosRef.current.y) < 5
+
+      // Try text layers first (they're on top)
+      const hitTextLayer = hitTestTextLayers(pos)
+      if (hitTextLayer) {
+        if (isDoubleClick && activeTextLayerIdRef.current === hitTextLayer.id) {
+          // Double-clicked on selected text layer - start editing
+          editingTextLayerIdRef.current = hitTextLayer.id
+          setTextInput(hitTextLayer.text)
+          setTextInputPos({ x: hitTextLayer.x, y: hitTextLayer.y })
+          const rect = canvas.getBoundingClientRect()
+          setTextInputScreenPos({
+            x: rect.left + (hitTextLayer.x * rect.width) / canvas.width,
+            y: rect.top + (hitTextLayer.y * rect.height) / canvas.height,
+          })
+          setTimeout(() => inputRef.current?.focus(), 0)
+          setIsDrawing(false)
+          lastClickTimeRef.current = 0
+          lastClickPosRef.current = null
+          return
+        } else {
+          // Single click - select the text layer
+          lastClickTimeRef.current = currentTime
+          lastClickPosRef.current = pos
+          if (beginTextLayerInteraction(pos)) {
+            setIsDrawing(true)
+            return
+          }
+        }
+      } else {
+        // No text layer hit, try shape layers
+        if (beginShapeLayerInteraction(pos)) {
+          setIsDrawing(true)
+          return
+        }
+        // No object was hit: clear selection/highlight
+        activeShapeLayerIdRef.current = null
+        activeTextLayerIdRef.current = null
+        isDraggingShapeLayerRef.current = false
+        isResizingShapeLayerRef.current = false
+        isRotatingShapeLayerRef.current = false
+        isDraggingTextLayerRef.current = false
+        isResizingTextLayerRef.current = false
+        isRotatingTextLayerRef.current = false
+        shapeResizeHandleRef.current = null
+        shapeResizeStartRectRef.current = null
+        textResizeHandleRef.current = null
+        textResizeStartRectRef.current = null
+        repaintCanvas()
         return
       }
-      // No object shape was hit: clear selection/highlight
-      activeShapeLayerIdRef.current = null
-      isDraggingShapeLayerRef.current = false
-      isResizingShapeLayerRef.current = false
-      isRotatingShapeLayerRef.current = false
-      shapeResizeHandleRef.current = null
-      shapeResizeStartRectRef.current = null
-      repaintCanvas()
-      return
     }
 
     commitSelection()
@@ -695,6 +810,18 @@ export default function Canvas({
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
       onCanvasChange(imageData)
     } else if (tool === 'text') {
+      // Check if clicking on existing text layer
+      const hitTextLayer = hitTestTextLayers(pos)
+      if (hitTextLayer) {
+        // If clicking on existing text, allow editing (for now just select it)
+        activeTextLayerIdRef.current = hitTextLayer.id
+        activeShapeLayerIdRef.current = null
+        repaintCanvas()
+        setIsDrawing(false)
+        return
+      }
+      
+      // Otherwise, create new text input
       setTextInputPos({ x: pos.x, y: pos.y })
       const rect = canvas.getBoundingClientRect()
       setTextInputScreenPos({
@@ -717,30 +844,6 @@ export default function Canvas({
     traceShapePath(ctx, shape, startX, startY, endX, endY)
     ctx.stroke()
   }
-
-  const renderShapeLayer = (ctx: CanvasRenderingContext2D, layer: ShapeLayer) => {
-    const { x, y, width, height, rotation, strokeColor, strokeWidth, fillColor, shape: layerShape } = layer
-    const centerX = x + width / 2
-    const centerY = y + height / 2
-    ctx.save()
-    ctx.translate(centerX, centerY)
-    ctx.rotate(rotation)
-    traceShapePath(ctx, layerShape, -width / 2, -height / 2, width / 2, height / 2)
-    if (fillColor) {
-      ctx.fillStyle = fillColor
-      ctx.fill()
-    }
-    ctx.strokeStyle = strokeColor
-    ctx.lineWidth = strokeWidth
-    ctx.stroke()
-    ctx.restore()
-  }
-
-  const drawShapeLayers = useCallback((ctx: CanvasRenderingContext2D) => {
-    shapeLayersRef.current.forEach((layer) => {
-      renderShapeLayer(ctx, layer)
-    })
-  }, [])
 
   const repaintCanvas = useCallback(() => {
     debugLog('Canvas', 'Repainting canvas', { 
@@ -765,6 +868,7 @@ export default function Canvas({
     }
     drawGrid(ctx)
     drawShapeLayers(ctx)
+    drawTextLayers(ctx)
 
     if (activeShapeLayerIdRef.current) {
       const layer = shapeLayersRef.current.find((l) => l.id === activeShapeLayerIdRef.current)
@@ -774,7 +878,16 @@ export default function Canvas({
         drawSelectionHandles(ctx, layer, layer.rotation)
       }
     }
-  }, [panelData, drawGrid, drawShapeLayers])
+
+    if (activeTextLayerIdRef.current) {
+      const layer = textLayersRef.current.find((l) => l.id === activeTextLayerIdRef.current)
+      if (layer) {
+        // Draw selection outline and handles, accounting for rotation
+        drawSelectionOutline(ctx, layer, layer.rotation)
+        drawSelectionHandles(ctx, layer, layer.rotation)
+      }
+    }
+  }, [panelData, drawGrid, drawShapeLayers, drawTextLayers])
 
   const updateShapeLayers = useCallback((layers: ShapeLayer[], skipHistory = false) => {
     debugLog('Canvas', 'Updating shape layers', { layerCount: layers.length, skipHistory })
@@ -783,6 +896,14 @@ export default function Canvas({
       onShapeLayersChange(layers, skipHistory)
     }
   }, [onShapeLayersChange])
+
+  const updateTextLayers = useCallback((layers: TextLayer[], skipHistory = false) => {
+    debugLog('Canvas', 'Updating text layers', { layerCount: layers.length, skipHistory })
+    textLayersRef.current = layers
+    if (onTextLayersChange) {
+      onTextLayersChange(layers, skipHistory)
+    }
+  }, [onTextLayersChange])
 
   const generateLayerId = () => {
     if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -807,6 +928,22 @@ export default function Canvas({
     return null
   }, [])
 
+  const hitTestTextLayers = useCallback((point: { x: number; y: number }): TextLayer | null => {
+    const layers = textLayersRef.current
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const layer = layers[i]
+      if (layer && (
+        point.x >= layer.x &&
+        point.x <= layer.x + layer.width &&
+        point.y >= layer.y &&
+        point.y <= layer.y + layer.height
+      )) {
+        return layer
+      }
+    }
+    return null
+  }, [])
+
   const beginShapeLayerInteraction = useCallback(
     (point: { x: number; y: number }, allowResizeHandles = true): boolean => {
       const hitLayer = hitTestShapeLayers(point)
@@ -815,6 +952,7 @@ export default function Canvas({
       }
 
       activeShapeLayerIdRef.current = hitLayer.id
+      activeTextLayerIdRef.current = null
       const layerRect: SelectionRect = {
         x: hitLayer.x,
         y: hitLayer.y,
@@ -872,14 +1010,88 @@ export default function Canvas({
     [hitTestShapeLayers, repaintCanvas, onShapeLayersChange]
   )
 
+  const beginTextLayerInteraction = useCallback(
+    (point: { x: number; y: number }, allowResizeHandles = true): boolean => {
+      const hitLayer = hitTestTextLayers(point)
+      if (!hitLayer) {
+        return false
+      }
+
+      activeTextLayerIdRef.current = hitLayer.id
+      activeShapeLayerIdRef.current = null
+      const layerRect: SelectionRect = {
+        x: hitLayer.x,
+        y: hitLayer.y,
+        width: hitLayer.width,
+        height: hitLayer.height,
+      }
+
+      // Rotation handle has priority
+      if (allowResizeHandles && isRotationHandle(point, layerRect, 10, hitLayer.rotation)) {
+        // Save history before starting rotation
+        if (onTextLayersChange) {
+          onTextLayersChange([...textLayersRef.current], false)
+        }
+        isRotatingTextLayerRef.current = true
+        isDraggingTextLayerRef.current = false
+        isResizingTextLayerRef.current = false
+        const centerX = layerRect.x + layerRect.width / 2
+        const centerY = layerRect.y + layerRect.height / 2
+        rotationCenterRef.current = { x: centerX, y: centerY }
+        const clickAngle = calculateRotationAngle(rotationCenterRef.current, point)
+        textRotationStartAngleRef.current = clickAngle
+        textRotationBaseAngleRef.current = hitLayer.rotation
+      } else {
+        const handle = allowResizeHandles ? getHandleAtPoint(point, layerRect) : null
+        if (handle) {
+          // Resize - save history before starting resize
+          if (onTextLayersChange) {
+            onTextLayersChange([...textLayersRef.current], false)
+          }
+          isResizingTextLayerRef.current = true
+          isDraggingTextLayerRef.current = false
+          isRotatingTextLayerRef.current = false
+          textResizeHandleRef.current = handle
+          textResizeStartRectRef.current = { ...layerRect }
+          textResizeStartPosRef.current = { x: point.x, y: point.y }
+        } else {
+          // Drag - save history before starting drag
+          if (onTextLayersChange) {
+            onTextLayersChange([...textLayersRef.current], false)
+          }
+          isDraggingTextLayerRef.current = true
+          isResizingTextLayerRef.current = false
+          isRotatingTextLayerRef.current = false
+          textResizeHandleRef.current = null
+          textResizeStartRectRef.current = null
+          textDragOffsetRef.current = {
+            x: point.x - hitLayer.x,
+            y: point.y - hitLayer.y,
+          }
+        }
+      }
+      repaintCanvas()
+      return true
+    },
+    [hitTestTextLayers, repaintCanvas, onTextLayersChange]
+  )
+
   useEffect(() => {
     shapeLayersRef.current = shapeLayers
     repaintCanvas()
-  }, [shapeLayers, repaintCanvas])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shapeLayers])
+
+  useEffect(() => {
+    textLayersRef.current = textLayers
+    repaintCanvas()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [textLayers])
 
   useEffect(() => {
     repaintCanvas()
-  }, [panelData, repaintCanvas])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelData])
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isDrawing) return
@@ -908,6 +1120,56 @@ export default function Canvas({
     }
 
     if (tool === 'select') {
+    // Handle text layer interactions
+    if (isRotatingTextLayerRef.current && activeTextLayerIdRef.current) {
+      const layerId = activeTextLayerIdRef.current
+      const currentAngle = calculateRotationAngle(rotationCenterRef.current, pos)
+      const delta = currentAngle - textRotationStartAngleRef.current
+      const updatedLayers = textLayersRef.current.map((layer) =>
+        layer.id === layerId
+          ? { ...layer, rotation: textRotationBaseAngleRef.current + delta }
+          : layer
+      )
+      updateTextLayers(updatedLayers, true)
+      repaintCanvas()
+      return
+    }
+
+    if (isResizingTextLayerRef.current && activeTextLayerIdRef.current && textResizeHandleRef.current && textResizeStartRectRef.current) {
+      const startRect = textResizeStartRectRef.current
+      const newRect = calculateResizedRect(textResizeHandleRef.current, startRect, pos, textResizeStartPosRef.current)
+      const updatedLayers = textLayersRef.current.map((layer) =>
+        layer.id === activeTextLayerIdRef.current
+          ? {
+              ...layer,
+              x: newRect.x,
+              y: newRect.y,
+              width: newRect.width,
+              height: newRect.height,
+            }
+          : layer
+      )
+      updateTextLayers(updatedLayers, true)
+      repaintCanvas()
+      return
+    }
+
+    if (isDraggingTextLayerRef.current && activeTextLayerIdRef.current) {
+      const updatedLayers = textLayersRef.current.map((layer) =>
+        layer.id === activeTextLayerIdRef.current
+          ? {
+              ...layer,
+              x: clamp(pos.x - textDragOffsetRef.current.x, 0, canvas.width - layer.width),
+              y: clamp(pos.y - textDragOffsetRef.current.y, 0, canvas.height - layer.height),
+            }
+          : layer
+      )
+      updateTextLayers(updatedLayers, true)
+      repaintCanvas()
+      return
+    }
+
+    // Handle shape layer interactions
     if (isRotatingShapeLayerRef.current && activeShapeLayerIdRef.current) {
       const layerId = activeShapeLayerIdRef.current
       const currentAngle = calculateRotationAngle(rotationCenterRef.current, pos)
@@ -1217,6 +1479,17 @@ export default function Canvas({
       }
 
       const pos = getMousePos(e)
+
+      if (isDraggingTextLayerRef.current || isResizingTextLayerRef.current || isRotatingTextLayerRef.current) {
+        isDraggingTextLayerRef.current = false
+        isResizingTextLayerRef.current = false
+        isRotatingTextLayerRef.current = false
+        textResizeHandleRef.current = null
+        textResizeStartRectRef.current = null
+        setIsDrawing(false)
+        repaintCanvas()
+        return
+      }
 
       if (isDraggingShapeLayerRef.current || isResizingShapeLayerRef.current || isRotatingShapeLayerRef.current) {
         isDraggingShapeLayerRef.current = false
@@ -1542,8 +1815,8 @@ export default function Canvas({
   }
 
   const handleTextSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && textInput && textInputPos) {
-      debugLog('Canvas', 'Text submitted', { text: textInput, isBalloon: !!balloonOval })
+    if (e.key === 'Enter' && textInputPos) {
+      debugLog('Canvas', 'Text submitted', { text: textInput, isBalloon: !!balloonOval, editingLayerId: editingTextLayerIdRef.current })
       const canvas = canvasRef.current
       const ctx = canvas?.getContext('2d')
       if (!canvas || !ctx) {
@@ -1551,35 +1824,121 @@ export default function Canvas({
         return
       }
 
-      // Draw the text on canvas
-      ctx.fillStyle = color
-      ctx.font = '24px Arial'
-      
-      // If this is balloon text, center it in the oval
-      if (balloonOval) {
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.fillText(textInput, balloonOval.centerX, balloonOval.centerY)
-        ctx.textAlign = 'left'
-        ctx.textBaseline = 'alphabetic'
-      } else {
-        ctx.fillText(textInput, textInputPos.x, textInputPos.y)
+      // Check if we're editing an existing text layer
+      if (editingTextLayerIdRef.current) {
+        const existingLayer = textLayersRef.current.find(l => l.id === editingTextLayerIdRef.current)
+        if (existingLayer) {
+          // Measure text to determine new width and height
+          ctx.font = `${existingLayer.fontSize}px ${existingLayer.font}`
+          ctx.textAlign = 'left'
+          ctx.textBaseline = 'top'
+          const metrics = ctx.measureText(textInput)
+          const textWidth = metrics.width
+          const textHeight = existingLayer.fontSize * 1.2
+
+          // Update existing layer
+          const updatedLayers = textLayersRef.current.map((layer) =>
+            layer.id === editingTextLayerIdRef.current
+              ? {
+                  ...layer,
+                  text: textInput,
+                  width: textWidth,
+                  height: textHeight,
+                }
+              : layer
+          )
+
+          // Save history before updating text layer
+          const currentLayers = [...textLayersRef.current]
+          if (onTextLayersChange) {
+            onTextLayersChange(currentLayers, false)
+          }
+
+          updateTextLayers(updatedLayers, true)
+          repaintCanvas()
+
+          // Clear editing state
+          editingTextLayerIdRef.current = null
+          setTextInputPos(null)
+          setTextInputScreenPos(null)
+          setTextInput('')
+          setBalloonOval(null)
+          return
+        }
       }
 
-      // Redraw grid on top
-      drawGrid(ctx)
+      // Create new text layer (only if text is not empty)
+      if (!textInput.trim()) {
+        // Empty text - just cancel
+        setTextInputPos(null)
+        setTextInputScreenPos(null)
+        setTextInput('')
+        setBalloonOval(null)
+        return
+      }
 
-      // Save the canvas
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-      onCanvasChange(imageData)
+      // Measure text to determine width and height
+      ctx.font = `${fontSize}px ${font}`
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'top'
+      const metrics = ctx.measureText(textInput)
+      const textWidth = metrics.width
+      const textHeight = fontSize * 1.2 // Approximate line height
+
+      // Calculate position and size
+      let textX: number
+      let textY: number
+      let textW: number
+      let textH: number
+
+      if (balloonOval) {
+        // Center text in balloon
+        textX = balloonOval.centerX - textWidth / 2
+        textY = balloonOval.centerY - textHeight / 2
+        textW = textWidth
+        textH = textHeight
+      } else {
+        // Use click position as top-left
+        textX = textInputPos.x
+        textY = textInputPos.y
+        textW = textWidth
+        textH = textHeight
+      }
+
+      // Create text layer
+      const layerId = generateLayerId()
+      const newLayer: TextLayer = {
+        id: layerId,
+        text: textInput,
+        x: textX,
+        y: textY,
+        width: textW,
+        height: textH,
+        rotation: 0,
+        font: font,
+        fontSize: fontSize,
+        color: color,
+      }
+
+      // Save history before creating new text layer
+      const currentLayers = [...textLayersRef.current]
+      if (onTextLayersChange) {
+        onTextLayersChange(currentLayers, false)
+      }
+
+      // Add the new layer
+      updateTextLayers([...textLayersRef.current, newLayer], true)
+      repaintCanvas()
 
       // Hide input
       setTextInputPos(null)
       setTextInputScreenPos(null)
       setTextInput('')
       setBalloonOval(null)
+      editingTextLayerIdRef.current = null
     } else if (e.key === 'Escape') {
       debugLog('Canvas', 'Text input cancelled')
+      editingTextLayerIdRef.current = null
       setTextInputPos(null)
       setTextInputScreenPos(null)
       setTextInput('')
@@ -1597,28 +1956,38 @@ export default function Canvas({
         onMouseUp={stopDrawing}
         onMouseLeave={stopDrawing}
       />
-      {textInputPos && textInputScreenPos && (
-        <input
-          ref={inputRef}
-          type="text"
-          value={textInput}
-          onChange={(e) => setTextInput(e.target.value)}
-          onKeyDown={handleTextSubmit}
-          style={{
-            position: 'fixed',
-            left: `${textInputScreenPos.x}px`,
-            top: `${textInputScreenPos.y}px`,
-            border: '1px solid #667eea',
-            borderRadius: '4px',
-            padding: '4px 8px',
-            fontSize: '24px',
-            fontFamily: 'Arial',
-            outline: 'none',
-            backgroundColor: 'rgba(255, 255, 255, 0.9)',
-            zIndex: 1000,
-          }}
-        />
-      )}
+      {textInputPos && textInputScreenPos && (() => {
+        const editingLayer = editingTextLayerIdRef.current 
+          ? textLayersRef.current.find(l => l.id === editingTextLayerIdRef.current)
+          : null
+        const inputFontSize = editingLayer ? editingLayer.fontSize : fontSize
+        const inputFont = editingLayer ? editingLayer.font : font
+        const inputColor = editingLayer ? editingLayer.color : color
+        
+        return (
+          <input
+            ref={inputRef}
+            type="text"
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
+            onKeyDown={handleTextSubmit}
+            style={{
+              position: 'fixed',
+              left: `${textInputScreenPos.x}px`,
+              top: `${textInputScreenPos.y}px`,
+              border: '1px solid #667eea',
+              borderRadius: '4px',
+              padding: '4px 8px',
+              fontSize: `${inputFontSize}px`,
+              fontFamily: inputFont,
+              color: inputColor,
+              outline: 'none',
+              backgroundColor: 'rgba(255, 255, 255, 0.9)',
+              zIndex: 1000,
+            }}
+          />
+        )
+      })()}
     </div>
   )
 }

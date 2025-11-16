@@ -13,6 +13,10 @@ describe('Toolbar', () => {
     onSelectShape: vi.fn(),
     selectedPenType: 'medium' as const,
     onSelectPenType: vi.fn(),
+    font: 'Arial',
+    onFontChange: vi.fn(),
+    fontSize: 24,
+    onFontSizeChange: vi.fn(),
   }
 
   it('renders all tools', () => {
