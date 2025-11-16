@@ -3,7 +3,9 @@ import { Shape } from '../App'
 /**
  * Debug logging utility
  */
-const DEBUG_ENABLED = typeof import.meta !== 'undefined' && (import.meta.env?.DEV || import.meta.env?.MODE === 'development')
+const DEBUG_ENABLED = typeof import.meta !== 'undefined' && 
+  import.meta.env && 
+  (import.meta.env.DEV || import.meta.env.MODE === 'development')
 
 export const debugLog = (category: string, message: string, ...args: any[]) => {
   if (DEBUG_ENABLED) {

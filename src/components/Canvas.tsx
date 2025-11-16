@@ -67,7 +67,6 @@ const clamp = (value: number, min: number, max: number) => {
 }
 
 const MIN_CONTENT_PIXELS = 12
-const CONTENT_RETAIN_RATIO = 0.4
 
 const clampRectToCanvas = (rect: SelectionRect, canvasWidth: number, canvasHeight: number): SelectionRect => {
   const clampedWidth = Math.min(rect.width, canvasWidth)
@@ -100,7 +99,7 @@ const countContentPixels = (imageData: ImageData) => {
     const g = data[i + 1]
     const b = data[i + 2]
     const a = data[i + 3]
-    if (a !== 0 && (r < 250 || g < 250 || b < 250)) {
+    if (r !== undefined && g !== undefined && b !== undefined && a !== undefined && a !== 0 && (r < 250 || g < 250 || b < 250)) {
       count++
     }
   }
@@ -134,15 +133,31 @@ const getHandleAtPoint = (point: { x: number; y: number }, rect: SelectionRect, 
   return null
 }
 
-const getRotationHandlePos = (rect: SelectionRect): { x: number; y: number } => {
+const getRotationHandlePos = (rect: SelectionRect, rotation: number = 0): { x: number; y: number } => {
+  const centerX = rect.x + rect.width / 2
+  const centerY = rect.y + rect.height / 2
+  const offsetX = 0
+  const offsetY = -30 // Position above the rectangle
+  
+  if (rotation === 0) {
+    return {
+      x: centerX + offsetX,
+      y: centerY + offsetY,
+    }
+  }
+  
+  // Rotate the offset around the center
+  const rotatedX = offsetX * Math.cos(rotation) - offsetY * Math.sin(rotation)
+  const rotatedY = offsetX * Math.sin(rotation) + offsetY * Math.cos(rotation)
+  
   return {
-    x: rect.x + rect.width / 2,
-    y: rect.y - 30, // Position above the rectangle
+    x: centerX + rotatedX,
+    y: centerY + rotatedY,
   }
 }
 
-const isRotationHandle = (point: { x: number; y: number }, rect: SelectionRect, handleSize = 10): boolean => {
-  const handlePos = getRotationHandlePos(rect)
+const isRotationHandle = (point: { x: number; y: number }, rect: SelectionRect, handleSize = 10, rotation: number = 0): boolean => {
+  const handlePos = getRotationHandlePos(rect, rotation)
   const distance = Math.sqrt(
     Math.pow(point.x - handlePos.x, 2) + Math.pow(point.y - handlePos.y, 2)
   )
@@ -219,28 +234,51 @@ const calculateResizedRect = (
   return newRect
 }
 
-  const drawSelectionOutline = (ctx: CanvasRenderingContext2D, rect: SelectionRect) => {
+const drawSelectionOutline = (ctx: CanvasRenderingContext2D, rect: SelectionRect, rotation: number = 0) => {
   ctx.save()
   ctx.strokeStyle = '#4c6ef5'
   ctx.lineWidth = 1.5
   ctx.setLineDash([6, 4])
-  ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.width, rect.height)
+  
+  if (rotation === 0) {
+    ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.width, rect.height)
+  } else {
+    const centerX = rect.x + rect.width / 2
+    const centerY = rect.y + rect.height / 2
+    ctx.translate(centerX, centerY)
+    ctx.rotate(rotation)
+    ctx.strokeRect(-rect.width / 2 + 0.5, -rect.height / 2 + 0.5, rect.width, rect.height)
+  }
+  
   ctx.restore()
 }
 
-const drawSelectionHandles = (ctx: CanvasRenderingContext2D, rect: SelectionRect) => {
+const drawSelectionHandles = (ctx: CanvasRenderingContext2D, rect: SelectionRect, rotation: number = 0) => {
   const handleSize = 8
   const half = handleSize / 2
-  const positions = [
-    { x: rect.x, y: rect.y },
-    { x: rect.x + rect.width / 2, y: rect.y },
-    { x: rect.x + rect.width, y: rect.y },
-    { x: rect.x, y: rect.y + rect.height / 2 },
-    { x: rect.x + rect.width, y: rect.y + rect.height / 2 },
-    { x: rect.x, y: rect.y + rect.height },
-    { x: rect.x + rect.width / 2, y: rect.y + rect.height },
-    { x: rect.x + rect.width, y: rect.y + rect.height },
+  const centerX = rect.x + rect.width / 2
+  const centerY = rect.y + rect.height / 2
+  
+  // Base positions relative to center
+  const basePositions = [
+    { x: -rect.width / 2, y: -rect.height / 2 },
+    { x: 0, y: -rect.height / 2 },
+    { x: rect.width / 2, y: -rect.height / 2 },
+    { x: -rect.width / 2, y: 0 },
+    { x: rect.width / 2, y: 0 },
+    { x: -rect.width / 2, y: rect.height / 2 },
+    { x: 0, y: rect.height / 2 },
+    { x: rect.width / 2, y: rect.height / 2 },
   ]
+  
+  // Rotate positions if needed
+  const positions = rotation === 0
+    ? basePositions.map(p => ({ x: centerX + p.x, y: centerY + p.y }))
+    : basePositions.map(p => {
+        const rotatedX = p.x * Math.cos(rotation) - p.y * Math.sin(rotation)
+        const rotatedY = p.x * Math.sin(rotation) + p.y * Math.cos(rotation)
+        return { x: centerX + rotatedX, y: centerY + rotatedY }
+      })
 
   ctx.save()
   ctx.setLineDash([])
@@ -255,7 +293,7 @@ const drawSelectionHandles = (ctx: CanvasRenderingContext2D, rect: SelectionRect
   })
   
   // Draw rotation handle (circle above the rectangle)
-  const rotationHandlePos = getRotationHandlePos(rect)
+  const rotationHandlePos = getRotationHandlePos(rect, rotation)
   ctx.fillStyle = '#4c6ef5'
   ctx.beginPath()
   ctx.arc(rotationHandlePos.x, rotationHandlePos.y, 10, 0, Math.PI * 2)
@@ -265,8 +303,6 @@ const drawSelectionHandles = (ctx: CanvasRenderingContext2D, rect: SelectionRect
   ctx.stroke()
   
   // Draw line from center to rotation handle
-  const centerX = rect.x + rect.width / 2
-  const centerY = rect.y + rect.height / 2
   ctx.strokeStyle = '#4c6ef5'
   ctx.lineWidth = 1
   ctx.setLineDash([4, 4])
@@ -342,103 +378,6 @@ export default function Canvas({
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     drawGridUtil(ctx, layout)
   }, [layout])
-
-  // Unused function - kept for potential future use
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const findShapeIndexAtPoint = useCallback(() => -1, [])
-
-  // Unused function - kept for potential future use
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const prepareShapeSelection = useCallback(
-    (shapeIndex: number, clickPos: { x: number; y: number }): boolean => {
-      debugLog('Canvas', 'Preparing shape selection', { shapeIndex, clickPos })
-      const canvas = canvasRef.current
-      const ctx = canvas?.getContext('2d')
-      if (!canvas || !ctx) return false
-
-      const region = shapeRegionsRef.current[shapeIndex]
-      if (!region) return false
-
-      const imageData = ctx.getImageData(region.rect.x, region.rect.y, region.rect.width, region.rect.height)
-      const contentPixels = countContentPixels(imageData)
-      if (
-        contentPixels < MIN_CONTENT_PIXELS ||
-        (region.contentPixelCount > 0 && contentPixels < region.contentPixelCount * CONTENT_RETAIN_RATIO)
-      ) {
-        shapeRegionsRef.current.splice(shapeIndex, 1)
-        selectionRectRef.current = null
-        selectionImageRef.current = null
-        activeShapeIndexRef.current = null
-        selectionBaseImageRef.current = null
-        selectionOriginalImageRef.current = null
-        resizeHandleRef.current = null
-        return false
-      }
-
-      selectionRectRef.current = { ...region.rect }
-      selectionImageRef.current = imageData
-      originalImageSizeRef.current = { width: region.rect.width, height: region.rect.height }
-      shapeRegionsRef.current[shapeIndex] = {
-        ...region,
-        contentPixelCount: contentPixels,
-      }
-      selectionOriginalImageRef.current = null
-
-      ctx.save()
-      ctx.fillStyle = 'white'
-      ctx.fillRect(region.rect.x, region.rect.y, region.rect.width, region.rect.height)
-      ctx.restore()
-      drawGrid(ctx)
-
-      selectionBaseImageRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height)
-
-      if (selectionImageRef.current) {
-        ctx.putImageData(selectionImageRef.current, region.rect.x, region.rect.y)
-        drawSelectionOutline(ctx, region.rect)
-        drawSelectionHandles(ctx, region.rect)
-      }
-
-      activeShapeIndexRef.current = shapeIndex
-      isSelectingRef.current = false
-      isDraggingSelectionRef.current = false
-      isResizingRef.current = false
-      isRotatingRef.current = false
-      rotationAngleRef.current = 0
-      cumulativeRotationAngleRef.current = 0 // Reset cumulative angle for new selection
-      
-      // Check if clicking on rotation handle
-      if (isRotationHandle(clickPos, region.rect)) {
-        isRotatingRef.current = true
-        const centerX = region.rect.x + region.rect.width / 2
-        const centerY = region.rect.y + region.rect.height / 2
-        rotationCenterRef.current = { x: centerX, y: centerY }
-        // Calculate initial angle relative to current cumulative rotation (which is 0 for new selection)
-        const clickAngle = calculateRotationAngle(rotationCenterRef.current, clickPos)
-        initialRotationAngleRef.current = clickAngle - cumulativeRotationAngleRef.current
-        rotationAngleRef.current = 0
-        resizeHandleRef.current = null
-      } else {
-        // Check if clicking on resize handle
-        resizeHandleRef.current = getHandleAtPoint(clickPos, region.rect)
-        if (resizeHandleRef.current) {
-          isResizingRef.current = true
-          isDraggingSelectionRef.current = false
-          resizeStartRef.current = { ...region.rect }
-          resizeClickStartRef.current = { x: clickPos.x, y: clickPos.y }
-        } else {
-          // Otherwise, start dragging
-          isDraggingSelectionRef.current = true
-          dragOffsetRef.current = {
-            x: clickPos.x - region.rect.x,
-            y: clickPos.y - region.rect.y,
-          }
-          resizeHandleRef.current = null
-        }
-      }
-      return true
-    },
-    [drawGrid]
-  )
 
   const updateActiveShapeRegion = useCallback(
     (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, rect: SelectionRect, selectionImage?: ImageData | null) => {
@@ -592,13 +531,21 @@ export default function Canvas({
     const targetB = data[clickedIndex + 2]
     const targetA = data[clickedIndex + 3]
 
+    // Check if target color is valid
+    if (targetR === undefined || targetG === undefined || targetB === undefined || targetA === undefined) {
+      return
+    }
+
     // Parse fill color
     const fillR = parseInt(fillColor.slice(1, 3), 16)
     const fillG = parseInt(fillColor.slice(3, 5), 16)
     const fillB = parseInt(fillColor.slice(5, 7), 16)
 
     // Helper function to check if a pixel matches the target color (including alpha for erased areas)
-    const matchesTargetColor = (r: number, g: number, b: number, a: number) => {
+    const matchesTargetColor = (r: number | undefined, g: number | undefined, b: number | undefined, a: number | undefined) => {
+      if (r === undefined || g === undefined || b === undefined || a === undefined) {
+        return false
+      }
       const tolerance = 10 // Allow small differences for antialiasing
       const alphaTolerance = 5 // Tolerance for alpha channel
       
@@ -635,7 +582,7 @@ export default function Canvas({
       const a = data[index + 3]
 
       // Fill pixels that match the target color (where we clicked)
-      if (matchesTargetColor(r, g, b, a)) {
+      if (r !== undefined && g !== undefined && b !== undefined && a !== undefined && matchesTargetColor(r, g, b, a)) {
         // Fill this pixel
         data[index] = fillR
         data[index + 1] = fillG
@@ -815,8 +762,9 @@ export default function Canvas({
     if (activeShapeLayerIdRef.current) {
       const layer = shapeLayersRef.current.find((l) => l.id === activeShapeLayerIdRef.current)
       if (layer) {
-        drawSelectionOutline(ctx, layer)
-        drawSelectionHandles(ctx, layer)
+        // Draw selection outline and handles, accounting for rotation
+        drawSelectionOutline(ctx, layer, layer.rotation)
+        drawSelectionHandles(ctx, layer, layer.rotation)
       }
     }
   }, [panelData, drawGrid, drawShapeLayers])
@@ -840,12 +788,12 @@ export default function Canvas({
     const layers = shapeLayersRef.current
     for (let i = layers.length - 1; i >= 0; i--) {
       const layer = layers[i]
-      if (
+      if (layer && (
         point.x >= layer.x &&
         point.x <= layer.x + layer.width &&
         point.y >= layer.y &&
         point.y <= layer.y + layer.height
-      ) {
+      )) {
         return layer
       }
     }
@@ -868,7 +816,7 @@ export default function Canvas({
       }
 
       // Rotation handle has priority
-      if (allowResizeHandles && isRotationHandle(point, layerRect)) {
+      if (allowResizeHandles && isRotationHandle(point, layerRect, 10, hitLayer.rotation)) {
         isRotatingShapeLayerRef.current = true
         isDraggingShapeLayerRef.current = false
         isResizingShapeLayerRef.current = false

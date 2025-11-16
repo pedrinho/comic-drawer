@@ -127,15 +127,21 @@ function App() {
 
   const handleCanvasChange = (data: ImageData, skipHistory = false) => {
     debugLog('App', 'Canvas changed', { selectedPanel, skipHistory })
+    const panel = panels[selectedPanel]
+    if (!panel) return
+    
     if (!skipHistory) {
       // Save current state to history before making changes
-      const currentData = panels[selectedPanel].data
+      const currentData = panel.data
       saveToHistory(selectedPanel, currentData)
     }
     
     const updatedPanels = [...panels]
-    updatedPanels[selectedPanel].data = data
-    setPanels(updatedPanels)
+    const updatedPanel = updatedPanels[selectedPanel]
+    if (updatedPanel) {
+      updatedPanel.data = data
+      setPanels(updatedPanels)
+    }
   }
 
   const handleShapeLayersChange = useCallback((layers: ShapeLayer[]) => {
@@ -152,8 +158,11 @@ function App() {
 
   const handleUndo = useCallback(() => {
     debugLog('App', 'Undo requested', { selectedPanel })
+    const panel = panels[selectedPanel]
+    if (!panel) return
+    
     const history = getPanelHistory(selectedPanel)
-    const currentData = panels[selectedPanel].data
+    const currentData = panel.data
     
     if (history.undo.length === 0) {
       debugWarn('App', 'Nothing to undo')
@@ -172,14 +181,20 @@ function App() {
     // Restore previous state from undo stack
     const previousState = history.undo.pop()!
     const updatedPanels = [...panels]
-    updatedPanels[selectedPanel].data = previousState
-    setPanels(updatedPanels)
+    const updatedPanel = updatedPanels[selectedPanel]
+    if (updatedPanel) {
+      updatedPanel.data = previousState
+      setPanels(updatedPanels)
+    }
   }, [selectedPanel, panels])
 
   const handleRedo = useCallback(() => {
     debugLog('App', 'Redo requested', { selectedPanel })
+    const panel = panels[selectedPanel]
+    if (!panel) return
+    
     const history = getPanelHistory(selectedPanel)
-    const currentData = panels[selectedPanel].data
+    const currentData = panel.data
     
     if (history.redo.length === 0) {
       debugWarn('App', 'Nothing to redo')
@@ -198,8 +213,11 @@ function App() {
     // Restore next state from redo stack
     const nextState = history.redo.pop()!
     const updatedPanels = [...panels]
-    updatedPanels[selectedPanel].data = nextState
-    setPanels(updatedPanels)
+    const updatedPanel = updatedPanels[selectedPanel]
+    if (updatedPanel) {
+      updatedPanel.data = nextState
+      setPanels(updatedPanels)
+    }
   }, [selectedPanel, panels])
 
   const handlePanelSwitch = (index: number) => {
@@ -397,6 +415,10 @@ function App() {
       // Render each panel as a separate page
       for (let i = 0; i < panels.length; i++) {
         const panel = panels[i]
+        if (!panel) {
+          console.error(`Panel ${i + 1} is undefined`)
+          continue
+        }
         const canvas = renderPanelToCanvas(panel)
         
         if (!canvas) {
@@ -532,18 +554,20 @@ function App() {
           onAddPanel={addPanel}
           onDeletePanel={handleDeletePanel}
         />
-        <Canvas 
-          tool={currentTool} 
-          shape={selectedShape}
-          penType={selectedPenType}
-          color={selectedColor}
-          panelData={panels[selectedPanel].data}
-          layout={panels[selectedPanel].layout}
-          shapeLayers={panels[selectedPanel].shapeLayers}
-          onCanvasChange={handleCanvasChange}
-          onShapeLayersChange={handleShapeLayersChange}
-          key={selectedPanel}
-        />
+        {panels[selectedPanel] && (
+          <Canvas 
+            tool={currentTool} 
+            shape={selectedShape}
+            penType={selectedPenType}
+            color={selectedColor}
+            panelData={panels[selectedPanel]!.data}
+            layout={panels[selectedPanel]!.layout}
+            shapeLayers={panels[selectedPanel]!.shapeLayers}
+            onCanvasChange={handleCanvasChange}
+            onShapeLayersChange={handleShapeLayersChange}
+            key={selectedPanel}
+          />
+        )}
       </main>
       <PanelLayoutModal
         isOpen={showModal}
