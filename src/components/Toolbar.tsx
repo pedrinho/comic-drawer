@@ -23,6 +23,7 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     { name: 'pen', icon: '✏️', label: 'Pen' },
     { name: 'eraser', icon: '🧹', label: 'Eraser' },
     { name: 'shapes', icon: '🔷', label: 'Shapes' },
+    { name: 'objectShapes', icon: '⬚', label: 'Object Shapes' },
     { name: 'fill', icon: '🪣', label: 'Fill' },
     { name: 'text', icon: '💬', label: 'Text' },
     { name: 'balloon', icon: '💭', label: 'Balloon' },
@@ -32,18 +33,17 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     if (currentTool !== 'pen') {
       setShowPenSubmenu(false)
     }
-    if (currentTool !== 'shapes') {
+    if (currentTool !== 'shapes' && currentTool !== 'objectShapes') {
       setShowShapesSubmenu(false)
     }
   }, [currentTool])
 
-  const handleShapeButtonClick = () => {
-    if (currentTool === 'shapes') {
-      // Toggle submenu
+  const handleShapeToolClick = (toolName: Tool) => {
+    if (currentTool === toolName) {
       setShowShapesSubmenu(!showShapesSubmenu)
       setShowPenSubmenu(false)
     } else {
-      onToolChange('shapes')
+      onToolChange(toolName)
       setShowShapesSubmenu(true)
       setShowPenSubmenu(false)
     }
@@ -73,7 +73,13 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
         <React.Fragment key={tool.name}>
           <button
             className={`tool-btn ${currentTool === tool.name ? 'active' : ''}`}
-            onClick={tool.name === 'shapes' ? handleShapeButtonClick : tool.name === 'pen' ? handlePenButtonClick : () => handleOtherToolClick(tool.name)}
+            onClick={
+              tool.name === 'pen'
+                ? handlePenButtonClick
+                : tool.name === 'shapes' || tool.name === 'objectShapes'
+                ? () => handleShapeToolClick(tool.name)
+                : () => handleOtherToolClick(tool.name)
+            }
             title={tool.label}
           >
             <span className="tool-icon">{tool.icon}</span>
@@ -87,6 +93,13 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
             />
           )}
           {tool.name === 'shapes' && currentTool === 'shapes' && showShapesSubmenu && (
+            <ShapePicker
+              isOpen={true}
+              selectedShape={selectedShape}
+              onSelectShape={onSelectShape}
+            />
+          )}
+          {tool.name === 'objectShapes' && currentTool === 'objectShapes' && showShapesSubmenu && (
             <ShapePicker
               isOpen={true}
               selectedShape={selectedShape}

@@ -5,8 +5,10 @@ import Canvas from './components/Canvas'
 import Toolbar from './components/Toolbar'
 import PanelLayout from './components/PanelLayout'
 import PanelLayoutModal from './components/PanelLayoutModal'
+import { ShapeLayer } from './types/layers'
+import { traceShapePath, drawGrid as drawGridUtil, debugLog, debugError, debugWarn, cloneImageData, createBlankImageData } from './utils/canvasUtils'
 
-export type Tool = 'select' | 'pen' | 'eraser' | 'shapes' | 'text' | 'fill' | 'balloon'
+export type Tool = 'select' | 'pen' | 'eraser' | 'shapes' | 'objectShapes' | 'text' | 'fill' | 'balloon'
 export type Shape = 'rectangle' | 'circle' | 'triangle' | 'star' | 'heart' | 'diamond' | 'hexagon' | 'pentagon' | 'arrow' | 'cross' | 'heptagon' | 'octagon'
 export type PenType = 'fine' | 'small' | 'medium' | 'large' | 'thick' | 'verythick'
 
@@ -17,6 +19,7 @@ export interface PanelData {
     rows: number
     columns: number[]
   }
+  shapeLayers: ShapeLayer[]
 }
 
 interface SavedPanel {
@@ -26,6 +29,7 @@ interface SavedPanel {
     rows: number
     columns: number[]
   }
+  shapeLayers?: ShapeLayer[]
 }
 
 interface ComicFile {
@@ -40,6 +44,24 @@ interface PanelHistory {
 
 const MAX_HISTORY = 10
 
+const renderShapeLayerOnContext = (ctx: CanvasRenderingContext2D, layer: ShapeLayer) => {
+  const { x, y, width, height, rotation, strokeColor, strokeWidth, fillColor, shape } = layer
+  const centerX = x + width / 2
+  const centerY = y + height / 2
+  ctx.save()
+  ctx.translate(centerX, centerY)
+  ctx.rotate(rotation)
+  traceShapePath(ctx, shape, -width / 2, -height / 2, width / 2, height / 2)
+  if (fillColor) {
+    ctx.fillStyle = fillColor
+    ctx.fill()
+  }
+  ctx.strokeStyle = strokeColor
+  ctx.lineWidth = strokeWidth
+  ctx.stroke()
+  ctx.restore()
+}
+
 function App() {
   const [currentTool, setCurrentTool] = useState<Tool>('pen')
   const [selectedShape, setSelectedShape] = useState<Shape>('rectangle')
@@ -47,7 +69,7 @@ function App() {
   const [selectedColor, setSelectedColor] = useState<string>('#000000')
   const [selectedPanel, setSelectedPanel] = useState<number>(0)
   const [panels, setPanels] = useState<PanelData[]>([
-    { id: 0, data: null, layout: { rows: 1, columns: [1] } }
+    { id: 0, data: null, layout: { rows: 1, columns: [1] }, shapeLayers: [] }
   ])
   const [showModal, setShowModal] = useState(false)
   
@@ -55,11 +77,13 @@ function App() {
   const historyRef = useRef<Map<number, PanelHistory>>(new Map())
 
   const addPanel = () => {
+    debugLog('App', 'Adding new panel')
     setShowModal(true)
   }
 
   const handlePanelLayoutConfirm = (rows: number, columns: number[]) => {
-    setPanels([...panels, { id: panels.length, data: null, layout: { rows, columns } }])
+    debugLog('App', 'Panel layout confirmed', { rows, columns, newPanelId: panels.length })
+    setPanels([...panels, { id: panels.length, data: null, layout: { rows, columns }, shapeLayers: [] }])
   }
 
   // Helper to get or initialize history for a panel
@@ -72,33 +96,17 @@ function App() {
 
   // Save current state to history before making changes
   const saveToHistory = (panelIndex: number, currentData: ImageData | null) => {
+    debugLog('App', 'Saving to history', { panelIndex, hasData: !!currentData })
     const history = getPanelHistory(panelIndex)
-    const canvasWidth = 1200
-    const canvasHeight = 800
     
     let stateToSave: ImageData | null = null
     
     if (currentData) {
       // Clone the existing ImageData for history
-      const canvas = document.createElement('canvas')
-      canvas.width = currentData.width
-      canvas.height = currentData.height
-      const ctx = canvas.getContext('2d')
-      if (ctx) {
-        ctx.putImageData(currentData, 0, 0)
-        stateToSave = ctx.getImageData(0, 0, canvas.width, canvas.height)
-      }
+      stateToSave = cloneImageData(currentData)
     } else {
       // If canvas is empty, create a blank white canvas as the initial state
-      const canvas = document.createElement('canvas')
-      canvas.width = canvasWidth
-      canvas.height = canvasHeight
-      const ctx = canvas.getContext('2d')
-      if (ctx) {
-        ctx.fillStyle = 'white'
-        ctx.fillRect(0, 0, canvas.width, canvas.height)
-        stateToSave = ctx.getImageData(0, 0, canvas.width, canvas.height)
-      }
+      stateToSave = createBlankImageData()
     }
     
     if (stateToSave) {
@@ -108,14 +116,17 @@ function App() {
       // Limit to MAX_HISTORY
       if (history.undo.length > MAX_HISTORY) {
         history.undo.shift()
+        debugWarn('App', 'History limit reached, removing oldest state')
       }
       
       // Clear redo stack when new action is performed
       history.redo = []
+      debugLog('App', 'History saved', { undoStackSize: history.undo.length })
     }
   }
 
   const handleCanvasChange = (data: ImageData, skipHistory = false) => {
+    debugLog('App', 'Canvas changed', { selectedPanel, skipHistory })
     if (!skipHistory) {
       // Save current state to history before making changes
       const currentData = panels[selectedPanel].data
@@ -127,28 +138,34 @@ function App() {
     setPanels(updatedPanels)
   }
 
+  const handleShapeLayersChange = useCallback((layers: ShapeLayer[]) => {
+    setPanels((prevPanels) => {
+      const nextPanels = [...prevPanels]
+      const panel = nextPanels[selectedPanel]
+      if (!panel) {
+        return prevPanels
+      }
+      nextPanels[selectedPanel] = { ...panel, shapeLayers: layers }
+      return nextPanels
+    })
+  }, [selectedPanel])
+
   const handleUndo = useCallback(() => {
+    debugLog('App', 'Undo requested', { selectedPanel })
     const history = getPanelHistory(selectedPanel)
     const currentData = panels[selectedPanel].data
     
     if (history.undo.length === 0) {
+      debugWarn('App', 'Nothing to undo')
       return // Nothing to undo
     }
     
     // Move current state to redo stack if it exists
     if (currentData) {
-      const canvas = document.createElement('canvas')
-      canvas.width = currentData.width
-      canvas.height = currentData.height
-      const ctx = canvas.getContext('2d')
-      if (ctx) {
-        ctx.putImageData(currentData, 0, 0)
-        const clonedData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-        
-        history.redo.push(clonedData)
-        if (history.redo.length > MAX_HISTORY) {
-          history.redo.shift()
-        }
+      const clonedData = cloneImageData(currentData)
+      history.redo.push(clonedData)
+      if (history.redo.length > MAX_HISTORY) {
+        history.redo.shift()
       }
     }
     
@@ -160,27 +177,21 @@ function App() {
   }, [selectedPanel, panels])
 
   const handleRedo = useCallback(() => {
+    debugLog('App', 'Redo requested', { selectedPanel })
     const history = getPanelHistory(selectedPanel)
     const currentData = panels[selectedPanel].data
     
     if (history.redo.length === 0) {
+      debugWarn('App', 'Nothing to redo')
       return // Nothing to redo
     }
     
     // Move current state to undo stack if it exists
     if (currentData) {
-      const canvas = document.createElement('canvas')
-      canvas.width = currentData.width
-      canvas.height = currentData.height
-      const ctx = canvas.getContext('2d')
-      if (ctx) {
-        ctx.putImageData(currentData, 0, 0)
-        const clonedData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-        
-        history.undo.push(clonedData)
-        if (history.undo.length > MAX_HISTORY) {
-          history.undo.shift()
-        }
+      const clonedData = cloneImageData(currentData)
+      history.undo.push(clonedData)
+      if (history.undo.length > MAX_HISTORY) {
+        history.undo.shift()
       }
     }
     
@@ -192,19 +203,23 @@ function App() {
   }, [selectedPanel, panels])
 
   const handlePanelSwitch = (index: number) => {
+    debugLog('App', 'Switching panel', { from: selectedPanel, to: index })
     // Save current canvas before switching
     setSelectedPanel(index)
   }
 
   const handleDeletePanel = (index: number) => {
+    debugLog('App', 'Delete panel requested', { index, totalPanels: panels.length })
     // Don't allow deleting the last panel
     if (panels.length <= 1) {
+      debugWarn('App', 'Cannot delete last panel')
       return
     }
 
     // Ask for confirmation before deleting
     const confirmed = window.confirm(`Are you sure you want to delete Panel ${index + 1}? This action cannot be undone.`)
     if (!confirmed) {
+      debugLog('App', 'Panel deletion cancelled')
       return
     }
 
@@ -224,11 +239,13 @@ function App() {
   }
 
   const handleSave = () => {
+    debugLog('App', 'Saving comic file', { panelCount: panels.length })
     // Convert ImageData to base64 for each panel
     const savedPanels: SavedPanel[] = panels.map(panel => ({
       id: panel.id,
       data: panel.data ? imageDataToBase64(panel.data) : null,
-      layout: panel.layout
+      layout: panel.layout,
+      shapeLayers: panel.shapeLayers
     }))
 
     const comicFile: ComicFile = {
@@ -246,35 +263,44 @@ function App() {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
+    debugLog('App', 'Comic file saved successfully')
   }
 
   const handleLoad = () => {
+    debugLog('App', 'Loading comic file')
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = '.cd,application/json'
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0]
-      if (!file) return
+      if (!file) {
+        debugWarn('App', 'No file selected')
+        return
+      }
 
+      debugLog('App', 'File selected', { fileName: file.name, fileSize: file.size })
       const reader = new FileReader()
       reader.onload = async (event) => {
         try {
           const jsonStr = event.target?.result as string
           const comicFile: ComicFile = JSON.parse(jsonStr)
+          debugLog('App', 'Comic file parsed', { version: comicFile.version, panelCount: comicFile.panels.length })
           
           // Convert base64 back to ImageData (async)
           const loadedPanels: PanelData[] = await Promise.all(
             comicFile.panels.map(async (panel) => ({
               id: panel.id,
               data: panel.data ? await base64ToImageData(panel.data) : null,
-              layout: panel.layout
+              layout: panel.layout,
+              shapeLayers: panel.shapeLayers ?? []
             }))
           )
 
           setPanels(loadedPanels)
           setSelectedPanel(0)
+          debugLog('App', 'Comic file loaded successfully', { loadedPanelCount: loadedPanels.length })
         } catch (error) {
-          console.error('Error loading file:', error)
+          debugError('App', 'Error loading file', error)
           alert('Error loading comic file. Please check the file format.')
         }
       }
@@ -316,40 +342,6 @@ function App() {
     })
   }
 
-  // Helper function to draw grid on canvas (matching Canvas component)
-  const drawGrid = (ctx: CanvasRenderingContext2D, layout: { rows: number; columns: number[] }) => {
-    ctx.save()
-    ctx.strokeStyle = '#000000'
-    ctx.lineWidth = 3
-
-    const totalRows = layout.rows
-    const gutter = 12 // Space between panels (and around edges)
-    const canvasWidth = 1200
-    const canvasHeight = 800
-
-    for (let row = 0; row < totalRows; row++) {
-      const columnsInRow = layout.columns[row] || 1
-      
-      // Calculate spacing: gutter on each side + gutters between cells
-      const totalVerticalGutters = gutter * 2 + (totalRows - 1) * gutter
-      const totalHorizontalGutters = gutter * 2 + (columnsInRow - 1) * gutter
-      const panelHeight = (canvasHeight - totalVerticalGutters) / totalRows
-      const panelWidth = (canvasWidth - totalHorizontalGutters) / columnsInRow
-      
-      let currentX = gutter
-      const currentY = gutter + (row * (panelHeight + gutter))
-
-      // Draw rectangle for each cell in the row
-      for (let col = 0; col < columnsInRow; col++) {
-        ctx.beginPath()
-        ctx.rect(currentX, currentY, panelWidth, panelHeight)
-        ctx.stroke()
-        currentX += panelWidth + gutter
-      }
-    }
-
-    ctx.restore()
-  }
 
   // Helper function to render panel to canvas with grid
   const renderPanelToCanvas = (panel: PanelData): HTMLCanvasElement | null => {
@@ -369,13 +361,22 @@ function App() {
     }
 
     // Draw grid on top
-    drawGrid(ctx, panel.layout)
+    drawGridUtil(ctx, panel.layout)
+
+    // Draw shape layers if any
+    if (panel.shapeLayers && panel.shapeLayers.length > 0) {
+      panel.shapeLayers.forEach((layer) => {
+        renderShapeLayerOnContext(ctx, layer)
+      })
+    }
 
     return canvas
   }
 
   const handleExportPDF = async () => {
+    debugLog('App', 'Exporting PDF', { panelCount: panels.length })
     if (panels.length === 0) {
+      debugWarn('App', 'No panels to export')
       alert('No panels to export')
       return
     }
@@ -440,8 +441,9 @@ function App() {
 
       // Save the PDF
       pdf.save('comic.pdf')
+      debugLog('App', 'PDF exported successfully')
     } catch (error) {
-      console.error('Error exporting PDF:', error)
+      debugError('App', 'Error exporting PDF', error)
       alert('Error exporting PDF. Please try again.')
     }
   }
@@ -537,7 +539,9 @@ function App() {
           color={selectedColor}
           panelData={panels[selectedPanel].data}
           layout={panels[selectedPanel].layout}
+          shapeLayers={panels[selectedPanel].shapeLayers}
           onCanvasChange={handleCanvasChange}
+          onShapeLayersChange={handleShapeLayersChange}
           key={selectedPanel}
         />
       </main>
