@@ -46,3 +46,7 @@ main {
   padding: 1rem;
   overflow: hidden;
 }
+
+main > :first-child {
+  flex-shrink: 0;
+}

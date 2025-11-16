@@ -3,6 +3,7 @@ import './Toolbar.css'
 import React, { useState, useEffect } from 'react'
 import ShapePicker from './ShapePicker'
 import PenPicker from './PenPicker'
+import FontPicker from './FontPicker'
 
 interface ToolbarProps {
   currentTool: Tool
@@ -22,6 +23,7 @@ interface ToolbarProps {
 export default function Toolbar({ currentTool, onToolChange, color, onColorChange, selectedShape, onSelectShape, selectedPenType, onSelectPenType, font, onFontChange, fontSize, onFontSizeChange }: ToolbarProps) {
   const [showPenSubmenu, setShowPenSubmenu] = useState(false)
   const [showShapesSubmenu, setShowShapesSubmenu] = useState(false)
+  const [showTextSubmenu, setShowTextSubmenu] = useState(false)
   const tools: { name: Tool; icon: string; label: string }[] = [
     { name: 'select', icon: '🖱️', label: 'Select' },
     { name: 'pen', icon: '✏️', label: 'Pen' },
@@ -39,6 +41,9 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     }
     if (currentTool !== 'shapes' && currentTool !== 'objectShapes') {
       setShowShapesSubmenu(false)
+    }
+    if (currentTool !== 'text' && currentTool !== 'balloon') {
+      setShowTextSubmenu(false)
     }
   }, [currentTool])
 
@@ -65,10 +70,39 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     }
   }
 
+  const handleTextButtonClick = () => {
+    if (currentTool === 'text' || currentTool === 'balloon') {
+      // Toggle submenu
+      setShowTextSubmenu(!showTextSubmenu)
+      setShowPenSubmenu(false)
+      setShowShapesSubmenu(false)
+    } else {
+      onToolChange('text')
+      setShowTextSubmenu(true)
+      setShowPenSubmenu(false)
+      setShowShapesSubmenu(false)
+    }
+  }
+
+  const handleBalloonButtonClick = () => {
+    if (currentTool === 'balloon') {
+      // Toggle submenu
+      setShowTextSubmenu(!showTextSubmenu)
+      setShowPenSubmenu(false)
+      setShowShapesSubmenu(false)
+    } else {
+      onToolChange('balloon')
+      setShowTextSubmenu(true)
+      setShowPenSubmenu(false)
+      setShowShapesSubmenu(false)
+    }
+  }
+
   const handleOtherToolClick = (tool: Tool) => {
     onToolChange(tool)
     setShowPenSubmenu(false)
     setShowShapesSubmenu(false)
+    setShowTextSubmenu(false)
   }
 
   return (
@@ -82,6 +116,10 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
                 ? handlePenButtonClick
                 : tool.name === 'shapes' || tool.name === 'objectShapes'
                 ? () => handleShapeToolClick(tool.name)
+                : tool.name === 'text'
+                ? handleTextButtonClick
+                : tool.name === 'balloon'
+                ? handleBalloonButtonClick
                 : () => handleOtherToolClick(tool.name)
             }
             title={tool.label}
@@ -110,6 +148,15 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
               onSelectShape={onSelectShape}
             />
           )}
+          {tool.name === 'text' && (currentTool === 'text' || currentTool === 'balloon') && showTextSubmenu && (
+            <FontPicker
+              isOpen={true}
+              font={font}
+              onFontChange={onFontChange}
+              fontSize={fontSize}
+              onFontSizeChange={onFontSizeChange}
+            />
+          )}
         </React.Fragment>
       ))}
       <div className="color-selector">
@@ -122,41 +169,6 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
           title="Select drawing color"
         />
       </div>
-      {currentTool === 'text' && (
-        <>
-          <div className="font-selector">
-            <label htmlFor="font-picker">Font:</label>
-            <select
-              id="font-picker"
-              value={font}
-              onChange={(e) => onFontChange(e.target.value)}
-              title="Select font"
-            >
-              <option value="Arial">Arial</option>
-              <option value="Times New Roman">Times New Roman</option>
-              <option value="Courier New">Courier New</option>
-              <option value="Georgia">Georgia</option>
-              <option value="Verdana">Verdana</option>
-              <option value="Comic Sans MS">Comic Sans MS</option>
-              <option value="Impact">Impact</option>
-              <option value="Trebuchet MS">Trebuchet MS</option>
-            </select>
-          </div>
-          <div className="font-size-selector">
-            <label htmlFor="font-size-picker">Size:</label>
-            <input
-              id="font-size-picker"
-              type="number"
-              min="8"
-              max="200"
-              value={fontSize}
-              onChange={(e) => onFontSizeChange(parseInt(e.target.value) || 24)}
-              title="Font size"
-              style={{ width: '60px' }}
-            />
-          </div>
-        </>
-      )}
     </div>
   )
 }

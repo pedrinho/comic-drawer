@@ -1,0 +1,81 @@
+.font-picker-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.4rem 0.25rem 0.25rem;
+  margin-top: 0.35rem;
+  width: 100%;
+  box-sizing: border-box;
+  align-self: stretch;
+  min-width: 0;
+}
+
+.font-selector-inline,
+.font-size-selector-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem;
+  min-width: 0;
+}
+
+.font-selector-inline label,
+.font-size-selector-inline label {
+  font-size: 0.75rem;
+  color: #2d3142;
+  font-weight: 500;
+  min-width: 3rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.font-selector-inline select {
+  flex: 1;
+  padding: 0.4rem 0.6rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.85rem;
+  min-width: 0;
+  width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.font-selector-inline select:hover {
+  border-color: #667eea;
+  background: #eef2ff;
+}
+
+.font-selector-inline select:focus {
+  outline: none;
+  border-color: #667eea;
+  background: #eef2ff;
+}
+
+.font-size-selector-inline input {
+  flex: 1;
+  padding: 0.4rem 0.6rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  background: white;
+  transition: all 0.2s ease;
+  font-size: 0.85rem;
+  min-width: 0;
+  width: 0;
+}
+
+.font-size-selector-inline input:hover {
+  border-color: #667eea;
+  background: #eef2ff;
+}
+
+.font-size-selector-inline input:focus {
+  outline: none;
+  border-color: #667eea;
+  background: #eef2ff;
+}
+
