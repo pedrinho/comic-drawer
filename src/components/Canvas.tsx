@@ -395,6 +395,7 @@ export default function Canvas({
     screenPos: { x: number; y: number };
   } | null>(null)
   const [deleteButtonPos, setDeleteButtonPos] = useState<{ x: number; y: number } | null>(null)
+  const [duplicateButtonPos, setDuplicateButtonPos] = useState<{ x: number; y: number } | null>(null)
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     drawGridUtil(ctx, layout)
@@ -871,7 +872,7 @@ export default function Canvas({
     drawShapeLayers(ctx)
     drawTextLayers(ctx)
 
-    // Update delete button position when selection changes
+    // Update delete and duplicate button positions when selection changes
     const rect = canvas.getBoundingClientRect()
     const scaleX = rect.width / canvas.width
     const scaleY = rect.height / canvas.height
@@ -882,15 +883,22 @@ export default function Canvas({
         // Draw selection outline and handles, accounting for rotation
         drawSelectionOutline(ctx, layer, layer.rotation)
         drawSelectionHandles(ctx, layer, layer.rotation)
-        // Position delete button at top-right corner of selection
-        const buttonX = layer.x + layer.width
+        // Position buttons above the selection, centered
+        const buttonX = layer.x + layer.width / 2
         const buttonY = layer.y - 30 // Above the selection
+        // Delete button on the right
         setDeleteButtonPos({
-          x: rect.left + buttonX * scaleX,
+          x: rect.left + (buttonX + 50) * scaleX,
+          y: rect.top + buttonY * scaleY,
+        })
+        // Duplicate button on the left
+        setDuplicateButtonPos({
+          x: rect.left + (buttonX - 50) * scaleX,
           y: rect.top + buttonY * scaleY,
         })
       } else {
         setDeleteButtonPos(null)
+        setDuplicateButtonPos(null)
       }
     } else if (activeTextLayerIdRef.current) {
       const layer = textLayersRef.current.find((l) => l.id === activeTextLayerIdRef.current)
@@ -898,18 +906,26 @@ export default function Canvas({
         // Draw selection outline and handles, accounting for rotation
         drawSelectionOutline(ctx, layer, layer.rotation)
         drawSelectionHandles(ctx, layer, layer.rotation)
-        // Position delete button at top-right corner of selection
-        const buttonX = layer.x + layer.width
+        // Position buttons above the selection, centered
+        const buttonX = layer.x + layer.width / 2
         const buttonY = layer.y - 30 // Above the selection
+        // Delete button on the right
         setDeleteButtonPos({
-          x: rect.left + buttonX * scaleX,
+          x: rect.left + (buttonX + 50) * scaleX,
+          y: rect.top + buttonY * scaleY,
+        })
+        // Duplicate button on the left
+        setDuplicateButtonPos({
+          x: rect.left + (buttonX - 50) * scaleX,
           y: rect.top + buttonY * scaleY,
         })
       } else {
         setDeleteButtonPos(null)
+        setDuplicateButtonPos(null)
       }
     } else {
       setDeleteButtonPos(null)
+      setDuplicateButtonPos(null)
     }
   }, [panelData, drawGrid, drawShapeLayers, drawTextLayers])
 
@@ -1149,6 +1165,73 @@ export default function Canvas({
       updateTextLayers(updatedLayers, true)
       // Clear selection
       activeTextLayerIdRef.current = null
+      repaintCanvas()
+      return
+    }
+  }, [updateShapeLayers, updateTextLayers, onShapeLayersChange, onTextLayersChange, repaintCanvas])
+
+  const handleDuplicate = useCallback(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const DUPLICATE_OFFSET = 30 // Offset in pixels for the duplicate
+
+    // Check if a shape layer is selected
+    if (activeShapeLayerIdRef.current) {
+      const layerId = activeShapeLayerIdRef.current
+      const originalLayer = shapeLayersRef.current.find((layer) => layer.id === layerId)
+      if (!originalLayer) return
+
+      // Save history before duplication
+      if (onShapeLayersChange) {
+        onShapeLayersChange([...shapeLayersRef.current], false)
+      }
+
+      // Create duplicate with new ID and offset position
+      const duplicatedLayer: ShapeLayer = {
+        ...originalLayer,
+        id: generateLayerId(),
+        x: Math.min(originalLayer.x + DUPLICATE_OFFSET, canvas.width - originalLayer.width),
+        y: Math.min(originalLayer.y + DUPLICATE_OFFSET, canvas.height - originalLayer.height),
+      }
+
+      // Add the duplicated layer
+      const updatedLayers = [...shapeLayersRef.current, duplicatedLayer]
+      updateShapeLayers(updatedLayers, true)
+
+      // Select the new duplicated layer
+      activeShapeLayerIdRef.current = duplicatedLayer.id
+      activeTextLayerIdRef.current = null
+      repaintCanvas()
+      return
+    }
+
+    // Check if a text layer is selected
+    if (activeTextLayerIdRef.current) {
+      const layerId = activeTextLayerIdRef.current
+      const originalLayer = textLayersRef.current.find((layer) => layer.id === layerId)
+      if (!originalLayer) return
+
+      // Save history before duplication
+      if (onTextLayersChange) {
+        onTextLayersChange([...textLayersRef.current], false)
+      }
+
+      // Create duplicate with new ID and offset position
+      const duplicatedLayer: TextLayer = {
+        ...originalLayer,
+        id: generateLayerId(),
+        x: Math.min(originalLayer.x + DUPLICATE_OFFSET, canvas.width - originalLayer.width),
+        y: Math.min(originalLayer.y + DUPLICATE_OFFSET, canvas.height - originalLayer.height),
+      }
+
+      // Add the duplicated layer
+      const updatedLayers = [...textLayersRef.current, duplicatedLayer]
+      updateTextLayers(updatedLayers, true)
+
+      // Select the new duplicated layer
+      activeTextLayerIdRef.current = duplicatedLayer.id
+      activeShapeLayerIdRef.current = null
       repaintCanvas()
       return
     }
@@ -2083,6 +2166,37 @@ export default function Canvas({
           />
         )
       })()}
+      {duplicateButtonPos && tool === 'select' && (activeShapeLayerIdRef.current || activeTextLayerIdRef.current) && (
+        <button
+          onClick={handleDuplicate}
+          style={{
+            position: 'fixed',
+            left: `${duplicateButtonPos.x}px`,
+            top: `${duplicateButtonPos.y}px`,
+            transform: 'translateX(-50%)',
+            backgroundColor: '#3b82f6',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            padding: '6px 12px',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+            zIndex: 1001,
+            transition: 'background-color 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = '#2563eb'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = '#3b82f6'
+          }}
+          title="Duplicate"
+        >
+          📋 Duplicate
+        </button>
+      )}
       {deleteButtonPos && tool === 'select' && (activeShapeLayerIdRef.current || activeTextLayerIdRef.current) && (
         <button
           onClick={handleDelete}
