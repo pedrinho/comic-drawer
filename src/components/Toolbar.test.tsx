@@ -80,4 +80,146 @@ describe('Toolbar', () => {
     const colorPicker = screen.getByLabelText('Color:') as HTMLInputElement
     expect(colorPicker.value).toBe('#000000')
   })
+
+  it('calls onColorChange when color is changed', async () => {
+    const user = userEvent.setup()
+    const onColorChange = vi.fn()
+    render(<Toolbar {...defaultProps} onColorChange={onColorChange} />)
+
+    const colorPicker = screen.getByLabelText('Color:') as HTMLInputElement
+    await user.clear(colorPicker)
+    await user.type(colorPicker, '#ff0000')
+
+    expect(onColorChange).toHaveBeenCalled()
+  })
+
+  it('shows pen picker when pen tool is active and clicked', async () => {
+    const user = userEvent.setup()
+    render(<Toolbar {...defaultProps} currentTool="pen" />)
+    
+    // Click pen button to show submenu
+    await user.click(screen.getByText('Pen').closest('button')!)
+    
+    expect(screen.getByText('Fine')).toBeInTheDocument()
+    expect(screen.getByText('Small')).toBeInTheDocument()
+    expect(screen.getByText('Medium')).toBeInTheDocument()
+  })
+
+  it('shows shape picker when shapes tool is active and clicked', async () => {
+    const user = userEvent.setup()
+    render(<Toolbar {...defaultProps} currentTool="shapes" />)
+    
+    // Click shapes button to show submenu
+    await user.click(screen.getByText('Shapes').closest('button')!)
+    
+    expect(screen.getByText('Rectangle')).toBeInTheDocument()
+    expect(screen.getByText('Circle')).toBeInTheDocument()
+  })
+
+  it('calls onSelectPenType when pen type is clicked', async () => {
+    const user = userEvent.setup()
+    const onSelectPenType = vi.fn()
+    render(<Toolbar {...defaultProps} currentTool="pen" onSelectPenType={onSelectPenType} />)
+
+    // First click to show submenu
+    await user.click(screen.getByText('Pen').closest('button')!)
+    
+    // Then click pen type
+    await user.click(screen.getByText('Fine'))
+    expect(onSelectPenType).toHaveBeenCalledWith('fine')
+  })
+
+  it('calls onSelectShape when shape is clicked', async () => {
+    const user = userEvent.setup()
+    const onSelectShape = vi.fn()
+    render(<Toolbar {...defaultProps} currentTool="shapes" onSelectShape={onSelectShape} />)
+
+    // First click to show submenu
+    await user.click(screen.getByText('Shapes').closest('button')!)
+    
+    // Then click shape
+    await user.click(screen.getByText('Circle'))
+    expect(onSelectShape).toHaveBeenCalledWith('circle')
+  })
+
+  it('shows font controls when text tool is active', () => {
+    render(<Toolbar {...defaultProps} currentTool="text" />)
+    expect(screen.getByLabelText('Font:')).toBeInTheDocument()
+    expect(screen.getByLabelText('Size:')).toBeInTheDocument()
+  })
+
+  it('calls onFontChange when font is changed', async () => {
+    const user = userEvent.setup()
+    const onFontChange = vi.fn()
+    render(<Toolbar {...defaultProps} currentTool="text" onFontChange={onFontChange} />)
+
+    const fontSelect = screen.getByLabelText('Font:') as HTMLSelectElement
+    await user.selectOptions(fontSelect, 'Times New Roman')
+
+    expect(onFontChange).toHaveBeenCalledWith('Times New Roman')
+  })
+
+  it('calls onFontSizeChange when font size is changed', async () => {
+    const user = userEvent.setup()
+    const onFontSizeChange = vi.fn()
+    render(<Toolbar {...defaultProps} currentTool="text" onFontSizeChange={onFontSizeChange} />)
+
+    const fontSizeInput = screen.getByLabelText('Size:') as HTMLInputElement
+    await user.clear(fontSizeInput)
+    await user.type(fontSizeInput, '32')
+
+    expect(onFontSizeChange).toHaveBeenCalled()
+  })
+
+  it('hides pen picker when pen tool is not active', () => {
+    render(<Toolbar {...defaultProps} currentTool="eraser" />)
+    expect(screen.queryByText('Fine')).not.toBeInTheDocument()
+  })
+
+  it('hides shape picker when shapes tool is not active', () => {
+    render(<Toolbar {...defaultProps} currentTool="pen" />)
+    expect(screen.queryByText('Rectangle')).not.toBeInTheDocument()
+  })
+
+  it('hides font controls when text tool is not active', () => {
+    render(<Toolbar {...defaultProps} currentTool="pen" />)
+    expect(screen.queryByLabelText('Font:')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Size:')).not.toBeInTheDocument()
+  })
+
+  it('toggles pen submenu when pen button is clicked', async () => {
+    const user = userEvent.setup()
+    const onToolChange = vi.fn()
+    render(<Toolbar {...defaultProps} currentTool="pen" onToolChange={onToolChange} />)
+
+    // Click pen button to toggle submenu
+    await user.click(screen.getByText('Pen').closest('button')!)
+    
+    // Should show pen picker
+    expect(screen.getByText('Fine')).toBeInTheDocument()
+    
+    // Click again to hide
+    await user.click(screen.getByText('Pen').closest('button')!)
+    
+    // Should hide pen picker
+    expect(screen.queryByText('Fine')).not.toBeInTheDocument()
+  })
+
+  it('toggles shape submenu when shapes button is clicked', async () => {
+    const user = userEvent.setup()
+    const onToolChange = vi.fn()
+    render(<Toolbar {...defaultProps} currentTool="shapes" onToolChange={onToolChange} />)
+
+    // Click shapes button to toggle submenu
+    await user.click(screen.getByText('Shapes').closest('button')!)
+    
+    // Should show shape picker
+    expect(screen.getByText('Rectangle')).toBeInTheDocument()
+    
+    // Click again to hide
+    await user.click(screen.getByText('Shapes').closest('button')!)
+    
+    // Should hide shape picker
+    expect(screen.queryByText('Rectangle')).not.toBeInTheDocument()
+  })
 })

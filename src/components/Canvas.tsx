@@ -394,6 +394,7 @@ export default function Canvas({
     radiusY: number;
     screenPos: { x: number; y: number };
   } | null>(null)
+  const [deleteButtonPos, setDeleteButtonPos] = useState<{ x: number; y: number } | null>(null)
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     drawGridUtil(ctx, layout)
@@ -870,22 +871,45 @@ export default function Canvas({
     drawShapeLayers(ctx)
     drawTextLayers(ctx)
 
+    // Update delete button position when selection changes
+    const rect = canvas.getBoundingClientRect()
+    const scaleX = rect.width / canvas.width
+    const scaleY = rect.height / canvas.height
+
     if (activeShapeLayerIdRef.current) {
       const layer = shapeLayersRef.current.find((l) => l.id === activeShapeLayerIdRef.current)
       if (layer) {
         // Draw selection outline and handles, accounting for rotation
         drawSelectionOutline(ctx, layer, layer.rotation)
         drawSelectionHandles(ctx, layer, layer.rotation)
+        // Position delete button at top-right corner of selection
+        const buttonX = layer.x + layer.width
+        const buttonY = layer.y - 30 // Above the selection
+        setDeleteButtonPos({
+          x: rect.left + buttonX * scaleX,
+          y: rect.top + buttonY * scaleY,
+        })
+      } else {
+        setDeleteButtonPos(null)
       }
-    }
-
-    if (activeTextLayerIdRef.current) {
+    } else if (activeTextLayerIdRef.current) {
       const layer = textLayersRef.current.find((l) => l.id === activeTextLayerIdRef.current)
       if (layer) {
         // Draw selection outline and handles, accounting for rotation
         drawSelectionOutline(ctx, layer, layer.rotation)
         drawSelectionHandles(ctx, layer, layer.rotation)
+        // Position delete button at top-right corner of selection
+        const buttonX = layer.x + layer.width
+        const buttonY = layer.y - 30 // Above the selection
+        setDeleteButtonPos({
+          x: rect.left + buttonX * scaleX,
+          y: rect.top + buttonY * scaleY,
+        })
+      } else {
+        setDeleteButtonPos(null)
       }
+    } else {
+      setDeleteButtonPos(null)
     }
   }, [panelData, drawGrid, drawShapeLayers, drawTextLayers])
 
@@ -1092,6 +1116,77 @@ export default function Canvas({
     repaintCanvas()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelData])
+
+  const handleDelete = useCallback(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    // Check if a shape layer is selected
+    if (activeShapeLayerIdRef.current) {
+      const layerId = activeShapeLayerIdRef.current
+      // Save history before deletion
+      if (onShapeLayersChange) {
+        onShapeLayersChange([...shapeLayersRef.current], false)
+      }
+      // Remove the layer
+      const updatedLayers = shapeLayersRef.current.filter((layer) => layer.id !== layerId)
+      updateShapeLayers(updatedLayers, true)
+      // Clear selection
+      activeShapeLayerIdRef.current = null
+      repaintCanvas()
+      return
+    }
+
+    // Check if a text layer is selected
+    if (activeTextLayerIdRef.current) {
+      const layerId = activeTextLayerIdRef.current
+      // Save history before deletion
+      if (onTextLayersChange) {
+        onTextLayersChange([...textLayersRef.current], false)
+      }
+      // Remove the layer
+      const updatedLayers = textLayersRef.current.filter((layer) => layer.id !== layerId)
+      updateTextLayers(updatedLayers, true)
+      // Clear selection
+      activeTextLayerIdRef.current = null
+      repaintCanvas()
+      return
+    }
+  }, [updateShapeLayers, updateTextLayers, onShapeLayersChange, onTextLayersChange, repaintCanvas])
+
+  // Keyboard event handler for Delete/Backspace
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle delete if we're in select mode and not typing in an input
+      if (tool !== 'select') return
+      if (e.target instanceof HTMLInputElement) return
+
+      // Delete or Backspace key
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault()
+        handleDelete()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [tool, handleDelete])
+
+  // Update delete button position on window resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (activeShapeLayerIdRef.current || activeTextLayerIdRef.current) {
+        repaintCanvas()
+      }
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => {
+      window.removeEventListener('resize', handleResize)
+    }
+  }, [repaintCanvas])
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isDrawing) return
@@ -1988,6 +2083,37 @@ export default function Canvas({
           />
         )
       })()}
+      {deleteButtonPos && tool === 'select' && (activeShapeLayerIdRef.current || activeTextLayerIdRef.current) && (
+        <button
+          onClick={handleDelete}
+          style={{
+            position: 'fixed',
+            left: `${deleteButtonPos.x}px`,
+            top: `${deleteButtonPos.y}px`,
+            transform: 'translateX(-50%)',
+            backgroundColor: '#ef4444',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            padding: '6px 12px',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+            zIndex: 1001,
+            transition: 'background-color 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = '#dc2626'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = '#ef4444'
+          }}
+          title="Delete (Delete/Backspace)"
+        >
+          🗑️ Delete
+        </button>
+      )}
     </div>
   )
 }
