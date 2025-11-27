@@ -8,7 +8,7 @@ import PanelLayoutModal from './components/PanelLayoutModal'
 import { ShapeLayer, TextLayer, migrateLayers } from './types/layers'
 import { traceShapePath, drawGrid as drawGridUtil, debugLog, debugError, debugWarn, cloneImageData, createBlankImageData } from './utils/canvasUtils'
 
-export type Tool = 'select' | 'pen' | 'eraser' | 'shapes' | 'objectShapes' | 'text' | 'fill' | 'balloon'
+export type Tool = 'select' | 'pen' | 'eraser' | 'shapes' | 'objectShapes' | 'text' | 'fill' | 'balloon' | 'emoji'
 export type Shape = 'rectangle' | 'circle' | 'triangle' | 'star' | 'heart' | 'diamond' | 'hexagon' | 'pentagon' | 'arrow' | 'cross' | 'heptagon' | 'octagon'
 export type PenType = 'fine' | 'small' | 'medium' | 'large' | 'thick' | 'verythick'
 
@@ -104,6 +104,7 @@ function App() {
   const [selectedFont, setSelectedFont] = useState<string>('Arial')
   const [selectedFontSize, setSelectedFontSize] = useState<number>(24)
   const [isTextEditing, setIsTextEditing] = useState<boolean>(false)
+  const [selectedEmoji, setSelectedEmoji] = useState<string>('😀')
   const [selectedPanel, setSelectedPanel] = useState<number>(0)
   const selectedPanelRef = useRef<number>(0)
   const [panels, setPanels] = useState<PanelData[]>([
@@ -695,6 +696,8 @@ function App() {
           fontSize={selectedFontSize}
           onFontSizeChange={setSelectedFontSize}
           isTextEditing={isTextEditing}
+          selectedEmoji={selectedEmoji}
+          onSelectEmoji={setSelectedEmoji}
         />
         <PanelLayout 
           panels={panels}
@@ -719,6 +722,7 @@ function App() {
             onShapeLayersChange={handleShapeLayersChange}
             onTextLayersChange={handleTextLayersChange}
             onTextEditingChange={setIsTextEditing}
+            emoji={selectedEmoji}
             key={selectedPanel}
           />
         )}

@@ -42,6 +42,7 @@ interface CanvasProps {
   textLayers?: TextLayer[]
   onTextLayersChange?: (layers: TextLayer[], skipHistory?: boolean) => void
   onTextEditingChange?: (isEditing: boolean) => void
+  emoji?: string
 }
 
 const getPenWidth = (penType?: PenType): number => {
@@ -362,6 +363,7 @@ export default function Canvas({
   textLayers = [],
   onTextLayersChange,
   onTextEditingChange,
+  emoji = '😀',
 }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
@@ -410,6 +412,7 @@ export default function Canvas({
   const textResizeHandleRef = useRef<SelectionHandle | null>(null)
   const textResizeStartRectRef = useRef<SelectionRect | null>(null)
   const textResizeStartPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
+  const textResizeStartFontSizeRef = useRef<number>(0)
   const textRotationStartAngleRef = useRef(0)
   const textRotationBaseAngleRef = useRef(0)
   const [textInputPos, setTextInputPos] = useState<{ x: number; y: number } | null>(null)
@@ -941,6 +944,7 @@ export default function Canvas({
         shapeResizeStartRectRef.current = null
         textResizeHandleRef.current = null
         textResizeStartRectRef.current = null
+        textResizeStartFontSizeRef.current = 0
         repaintCanvas()
         return
       }
@@ -995,6 +999,62 @@ export default function Canvas({
       setTextInput('')
       setIsDrawing(false)
       setTimeout(() => inputRef.current?.focus(), 0)
+    } else if (tool === 'emoji') {
+      // Create a new text layer with the selected emoji
+      const canvas = canvasRef.current
+      const ctx = canvas?.getContext('2d')
+      if (!canvas || !ctx || !onTextLayersChange) {
+        setIsDrawing(false)
+        return
+      }
+
+      // Calculate scale factor for measurement
+      const rect = canvas.getBoundingClientRect()
+      const scaleX = rect.width / canvas.width
+      const scaleY = rect.height / canvas.height
+      const scale = (scaleX + scaleY) / 2
+      
+      // Scale fontSize for measurement (to get correct dimensions)
+      const scaledFontSize = fontSize / scale
+      
+      // Measure emoji to determine width and height
+      ctx.font = `${scaledFontSize}px ${font}`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      const metrics = ctx.measureText(emoji)
+      const textWidth = Math.max(metrics.width, scaledFontSize)
+      const textHeight = scaledFontSize
+
+      // Center emoji at click position
+      const textX = pos.x - textWidth / 2
+      const textY = pos.y - textHeight / 2
+
+      // Create text layer with emoji
+      const layerId = generateLayerId()
+      const newLayer: TextLayer = {
+        type: 'text',
+        id: layerId,
+        text: emoji,
+        x: textX,
+        y: textY,
+        width: textWidth,
+        height: textHeight,
+        rotation: 0,
+        font: font,
+        fontSize: fontSize, // Store original CSS pixel size, not scaled
+        color: color,
+      }
+
+      // Save history before creating new emoji layer
+      const currentLayers = [...textLayersRef.current]
+      if (onTextLayersChange) {
+        onTextLayersChange(currentLayers, false)
+      }
+
+      // Add the new layer
+      updateTextLayers([...textLayersRef.current, newLayer], true)
+      repaintCanvas()
+      setIsDrawing(false)
     } else if (tool === 'shapes' || tool === 'balloon') {
       savedImageRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height)
     } else if (tool === 'eraser') {
@@ -1313,6 +1373,7 @@ export default function Canvas({
             textResizeHandleRef.current = handle
             textResizeStartRectRef.current = { ...layerRect }
             textResizeStartPosRef.current = { x: point.x, y: point.y }
+            textResizeStartFontSizeRef.current = selectedLayer.fontSize
             repaintCanvas()
             return true
           }
@@ -1362,6 +1423,7 @@ export default function Canvas({
           textResizeHandleRef.current = handle
           textResizeStartRectRef.current = { ...layerRect }
           textResizeStartPosRef.current = { x: point.x, y: point.y }
+          textResizeStartFontSizeRef.current = hitLayer.fontSize
         } else {
           // Drag - save history before starting drag
           if (onTextLayersChange) {
@@ -1586,6 +1648,16 @@ export default function Canvas({
     if (isResizingTextLayerRef.current && activeTextLayerIdRef.current && textResizeHandleRef.current && textResizeStartRectRef.current) {
       const startRect = textResizeStartRectRef.current
       const newRect = calculateResizedRect(textResizeHandleRef.current, startRect, pos, textResizeStartPosRef.current)
+      
+      // Calculate scale factors from width and height changes
+      const scaleX = startRect.width > 0 ? newRect.width / startRect.width : 1
+      const scaleY = startRect.height > 0 ? newRect.height / startRect.height : 1
+      // Use average scale to maintain reasonable proportions
+      const scale = (scaleX + scaleY) / 2
+      
+      // Calculate new fontSize based on scale
+      const newFontSize = textResizeStartFontSizeRef.current * scale
+      
       const updatedLayers = textLayersRef.current.map((layer) =>
         layer.id === activeTextLayerIdRef.current
           ? {
@@ -1594,6 +1666,7 @@ export default function Canvas({
               y: newRect.y,
               width: newRect.width,
               height: newRect.height,
+              fontSize: newFontSize,
             }
           : layer
       )
@@ -1934,6 +2007,7 @@ export default function Canvas({
         isRotatingTextLayerRef.current = false
         textResizeHandleRef.current = null
         textResizeStartRectRef.current = null
+        textResizeStartFontSizeRef.current = 0
         setIsDrawing(false)
         repaintCanvas()
         return

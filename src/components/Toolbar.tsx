@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import ShapePicker from './ShapePicker'
 import PenPicker from './PenPicker'
 import FontPicker from './FontPicker'
+import EmojiPicker from './EmojiPicker'
 
 interface ToolbarProps {
   currentTool: Tool
@@ -19,12 +20,15 @@ interface ToolbarProps {
   fontSize: number
   onFontSizeChange: (fontSize: number) => void
   isTextEditing?: boolean
+  selectedEmoji?: string
+  onSelectEmoji?: (emoji: string) => void
 }
 
-export default function Toolbar({ currentTool, onToolChange, color, onColorChange, selectedShape, onSelectShape, selectedPenType, onSelectPenType, font, onFontChange, fontSize, onFontSizeChange, isTextEditing = false }: ToolbarProps) {
+export default function Toolbar({ currentTool, onToolChange, color, onColorChange, selectedShape, onSelectShape, selectedPenType, onSelectPenType, font, onFontChange, fontSize, onFontSizeChange, isTextEditing = false, selectedEmoji = '😀', onSelectEmoji }: ToolbarProps) {
   const [showPenSubmenu, setShowPenSubmenu] = useState(false)
   const [showShapesSubmenu, setShowShapesSubmenu] = useState(false)
   const [showTextSubmenu, setShowTextSubmenu] = useState(false)
+  const [showEmojiSubmenu, setShowEmojiSubmenu] = useState(false)
   const tools: { name: Tool; icon: string; label: string }[] = [
     { name: 'select', icon: '🖱️', label: 'Select' },
     { name: 'pen', icon: '✏️', label: 'Pen' },
@@ -34,6 +38,7 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     { name: 'fill', icon: '🪣', label: 'Fill' },
     { name: 'text', icon: '💬', label: 'Text' },
     { name: 'balloon', icon: '💭', label: 'Balloon' },
+    { name: 'emoji', icon: '😀', label: 'Emoji' },
   ]
 
   useEffect(() => {
@@ -48,6 +53,9 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
       setShowTextSubmenu(false)
     } else if (isTextEditing) {
       setShowTextSubmenu(true)
+    }
+    if (currentTool !== 'emoji') {
+      setShowEmojiSubmenu(false)
     }
   }, [currentTool, isTextEditing])
 
@@ -102,11 +110,28 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     }
   }
 
+  const handleEmojiButtonClick = () => {
+    if (currentTool === 'emoji') {
+      // Toggle submenu
+      setShowEmojiSubmenu(!showEmojiSubmenu)
+      setShowPenSubmenu(false)
+      setShowShapesSubmenu(false)
+      setShowTextSubmenu(false)
+    } else {
+      onToolChange('emoji')
+      setShowEmojiSubmenu(true)
+      setShowPenSubmenu(false)
+      setShowShapesSubmenu(false)
+      setShowTextSubmenu(false)
+    }
+  }
+
   const handleOtherToolClick = (tool: Tool) => {
     onToolChange(tool)
     setShowPenSubmenu(false)
     setShowShapesSubmenu(false)
     setShowTextSubmenu(false)
+    setShowEmojiSubmenu(false)
   }
 
   return (
@@ -124,6 +149,8 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
                 ? handleTextButtonClick
                 : tool.name === 'balloon'
                 ? handleBalloonButtonClick
+                : tool.name === 'emoji'
+                ? handleEmojiButtonClick
                 : () => handleOtherToolClick(tool.name)
             }
             title={tool.label}
@@ -173,6 +200,15 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
           title="Select drawing color"
         />
       </div>
+      {currentTool === 'emoji' && showEmojiSubmenu && onSelectEmoji && (
+        <div className="emoji-picker-wrapper">
+          <EmojiPicker
+            isOpen={true}
+            selectedEmoji={selectedEmoji}
+            onSelectEmoji={onSelectEmoji}
+          />
+        </div>
+      )}
     </div>
   )
 }

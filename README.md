@@ -5,6 +5,7 @@ A web-based application for creating comics! Draw panels, add dialogue, and let 
 ## Features
 
 - ✏️ **Drawing Tools**: Pen, eraser, and text
+- 😀 **Emoji Tool**: Add emojis to your comics with a comprehensive emoji picker
 - 🔷 **Shapes**: 12 different shapes (rectangle, circle, triangle, star, heart, diamond, hexagon, pentagon, heptagon, octagon, arrow, cross)
 - ⬚ **Object Shapes**: Create editable shape objects that can be moved, resized, rotated, and deleted
 - 💬 **Speech Balloons**: Add dialogue bubbles with text
@@ -12,7 +13,7 @@ A web-based application for creating comics! Draw panels, add dialogue, and let 
 - 📐 **Panel Layout**: Customizable comic panel layouts
 - 💾 **Save & Load**: Save your comics in .cd format and load them later
 - 📄 **Export to PDF**: Export your comic panels as a PDF file (each panel becomes one page)
-- 🖱️ **Object Selection**: Select, move, resize, rotate, and delete shape and text objects with the select tool
+- 🖱️ **Object Selection**: Select, move, resize, rotate, and delete shape, text, and emoji objects with the select tool
 - 🗑️ **Delete Objects**: Delete selected objects using the delete button or Delete/Backspace keys
 - ↶ **Undo/Redo**: Undo and redo the last 10 actions (keyboard shortcuts: Ctrl+Z / Ctrl+Shift+Z)
 - 🎨 **Beautiful UI**: Modern, kid-friendly interface
