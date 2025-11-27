@@ -461,10 +461,19 @@ export default function Canvas({
     const centerY = y + height / 2
     
     // Calculate current scale factor for consistent rendering
-    const rect = canvas.getBoundingClientRect()
-    const scaleX = rect.width / canvas.width
-    const scaleY = rect.height / canvas.height
-    const scale = (scaleX + scaleY) / 2
+    // In test environment, getBoundingClientRect may not be available
+    let scale = 1
+    try {
+      const rect = canvas.getBoundingClientRect()
+      if (rect && rect.width && rect.height) {
+        const scaleX = rect.width / canvas.width
+        const scaleY = rect.height / canvas.height
+        scale = (scaleX + scaleY) / 2
+      }
+    } catch {
+      // In test environment, use default scale
+      scale = 1
+    }
     
     // Scale fontSize to match visual size (layerFontSize is stored in CSS pixels, need to scale up for canvas)
     const scaledFontSize = layerFontSize / scale
@@ -665,12 +674,9 @@ export default function Canvas({
   }, [panelData, layout, drawGrid, color, penType, drawShapeLayers, drawTextLayers])
 
   // Track text editing state for parent notification
-  const [isTextEditing, setIsTextEditing] = useState(false)
-  
   // Notify parent when text editing state changes
   useEffect(() => {
     const isEditing = editingTextLayerIdRef.current !== null
-    setIsTextEditing(isEditing)
     if (onTextEditingChange) {
       onTextEditingChange(isEditing)
     }
@@ -899,6 +905,15 @@ export default function Canvas({
         Math.abs(pos.y - lastClickPosRef.current.y) < 5
 
       // Try text layers first (they're on top)
+      // BUT: If a text layer is already selected, check handles FIRST before checking if we hit a text layer
+      // This ensures handles are detected even when clicking on the text itself
+      if (activeTextLayerIdRef.current) {
+        if (beginTextLayerInteraction(pos)) {
+          setIsDrawing(true)
+          return
+        }
+      }
+      
       const hitTextLayer = hitTestTextLayers(pos)
       if (hitTextLayer) {
         if (isDoubleClick && activeTextLayerIdRef.current === hitTextLayer.id) {
@@ -966,7 +981,6 @@ export default function Canvas({
       setIsDrawing(false)
       // Capture canvas state after floodFill (which modifies canvas directly)
       // But exclude layers by using getBackgroundImageData and then applying the fill result
-      const background = getBackgroundImageData()
       // Get current canvas state (has fill applied, but also has layers)
       const currentState = ctx.getImageData(0, 0, canvas.width, canvas.height)
       // Merge: start with background, then apply only the fill changes
@@ -1647,7 +1661,8 @@ export default function Canvas({
 
     if (isResizingTextLayerRef.current && activeTextLayerIdRef.current && textResizeHandleRef.current && textResizeStartRectRef.current) {
       const startRect = textResizeStartRectRef.current
-      const newRect = calculateResizedRect(textResizeHandleRef.current, startRect, pos, textResizeStartPosRef.current)
+      const handle = textResizeHandleRef.current
+      const newRect = calculateResizedRect(handle, startRect, pos, textResizeStartPosRef.current)
       
       // Calculate scale factors from width and height changes
       const scaleX = startRect.width > 0 ? newRect.width / startRect.width : 1
@@ -1656,7 +1671,7 @@ export default function Canvas({
       const scale = (scaleX + scaleY) / 2
       
       // Calculate new fontSize based on scale
-      const newFontSize = textResizeStartFontSizeRef.current * scale
+      const newFontSize = Math.max(1, textResizeStartFontSizeRef.current * scale)
       
       const updatedLayers = textLayersRef.current.map((layer) =>
         layer.id === activeTextLayerIdRef.current
@@ -1664,8 +1679,8 @@ export default function Canvas({
               ...layer,
               x: newRect.x,
               y: newRect.y,
-              width: newRect.width,
-              height: newRect.height,
+              width: Math.max(1, newRect.width),
+              height: Math.max(1, newRect.height),
               fontSize: newFontSize,
             }
           : layer
@@ -2080,13 +2095,14 @@ export default function Canvas({
           // Apply final rotation
           const origWidth = originalImageSizeRef.current?.width || rect.width
           const origHeight = originalImageSizeRef.current?.height || rect.height
-          const tempCanvas = document.createElement('canvas')
-          tempCanvas.width = origWidth
-          tempCanvas.height = origHeight
-          const tempCtx = tempCanvas.getContext('2d')
-          if (tempCtx && selectionImageRef.current && originalImageSizeRef.current) {
+          // Create temp canvas and context for rotation
+          const rotationCanvas = document.createElement('canvas')
+          rotationCanvas.width = origWidth
+          rotationCanvas.height = origHeight
+          const rotationCtx = rotationCanvas.getContext('2d')
+          if (rotationCtx && selectionImageRef.current && originalImageSizeRef.current) {
             // Use original unrotated image
-            tempCtx.putImageData(selectionImageRef.current, 0, 0)
+            rotationCtx.putImageData(selectionImageRef.current, 0, 0)
             
             // Use total angle (accumulated + new)
             const totalAngle = cumulativeRotationAngleRef.current + rotationAngleRef.current
@@ -2094,7 +2110,7 @@ export default function Canvas({
             ctx.save()
             ctx.translate(centerX, centerY)
             ctx.rotate(totalAngle)
-            ctx.drawImage(tempCanvas, -origWidth / 2, -origHeight / 2)
+            ctx.drawImage(rotationCanvas, -origWidth / 2, -origHeight / 2)
             ctx.restore()
             
             // Calculate new bounding box using original image size and total angle
@@ -2482,8 +2498,10 @@ export default function Canvas({
           const currA = currData[i + 3]
           
           // If pixel differs significantly from background, it's a pen stroke
-          if (Math.abs(bgR - currR) > 5 || Math.abs(bgG - currG) > 5 || 
-              Math.abs(bgB - currB) > 5 || Math.abs(bgA - currA) > 5) {
+          if (bgR !== undefined && bgG !== undefined && bgB !== undefined && bgA !== undefined &&
+              currR !== undefined && currG !== undefined && currB !== undefined && currA !== undefined &&
+              (Math.abs(bgR - currR) > 5 || Math.abs(bgG - currG) > 5 || 
+               Math.abs(bgB - currB) > 5 || Math.abs(bgA - currA) > 5)) {
             resultData[i] = currR
             resultData[i + 1] = currG
             resultData[i + 2] = currB

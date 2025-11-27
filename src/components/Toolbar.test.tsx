@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi } from 'vitest'
 import Toolbar from './Toolbar'
@@ -87,10 +87,10 @@ describe('Toolbar', () => {
     render(<Toolbar {...defaultProps} onColorChange={onColorChange} />)
 
     const colorPicker = screen.getByLabelText('Color:') as HTMLInputElement
-    await user.clear(colorPicker)
-    await user.type(colorPicker, '#ff0000')
+    // For color input, fire change event directly
+    fireEvent.change(colorPicker, { target: { value: '#ff0000' } })
 
-    expect(onColorChange).toHaveBeenCalled()
+    expect(onColorChange).toHaveBeenCalledWith('#ff0000')
   })
 
   it('shows pen picker when pen tool is active and clicked', async () => {
@@ -112,8 +112,8 @@ describe('Toolbar', () => {
     // Click shapes button to show submenu
     await user.click(screen.getByText('Shapes').closest('button')!)
     
-    expect(screen.getByText('Rectangle')).toBeInTheDocument()
-    expect(screen.getByText('Circle')).toBeInTheDocument()
+    expect(screen.getByTitle('rectangle')).toBeInTheDocument()
+    expect(screen.getByTitle('circle')).toBeInTheDocument()
   })
 
   it('calls onSelectPenType when pen type is clicked', async () => {

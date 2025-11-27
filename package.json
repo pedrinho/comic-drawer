@@ -4,7 +4,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "type-check": "tsc --noEmit",
+    "type-check:watch": "tsc --noEmit --watch",
+    "build": "npm run type-check && vite build",
+    "build:fast": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest",
     "test:coverage": "vitest --coverage"

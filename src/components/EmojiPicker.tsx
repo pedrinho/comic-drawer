@@ -1,5 +1,4 @@
 import './EmojiPicker.css'
-import React from 'react'
 
 interface EmojiPickerProps {
   isOpen: boolean

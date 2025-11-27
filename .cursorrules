@@ -1,0 +1,19 @@
+# Commit Procedure
+
+When the user asks to "commit proceedure" or "commit procedure", execute the following steps in order:
+
+1. **Run unit tests** - Execute `npm test` to ensure all tests are passing
+2. **Check test coverage** - Verify that new functionality has proper unit tests. If new features were added without tests, inform the user and ask if they want to add tests before committing
+3. **Type check** - Run `npm run type-check` to ensure there are no TypeScript errors that would break the Vercel build
+4. **Update README** - Review changes and update README.md if:
+   - New features were added
+   - Known issues were fixed
+   - Dependencies changed
+   - Usage instructions need updates
+5. **Commit and sync** - After all checks pass:
+   - Stage all changes: `git add -A`
+   - Create a descriptive commit message based on the changes
+   - Commit: `git commit -m "message"`
+   - Push: `git push`
+
+If any step fails, stop and inform the user about the issue before proceeding.

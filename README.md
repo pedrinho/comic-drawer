@@ -54,6 +54,20 @@ npm run test:coverage
 
 Current coverage: **97.2%** (excluding Canvas drawing logic and DOM APIs)
 
+## Type Checking
+
+Check TypeScript types without building:
+```bash
+npm run type-check
+```
+
+Watch mode for type checking:
+```bash
+npm run type-check:watch
+```
+
+The build process (`npm run build`) automatically runs type checking before building to catch errors early.
+
 ## Credits
 
 This project is inspired by my sons, Pedro and Paulo ❤️ They love to paint comics and that's why I started to develop this project.
