@@ -53,3 +53,5 @@ Create a descriptive commit message that:
 - **Never skip steps** - Each step is important for code quality
 - **Stop on errors** - If any step fails, inform the user before proceeding
 - **Ask for confirmation** - If tests are missing or there are issues, ask the user how to proceed
+
+

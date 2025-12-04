@@ -14,6 +14,7 @@ export type PenType = 'fine' | 'small' | 'medium' | 'large' | 'thick' | 'verythi
 
 export interface PanelData {
   id: number
+  name: string
   data: ImageData | null
   layout: {
     rows: number
@@ -25,6 +26,7 @@ export interface PanelData {
 
 interface SavedPanel {
   id: number
+  name?: string  // Optional for backward compatibility
   data: string | null  // Base64 encoded ImageData
   layout: {
     rows: number
@@ -108,7 +110,7 @@ function App() {
   const [selectedPanel, setSelectedPanel] = useState<number>(0)
   const selectedPanelRef = useRef<number>(0)
   const [panels, setPanels] = useState<PanelData[]>([
-    { id: 0, data: null, layout: { rows: 1, columns: [1] }, shapeLayers: [], textLayers: [] }
+    { id: 0, name: 'Panel 1', data: null, layout: { rows: 1, columns: [1] }, shapeLayers: [], textLayers: [] }
   ])
   const [showModal, setShowModal] = useState(false)
   
@@ -127,7 +129,7 @@ function App() {
 
   const handlePanelLayoutConfirm = (rows: number, columns: number[]) => {
     debugLog('App', 'Panel layout confirmed', { rows, columns, newPanelId: panels.length })
-    setPanels([...panels, { id: panels.length, data: null, layout: { rows, columns }, shapeLayers: [], textLayers: [] }])
+    setPanels([...panels, { id: panels.length, name: `Panel ${panels.length + 1}`, data: null, layout: { rows, columns }, shapeLayers: [], textLayers: [] }])
   }
 
   // Helper to get or initialize history for a panel
@@ -361,6 +363,44 @@ function App() {
     setSelectedPanel(index)
   }
 
+  const handleRenamePanel = (index: number, newName: string) => {
+    debugLog('App', 'Rename panel requested', { index, newName })
+    const updatedPanels = [...panels]
+    const updatedPanel = updatedPanels[index]
+    if (updatedPanel) {
+      updatedPanel.name = newName.trim() || `Panel ${index + 1}`
+      setPanels(updatedPanels)
+    }
+  }
+
+  const handleMovePanel = (index: number, direction: 'up' | 'down') => {
+    debugLog('App', 'Move panel requested', { index, direction, totalPanels: panels.length })
+    
+    // Validate move
+    if (direction === 'up' && index === 0) return // Can't move first panel up
+    if (direction === 'down' && index === panels.length - 1) return // Can't move last panel down
+    
+    const newIndex = direction === 'up' ? index - 1 : index + 1
+    
+    // Create new array with panels swapped
+    const updatedPanels = [...panels]
+    const [movedPanel] = updatedPanels.splice(index, 1)
+    if (!movedPanel) return // Safety check
+    updatedPanels.splice(newIndex, 0, movedPanel)
+    
+    setPanels(updatedPanels)
+    
+    // Update selected panel index
+    if (selectedPanel === index) {
+      // If we moved the selected panel, update its index
+      setSelectedPanel(newIndex)
+    } else if (selectedPanel === newIndex) {
+      // If we moved a panel into the selected panel's position, update selected index
+      setSelectedPanel(index)
+    }
+    // Otherwise, selected panel stays the same
+  }
+
   const handleDeletePanel = (index: number) => {
     debugLog('App', 'Delete panel requested', { index, totalPanels: panels.length })
     // Don't allow deleting the last panel
@@ -370,7 +410,8 @@ function App() {
     }
 
     // Ask for confirmation before deleting
-    const confirmed = window.confirm(`Are you sure you want to delete Panel ${index + 1}? This action cannot be undone.`)
+    const panelName = panels[index]?.name || `Panel ${index + 1}`
+    const confirmed = window.confirm(`Are you sure you want to delete ${panelName}? This action cannot be undone.`)
     if (!confirmed) {
       debugLog('App', 'Panel deletion cancelled')
       return
@@ -396,6 +437,7 @@ function App() {
     // Convert ImageData to base64 for each panel
     const savedPanels: SavedPanel[] = panels.map(panel => ({
       id: panel.id,
+      name: panel.name,
       data: panel.data ? imageDataToBase64(panel.data) : null,
       layout: panel.layout,
       shapeLayers: panel.shapeLayers,
@@ -442,8 +484,9 @@ function App() {
           
           // Convert base64 back to ImageData (async)
           const loadedPanels: PanelData[] = await Promise.all(
-            comicFile.panels.map(async (panel) => ({
+            comicFile.panels.map(async (panel, index) => ({
               id: panel.id,
+              name: panel.name || `Panel ${index + 1}`,  // Fallback for backward compatibility
               data: panel.data ? await base64ToImageData(panel.data) : null,
               layout: panel.layout,
               // Migrate layers to ensure they have the 'type' field
@@ -705,6 +748,8 @@ function App() {
           onPanelSelect={handlePanelSwitch}
           onAddPanel={addPanel}
           onDeletePanel={handleDeletePanel}
+          onRenamePanel={handleRenamePanel}
+          onMovePanel={handleMovePanel}
         />
         {panels[selectedPanel] && (
           <Canvas 

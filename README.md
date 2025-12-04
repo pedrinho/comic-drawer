@@ -11,6 +11,7 @@ A web-based application for creating comics! Draw panels, add dialogue, and let 
 - 💬 **Speech Balloons**: Add dialogue bubbles with text
 - 🪣 **Fill Tool**: Fill shapes and areas with color
 - 📐 **Panel Layout**: Customizable comic panel layouts
+- ✏️ **Panel Management**: Rename panels by double-clicking, and reorder panels with up/down arrows
 - 💾 **Save & Load**: Save your comics in .cd format and load them later
 - 📄 **Export to PDF**: Export your comic panels as a PDF file (each panel becomes one page)
 - 🖱️ **Object Selection**: Select, move, resize, rotate, and delete shape, text, and emoji objects with the select tool
