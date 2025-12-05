@@ -116,7 +116,7 @@ const getHandleAtPoint = (point: { x: number; y: number }, rect: SelectionRect, 
   const half = hitAreaSize / 2
   const centerX = rect.x + rect.width / 2
   const centerY = rect.y + rect.height / 2
-  
+
   // Base positions relative to center (same order as drawSelectionHandles)
   const basePositions = [
     { x: -rect.width / 2, y: -rect.height / 2 },      // top-left
@@ -128,7 +128,7 @@ const getHandleAtPoint = (point: { x: number; y: number }, rect: SelectionRect, 
     { x: 0, y: rect.height / 2 },                      // bottom-center
     { x: rect.width / 2, y: rect.height / 2 },        // bottom-right
   ]
-  
+
   const handleTypes: SelectionHandle[] = [
     'top-left',
     'top-center',
@@ -139,15 +139,15 @@ const getHandleAtPoint = (point: { x: number; y: number }, rect: SelectionRect, 
     'bottom-center',
     'bottom-right',
   ]
-  
+
   // Rotate positions if needed (same logic as drawSelectionHandles)
   const positions = rotation === 0
     ? basePositions.map(p => ({ x: centerX + p.x, y: centerY + p.y }))
     : basePositions.map(p => {
-        const rotatedX = p.x * Math.cos(rotation) - p.y * Math.sin(rotation)
-        const rotatedY = p.x * Math.sin(rotation) + p.y * Math.cos(rotation)
-        return { x: centerX + rotatedX, y: centerY + rotatedY }
-      })
+      const rotatedX = p.x * Math.cos(rotation) - p.y * Math.sin(rotation)
+      const rotatedY = p.x * Math.sin(rotation) + p.y * Math.cos(rotation)
+      return { x: centerX + rotatedX, y: centerY + rotatedY }
+    })
 
   for (let i = 0; i < positions.length; i++) {
     const pos = positions[i]
@@ -172,18 +172,18 @@ const getRotationHandlePos = (rect: SelectionRect, rotation: number = 0): { x: n
   const centerY = rect.y + rect.height / 2
   const offsetX = 0
   const offsetY = -30 // Position above the rectangle
-  
+
   if (rotation === 0) {
     return {
       x: centerX + offsetX,
       y: centerY + offsetY,
     }
   }
-  
+
   // Rotate the offset around the center
   const rotatedX = offsetX * Math.cos(rotation) - offsetY * Math.sin(rotation)
   const rotatedY = offsetX * Math.sin(rotation) + offsetY * Math.cos(rotation)
-  
+
   return {
     x: centerX + rotatedX,
     y: centerY + rotatedY,
@@ -273,7 +273,7 @@ const drawSelectionOutline = (ctx: CanvasRenderingContext2D, rect: SelectionRect
   ctx.strokeStyle = '#4c6ef5'
   ctx.lineWidth = 1.5
   ctx.setLineDash([6, 4])
-  
+
   if (rotation === 0) {
     ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.width, rect.height)
   } else {
@@ -283,7 +283,7 @@ const drawSelectionOutline = (ctx: CanvasRenderingContext2D, rect: SelectionRect
     ctx.rotate(rotation)
     ctx.strokeRect(-rect.width / 2 + 0.5, -rect.height / 2 + 0.5, rect.width, rect.height)
   }
-  
+
   ctx.restore()
 }
 
@@ -292,7 +292,7 @@ const drawSelectionHandles = (ctx: CanvasRenderingContext2D, rect: SelectionRect
   const half = handleSize / 2
   const centerX = rect.x + rect.width / 2
   const centerY = rect.y + rect.height / 2
-  
+
   // Base positions relative to center
   const basePositions = [
     { x: -rect.width / 2, y: -rect.height / 2 },
@@ -304,15 +304,15 @@ const drawSelectionHandles = (ctx: CanvasRenderingContext2D, rect: SelectionRect
     { x: 0, y: rect.height / 2 },
     { x: rect.width / 2, y: rect.height / 2 },
   ]
-  
+
   // Rotate positions if needed
   const positions = rotation === 0
     ? basePositions.map(p => ({ x: centerX + p.x, y: centerY + p.y }))
     : basePositions.map(p => {
-        const rotatedX = p.x * Math.cos(rotation) - p.y * Math.sin(rotation)
-        const rotatedY = p.x * Math.sin(rotation) + p.y * Math.cos(rotation)
-        return { x: centerX + rotatedX, y: centerY + rotatedY }
-      })
+      const rotatedX = p.x * Math.cos(rotation) - p.y * Math.sin(rotation)
+      const rotatedY = p.x * Math.sin(rotation) + p.y * Math.cos(rotation)
+      return { x: centerX + rotatedX, y: centerY + rotatedY }
+    })
 
   ctx.save()
   ctx.setLineDash([])
@@ -325,7 +325,7 @@ const drawSelectionHandles = (ctx: CanvasRenderingContext2D, rect: SelectionRect
     ctx.fill()
     ctx.stroke()
   })
-  
+
   // Draw rotation handle (circle above the rectangle)
   const rotationHandlePos = getRotationHandlePos(rect, rotation)
   ctx.fillStyle = '#4c6ef5'
@@ -335,7 +335,7 @@ const drawSelectionHandles = (ctx: CanvasRenderingContext2D, rect: SelectionRect
   ctx.strokeStyle = '#ffffff'
   ctx.lineWidth = 2
   ctx.stroke()
-  
+
   // Draw line from center to rotation handle
   ctx.strokeStyle = '#4c6ef5'
   ctx.lineWidth = 1
@@ -344,7 +344,7 @@ const drawSelectionHandles = (ctx: CanvasRenderingContext2D, rect: SelectionRect
   ctx.moveTo(centerX, centerY)
   ctx.lineTo(rotationHandlePos.x, rotationHandlePos.y)
   ctx.stroke()
-  
+
   ctx.restore()
 }
 
@@ -366,6 +366,7 @@ export default function Canvas({
   emoji = '😀',
 }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+
   const [isDrawing, setIsDrawing] = useState(false)
   const [startPos, setStartPos] = useState({ x: 0, y: 0 })
   const savedImageRef = useRef<ImageData | null>(null)
@@ -422,10 +423,10 @@ export default function Canvas({
   const editingTextLayerIdRef = useRef<string | null>(null)
   const lastClickTimeRef = useRef(0)
   const lastClickPosRef = useRef<{ x: number; y: number } | null>(null)
-  const [balloonOval, setBalloonOval] = useState<{ 
-    centerX: number; 
-    centerY: number; 
-    radiusX: number; 
+  const [balloonOval, setBalloonOval] = useState<{
+    centerX: number;
+    centerY: number;
+    radiusX: number;
     radiusY: number;
     screenPos: { x: number; y: number };
   } | null>(null)
@@ -459,7 +460,7 @@ export default function Canvas({
     const { x, y, width, height, rotation, text, font: layerFont, fontSize: layerFontSize, color: layerColor } = layer
     const centerX = x + width / 2
     const centerY = y + height / 2
-    
+
     // Calculate current scale factor for consistent rendering
     // In test environment, getBoundingClientRect may not be available
     let scale = 1
@@ -474,10 +475,10 @@ export default function Canvas({
       // In test environment, use default scale
       scale = 1
     }
-    
+
     // Scale fontSize to match visual size (layerFontSize is stored in CSS pixels, need to scale up for canvas)
     const scaledFontSize = layerFontSize / scale
-    
+
     ctx.save()
     ctx.translate(centerX, centerY)
     ctx.rotate(rotation)
@@ -716,13 +717,13 @@ export default function Canvas({
       const updatedLayers = textLayersRef.current.map((layer) =>
         layer.id === editingTextLayerIdRef.current
           ? {
-              ...layer,
-              font: font,
-              fontSize: fontSize, // Store original CSS pixel size, not scaled
-              color: color,
-              width: textWidth,
-              height: textHeight,
-            }
+            ...layer,
+            font: font,
+            fontSize: fontSize, // Store original CSS pixel size, not scaled
+            color: color,
+            width: textWidth,
+            height: textHeight,
+          }
           : layer
       )
 
@@ -735,11 +736,11 @@ export default function Canvas({
   const getMousePos = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return { x: 0, y: 0 }
-    
+
     const rect = canvas.getBoundingClientRect()
     const scaleX = canvas.width / rect.width
     const scaleY = canvas.height / rect.height
-    
+
     return {
       x: (e.clientX - rect.left) * scaleX,
       y: (e.clientY - rect.top) * scaleY,
@@ -749,7 +750,7 @@ export default function Canvas({
   const floodFill = (ctx: CanvasRenderingContext2D, x: number, y: number, fillColor: string) => {
     // Ensure we're using source-over for fill
     ctx.globalCompositeOperation = 'source-over'
-    
+
     const canvas = ctx.canvas
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
     const data = imageData.data
@@ -780,17 +781,17 @@ export default function Canvas({
       }
       const tolerance = 10 // Allow small differences for antialiasing
       const alphaTolerance = 5 // Tolerance for alpha channel
-      
+
       // If target is transparent (erased), match transparent pixels
       if (targetA < alphaTolerance) {
         return a < alphaTolerance
       }
-      
+
       // If target is opaque, match RGB values and ensure alpha is similar
-      return Math.abs(r - targetR) <= tolerance && 
-             Math.abs(g - targetG) <= tolerance && 
-             Math.abs(b - targetB) <= tolerance &&
-             Math.abs(a - targetA) <= alphaTolerance
+      return Math.abs(r - targetR) <= tolerance &&
+        Math.abs(g - targetG) <= tolerance &&
+        Math.abs(b - targetB) <= tolerance &&
+        Math.abs(a - targetA) <= alphaTolerance
     }
 
     // Stack-based flood fill
@@ -898,7 +899,7 @@ export default function Canvas({
     if (tool === 'select') {
       // Check for double-click on text layer
       const currentTime = Date.now()
-      const isDoubleClick = 
+      const isDoubleClick =
         currentTime - lastClickTimeRef.current < 300 &&
         lastClickPosRef.current &&
         Math.abs(pos.x - lastClickPosRef.current.x) < 5 &&
@@ -913,7 +914,7 @@ export default function Canvas({
           return
         }
       }
-      
+
       const hitTextLayer = hitTestTextLayers(pos)
       if (hitTextLayer) {
         if (isDoubleClick && activeTextLayerIdRef.current === hitTextLayer.id) {
@@ -1002,7 +1003,7 @@ export default function Canvas({
         setIsDrawing(false)
         return
       }
-      
+
       // Otherwise, create new text input
       setTextInputPos({ x: pos.x, y: pos.y })
       const rect = canvas.getBoundingClientRect()
@@ -1027,10 +1028,10 @@ export default function Canvas({
       const scaleX = rect.width / canvas.width
       const scaleY = rect.height / canvas.height
       const scale = (scaleX + scaleY) / 2
-      
+
       // Scale fontSize for measurement (to get correct dimensions)
       const scaledFontSize = fontSize / scale
-      
+
       // Measure emoji to determine width and height
       ctx.font = `${scaledFontSize}px ${font}`
       ctx.textAlign = 'center'
@@ -1084,10 +1085,10 @@ export default function Canvas({
   }
 
   const repaintCanvas = useCallback(() => {
-    debugLog('Canvas', 'Repainting canvas', { 
-      hasPanelData: !!panelData, 
+    debugLog('Canvas', 'Repainting canvas', {
+      hasPanelData: !!panelData,
       shapeLayerCount: shapeLayersRef.current.length,
-      activeShapeLayerId: activeShapeLayerIdRef.current 
+      activeShapeLayerId: activeShapeLayerIdRef.current
     })
     const canvas = canvasRef.current
     if (!canvas) {
@@ -1125,14 +1126,23 @@ export default function Canvas({
         const buttonY = layer.y - 45 // Higher up to avoid rotation handle
         const buttonSpacing = 35 // Reduced spacing for smaller buttons
         // Delete button on the right
-        setDeleteButtonPos({
+        const newDeletePos = {
           x: rect.left + (buttonX + buttonSpacing) * scaleX,
           y: rect.top + buttonY * scaleY,
+        }
+        setDeleteButtonPos(prev => {
+          if (prev && Math.abs(prev.x - newDeletePos.x) < 0.1 && Math.abs(prev.y - newDeletePos.y) < 0.1) return prev
+          return newDeletePos
         })
+
         // Duplicate button on the left
-        setDuplicateButtonPos({
+        const newDuplicatePos = {
           x: rect.left + (buttonX - buttonSpacing) * scaleX,
           y: rect.top + buttonY * scaleY,
+        }
+        setDuplicateButtonPos(prev => {
+          if (prev && Math.abs(prev.x - newDuplicatePos.x) < 0.1 && Math.abs(prev.y - newDuplicatePos.y) < 0.1) return prev
+          return newDuplicatePos
         })
       } else {
         setDeleteButtonPos(null)
@@ -1150,14 +1160,23 @@ export default function Canvas({
         const buttonY = layer.y - 45 // Higher up to avoid rotation handle
         const buttonSpacing = 35 // Reduced spacing for smaller buttons
         // Delete button on the right
-        setDeleteButtonPos({
+        const newDeletePos = {
           x: rect.left + (buttonX + buttonSpacing) * scaleX,
           y: rect.top + buttonY * scaleY,
+        }
+        setDeleteButtonPos(prev => {
+          if (prev && Math.abs(prev.x - newDeletePos.x) < 0.1 && Math.abs(prev.y - newDeletePos.y) < 0.1) return prev
+          return newDeletePos
         })
+
         // Duplicate button on the left
-        setDuplicateButtonPos({
+        const newDuplicatePos = {
           x: rect.left + (buttonX - buttonSpacing) * scaleX,
           y: rect.top + buttonY * scaleY,
+        }
+        setDuplicateButtonPos(prev => {
+          if (prev && Math.abs(prev.x - newDuplicatePos.x) < 0.1 && Math.abs(prev.y - newDuplicatePos.y) < 0.1) return prev
+          return newDuplicatePos
         })
       } else {
         setDeleteButtonPos(null)
@@ -1167,7 +1186,7 @@ export default function Canvas({
       setDeleteButtonPos(null)
       setDuplicateButtonPos(null)
     }
-  }, [panelData, drawGrid, drawShapeLayers, drawTextLayers])
+  }, [panelData, drawShapeLayers, drawTextLayers])
 
   const updateShapeLayers = useCallback((layers: ShapeLayer[], skipHistory = false) => {
     debugLog('Canvas', 'Updating shape layers', { layerCount: layers.length, skipHistory })
@@ -1475,6 +1494,11 @@ export default function Canvas({
   useEffect(() => {
     repaintCanvas()
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repaintCanvas])
+
+  useEffect(() => {
+    repaintCanvas()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelData])
 
   const handleDelete = useCallback(() => {
@@ -1627,55 +1651,55 @@ export default function Canvas({
     const pos = getMousePos(e)
 
     if (tool === 'objectShapes' && isDrawingObjectShapeRef.current && pendingShapeLayerIdRef.current) {
-    const layerId = pendingShapeLayerIdRef.current
-    const width = Math.max(1, Math.abs(pos.x - startPos.x))
-    const height = Math.max(1, Math.abs(pos.y - startPos.y))
-    const layerX = Math.min(startPos.x, pos.x)
-    const layerY = Math.min(startPos.y, pos.y)
-    const updatedLayers = shapeLayersRef.current.map((layer) =>
-      layer.id === layerId
-        ? { ...layer, x: layerX, y: layerY, width, height }
-        : layer
-    )
-    // Skip history during drawing - we already saved when shape creation started
-    updateShapeLayers(updatedLayers, true)
-    repaintCanvas()
-      return
-    }
-
-    if (tool === 'select') {
-    // Handle text layer interactions
-    if (isRotatingTextLayerRef.current && activeTextLayerIdRef.current) {
-      const layerId = activeTextLayerIdRef.current
-      const currentAngle = calculateRotationAngle(rotationCenterRef.current, pos)
-      const delta = currentAngle - textRotationStartAngleRef.current
-      const updatedLayers = textLayersRef.current.map((layer) =>
+      const layerId = pendingShapeLayerIdRef.current
+      const width = Math.max(1, Math.abs(pos.x - startPos.x))
+      const height = Math.max(1, Math.abs(pos.y - startPos.y))
+      const layerX = Math.min(startPos.x, pos.x)
+      const layerY = Math.min(startPos.y, pos.y)
+      const updatedLayers = shapeLayersRef.current.map((layer) =>
         layer.id === layerId
-          ? { ...layer, rotation: textRotationBaseAngleRef.current + delta }
+          ? { ...layer, x: layerX, y: layerY, width, height }
           : layer
       )
-      updateTextLayers(updatedLayers, true)
+      // Skip history during drawing - we already saved when shape creation started
+      updateShapeLayers(updatedLayers, true)
       repaintCanvas()
       return
     }
 
-    if (isResizingTextLayerRef.current && activeTextLayerIdRef.current && textResizeHandleRef.current && textResizeStartRectRef.current) {
-      const startRect = textResizeStartRectRef.current
-      const handle = textResizeHandleRef.current
-      const newRect = calculateResizedRect(handle, startRect, pos, textResizeStartPosRef.current)
-      
-      // Calculate scale factors from width and height changes
-      const scaleX = startRect.width > 0 ? newRect.width / startRect.width : 1
-      const scaleY = startRect.height > 0 ? newRect.height / startRect.height : 1
-      // Use average scale to maintain reasonable proportions
-      const scale = (scaleX + scaleY) / 2
-      
-      // Calculate new fontSize based on scale
-      const newFontSize = Math.max(1, textResizeStartFontSizeRef.current * scale)
-      
-      const updatedLayers = textLayersRef.current.map((layer) =>
-        layer.id === activeTextLayerIdRef.current
-          ? {
+    if (tool === 'select') {
+      // Handle text layer interactions
+      if (isRotatingTextLayerRef.current && activeTextLayerIdRef.current) {
+        const layerId = activeTextLayerIdRef.current
+        const currentAngle = calculateRotationAngle(rotationCenterRef.current, pos)
+        const delta = currentAngle - textRotationStartAngleRef.current
+        const updatedLayers = textLayersRef.current.map((layer) =>
+          layer.id === layerId
+            ? { ...layer, rotation: textRotationBaseAngleRef.current + delta }
+            : layer
+        )
+        updateTextLayers(updatedLayers, true)
+        repaintCanvas()
+        return
+      }
+
+      if (isResizingTextLayerRef.current && activeTextLayerIdRef.current && textResizeHandleRef.current && textResizeStartRectRef.current) {
+        const startRect = textResizeStartRectRef.current
+        const handle = textResizeHandleRef.current
+        const newRect = calculateResizedRect(handle, startRect, pos, textResizeStartPosRef.current)
+
+        // Calculate scale factors from width and height changes
+        const scaleX = startRect.width > 0 ? newRect.width / startRect.width : 1
+        const scaleY = startRect.height > 0 ? newRect.height / startRect.height : 1
+        // Use average scale to maintain reasonable proportions
+        const scale = (scaleX + scaleY) / 2
+
+        // Calculate new fontSize based on scale
+        const newFontSize = Math.max(1, textResizeStartFontSizeRef.current * scale)
+
+        const updatedLayers = textLayersRef.current.map((layer) =>
+          layer.id === activeTextLayerIdRef.current
+            ? {
               ...layer,
               x: newRect.x,
               y: newRect.y,
@@ -1683,79 +1707,79 @@ export default function Canvas({
               height: Math.max(1, newRect.height),
               fontSize: newFontSize,
             }
-          : layer
-      )
-      updateTextLayers(updatedLayers, true)
-      repaintCanvas()
-      return
-    }
+            : layer
+        )
+        updateTextLayers(updatedLayers, true)
+        repaintCanvas()
+        return
+      }
 
-    if (isDraggingTextLayerRef.current && activeTextLayerIdRef.current) {
-      const updatedLayers = textLayersRef.current.map((layer) =>
-        layer.id === activeTextLayerIdRef.current
-          ? {
+      if (isDraggingTextLayerRef.current && activeTextLayerIdRef.current) {
+        const updatedLayers = textLayersRef.current.map((layer) =>
+          layer.id === activeTextLayerIdRef.current
+            ? {
               ...layer,
               x: clamp(pos.x - textDragOffsetRef.current.x, 0, canvas.width - layer.width),
               y: clamp(pos.y - textDragOffsetRef.current.y, 0, canvas.height - layer.height),
             }
-          : layer
-      )
-      updateTextLayers(updatedLayers, true)
-      repaintCanvas()
-      return
-    }
+            : layer
+        )
+        updateTextLayers(updatedLayers, true)
+        repaintCanvas()
+        return
+      }
 
-    // Handle shape layer interactions
-    if (isRotatingShapeLayerRef.current && activeShapeLayerIdRef.current) {
-      const layerId = activeShapeLayerIdRef.current
-      const currentAngle = calculateRotationAngle(rotationCenterRef.current, pos)
-      const delta = currentAngle - shapeRotationStartAngleRef.current
-      const updatedLayers = shapeLayersRef.current.map((layer) =>
-        layer.id === layerId
-          ? { ...layer, rotation: shapeRotationBaseAngleRef.current + delta }
-          : layer
-      )
-      // Skip history during rotation drag - history saved when rotation starts
-      updateShapeLayers(updatedLayers, true)
-      repaintCanvas()
-      return
-    }
+      // Handle shape layer interactions
+      if (isRotatingShapeLayerRef.current && activeShapeLayerIdRef.current) {
+        const layerId = activeShapeLayerIdRef.current
+        const currentAngle = calculateRotationAngle(rotationCenterRef.current, pos)
+        const delta = currentAngle - shapeRotationStartAngleRef.current
+        const updatedLayers = shapeLayersRef.current.map((layer) =>
+          layer.id === layerId
+            ? { ...layer, rotation: shapeRotationBaseAngleRef.current + delta }
+            : layer
+        )
+        // Skip history during rotation drag - history saved when rotation starts
+        updateShapeLayers(updatedLayers, true)
+        repaintCanvas()
+        return
+      }
 
-    if (isResizingShapeLayerRef.current && activeShapeLayerIdRef.current && shapeResizeHandleRef.current && shapeResizeStartRectRef.current) {
-      const startRect = shapeResizeStartRectRef.current
-      const newRect = calculateResizedRect(shapeResizeHandleRef.current, startRect, pos, shapeResizeStartPosRef.current)
-      const updatedLayers = shapeLayersRef.current.map((layer) =>
-        layer.id === activeShapeLayerIdRef.current
-          ? {
+      if (isResizingShapeLayerRef.current && activeShapeLayerIdRef.current && shapeResizeHandleRef.current && shapeResizeStartRectRef.current) {
+        const startRect = shapeResizeStartRectRef.current
+        const newRect = calculateResizedRect(shapeResizeHandleRef.current, startRect, pos, shapeResizeStartPosRef.current)
+        const updatedLayers = shapeLayersRef.current.map((layer) =>
+          layer.id === activeShapeLayerIdRef.current
+            ? {
               ...layer,
               x: newRect.x,
               y: newRect.y,
               width: newRect.width,
               height: newRect.height,
             }
-          : layer
-      )
-      // Skip history during resize drag - history saved when resize starts
-      updateShapeLayers(updatedLayers, true)
-      repaintCanvas()
-      return
-    }
+            : layer
+        )
+        // Skip history during resize drag - history saved when resize starts
+        updateShapeLayers(updatedLayers, true)
+        repaintCanvas()
+        return
+      }
 
-    if (isDraggingShapeLayerRef.current && activeShapeLayerIdRef.current) {
-      const updatedLayers = shapeLayersRef.current.map((layer) =>
-        layer.id === activeShapeLayerIdRef.current
-          ? {
+      if (isDraggingShapeLayerRef.current && activeShapeLayerIdRef.current) {
+        const updatedLayers = shapeLayersRef.current.map((layer) =>
+          layer.id === activeShapeLayerIdRef.current
+            ? {
               ...layer,
               x: clamp(pos.x - shapeDragOffsetRef.current.x, 0, canvas.width - layer.width),
               y: clamp(pos.y - shapeDragOffsetRef.current.y, 0, canvas.height - layer.height),
             }
-          : layer
-      )
-      // Skip history during drag - history saved when drag starts
-      updateShapeLayers(updatedLayers, true)
-      repaintCanvas()
-      return
-    }
+            : layer
+        )
+        // Skip history during drag - history saved when drag starts
+        updateShapeLayers(updatedLayers, true)
+        repaintCanvas()
+        return
+      }
 
       if (isSelectingRef.current && selectionOriginalImageRef.current) {
         ctx.putImageData(selectionOriginalImageRef.current, 0, 0)
@@ -1769,13 +1793,13 @@ export default function Canvas({
         const rect = selectionRectRef.current
         const centerX = rect.x + rect.width / 2
         const centerY = rect.y + rect.height / 2
-        
+
         const currentAngle = calculateRotationAngle(rotationCenterRef.current, pos)
         rotationAngleRef.current = currentAngle - initialRotationAngleRef.current
-        
+
         // Total rotation angle = accumulated angle + new relative angle
         const totalAngle = cumulativeRotationAngleRef.current + rotationAngleRef.current
-        
+
         // Create temporary canvas for rotation using original image size
         const origWidth = originalImageSizeRef.current?.width || rect.width
         const origHeight = originalImageSizeRef.current?.height || rect.height
@@ -1786,7 +1810,7 @@ export default function Canvas({
         if (tempCtx && selectionImageRef.current && originalImageSizeRef.current) {
           // Use original unrotated image
           tempCtx.putImageData(selectionImageRef.current, 0, 0)
-          
+
           // Calculate bounding box for rotated rectangle using original image size and total angle
           const angle = totalAngle
           const corners = [
@@ -1795,27 +1819,27 @@ export default function Canvas({
             { x: origWidth / 2, y: origHeight / 2 },
             { x: -origWidth / 2, y: origHeight / 2 },
           ]
-          
+
           const rotatedCorners = corners.map(corner => ({
             x: corner.x * Math.cos(angle) - corner.y * Math.sin(angle),
             y: corner.x * Math.sin(angle) + corner.y * Math.cos(angle),
           }))
-          
+
           const minX = Math.min(...rotatedCorners.map(c => c.x))
           const maxX = Math.max(...rotatedCorners.map(c => c.x))
           const minY = Math.min(...rotatedCorners.map(c => c.y))
           const maxY = Math.max(...rotatedCorners.map(c => c.y))
-          
+
           const rotatedWidth = maxX - minX
           const rotatedHeight = maxY - minY
-          
+
           // Draw rotated image
           ctx.save()
           ctx.translate(centerX, centerY)
           ctx.rotate(angle)
           ctx.drawImage(tempCanvas, -origWidth / 2, -origHeight / 2)
           ctx.restore()
-          
+
           drawSelectionOutline(ctx, {
             x: centerX + minX,
             y: centerY + minY,
@@ -1835,13 +1859,13 @@ export default function Canvas({
         const startRect = resizeStartRef.current
         const clickStartPos = resizeClickStartRef.current
         const newRect = calculateResizedRect(resizeHandleRef.current, startRect, pos, clickStartPos)
-        
+
         // Clamp to canvas bounds
         newRect.x = clamp(newRect.x, 0, canvas.width)
         newRect.y = clamp(newRect.y, 0, canvas.height)
         newRect.width = Math.min(newRect.width, canvas.width - newRect.x)
         newRect.height = Math.min(newRect.height, canvas.height - newRect.y)
-        
+
         if (newRect.width > 0 && newRect.height > 0) {
           // Scale the image to new size
           const tempCanvas = document.createElement('canvas')
@@ -1850,7 +1874,7 @@ export default function Canvas({
           const tempCtx = tempCanvas.getContext('2d')
           if (tempCtx) {
             tempCtx.putImageData(selectionImageRef.current, 0, 0)
-            
+
             ctx.save()
             ctx.imageSmoothingEnabled = true
             ctx.imageSmoothingQuality = 'high'
@@ -1863,7 +1887,7 @@ export default function Canvas({
             )
             ctx.restore()
           }
-          
+
           selectionRectRef.current = newRect
           drawSelectionOutline(ctx, newRect)
           drawSelectionHandles(ctx, newRect)
@@ -1876,12 +1900,12 @@ export default function Canvas({
       ) {
         ctx.putImageData(selectionBaseImageRef.current, 0, 0)
         const rect = selectionRectRef.current
-        
+
         // If there's accumulated rotation, apply it when rendering
         if (cumulativeRotationAngleRef.current !== 0 && originalImageSizeRef.current) {
           const origWidth = originalImageSizeRef.current.width
           const origHeight = originalImageSizeRef.current.height
-          
+
           // Calculate new center position based on drag
           const newRect: SelectionRect = {
             ...rect,
@@ -1890,20 +1914,20 @@ export default function Canvas({
           }
           const centerX = newRect.x + newRect.width / 2
           const centerY = newRect.y + newRect.height / 2
-          
+
           const tempCanvas = document.createElement('canvas')
           tempCanvas.width = origWidth
           tempCanvas.height = origHeight
           const tempCtx = tempCanvas.getContext('2d')
           if (tempCtx) {
             tempCtx.putImageData(selectionImageRef.current, 0, 0)
-            
+
             ctx.save()
             ctx.translate(centerX, centerY)
             ctx.rotate(cumulativeRotationAngleRef.current)
             ctx.drawImage(tempCanvas, -origWidth / 2, -origHeight / 2)
             ctx.restore()
-            
+
             // Calculate bounding box for rotated rectangle
             const angle = cumulativeRotationAngleRef.current
             const corners = [
@@ -1912,24 +1936,24 @@ export default function Canvas({
               { x: origWidth / 2, y: origHeight / 2 },
               { x: -origWidth / 2, y: origHeight / 2 },
             ]
-            
+
             const rotatedCorners = corners.map(corner => ({
               x: corner.x * Math.cos(angle) - corner.y * Math.sin(angle),
               y: corner.x * Math.sin(angle) + corner.y * Math.cos(angle),
             }))
-            
+
             const minX = Math.min(...rotatedCorners.map(c => c.x))
             const maxX = Math.max(...rotatedCorners.map(c => c.x))
             const minY = Math.min(...rotatedCorners.map(c => c.y))
             const maxY = Math.max(...rotatedCorners.map(c => c.y))
-            
+
             const rotatedRect = {
               x: centerX + minX,
               y: centerY + minY,
               width: maxX - minX,
               height: maxY - minY,
             }
-            
+
             selectionRectRef.current = rotatedRect
             drawSelectionOutline(ctx, rotatedRect)
             drawSelectionHandles(ctx, rotatedRect)
@@ -2091,7 +2115,7 @@ export default function Canvas({
           const rect = selectionRectRef.current
           const centerX = rect.x + rect.width / 2
           const centerY = rect.y + rect.height / 2
-          
+
           // Apply final rotation
           const origWidth = originalImageSizeRef.current?.width || rect.width
           const origHeight = originalImageSizeRef.current?.height || rect.height
@@ -2103,16 +2127,16 @@ export default function Canvas({
           if (rotationCtx && selectionImageRef.current && originalImageSizeRef.current) {
             // Use original unrotated image
             rotationCtx.putImageData(selectionImageRef.current, 0, 0)
-            
+
             // Use total angle (accumulated + new)
             const totalAngle = cumulativeRotationAngleRef.current + rotationAngleRef.current
-            
+
             ctx.save()
             ctx.translate(centerX, centerY)
             ctx.rotate(totalAngle)
             ctx.drawImage(rotationCanvas, -origWidth / 2, -origHeight / 2)
             ctx.restore()
-            
+
             // Calculate new bounding box using original image size and total angle
             const angle = totalAngle
             const corners = [
@@ -2121,32 +2145,32 @@ export default function Canvas({
               { x: origWidth / 2, y: origHeight / 2 },
               { x: -origWidth / 2, y: origHeight / 2 },
             ]
-            
+
             const rotatedCorners = corners.map(corner => ({
               x: corner.x * Math.cos(angle) - corner.y * Math.sin(angle),
               y: corner.x * Math.sin(angle) + corner.y * Math.cos(angle),
             }))
-            
+
             const minX = Math.min(...rotatedCorners.map(c => c.x))
             const maxX = Math.max(...rotatedCorners.map(c => c.x))
             const minY = Math.min(...rotatedCorners.map(c => c.y))
             const maxY = Math.max(...rotatedCorners.map(c => c.y))
-            
+
             const rotatedRect = {
               x: centerX + minX,
               y: centerY + minY,
               width: maxX - minX,
               height: maxY - minY,
             }
-            
+
             // Extract the rotated image from the canvas to display
             const rotatedImage = ctx.getImageData(rotatedRect.x, rotatedRect.y, rotatedRect.width, rotatedRect.height)
-            
+
             drawGrid(ctx)
             ctx.putImageData(rotatedImage, rotatedRect.x, rotatedRect.y)
             drawSelectionOutline(ctx, rotatedRect)
             drawSelectionHandles(ctx, rotatedRect)
-            
+
             // After committing rotation, update the cumulative angle
             // Keep the original unrotated image in selectionImageRef
             // This way, future rotations will always use the original image with the accumulated angle
@@ -2155,9 +2179,9 @@ export default function Canvas({
             rotationAngleRef.current = 0
             selectionRectRef.current = rotatedRect
             // Keep selectionImageRef as the original unrotated image - don't update it!
-            
+
             updateActiveShapeRegion(canvas, ctx, rotatedRect, rotatedImage)
-            
+
             // Capture background without layers, then add the selection
             const background = getBackgroundImageData()
             const tempCanvas = document.createElement('canvas')
@@ -2201,7 +2225,7 @@ export default function Canvas({
 
         if (selectionBaseImageRef.current && selectionImageRef.current && selectionRectRef.current && resizeHandleRef.current) {
           const newRect = selectionRectRef.current
-          
+
           // Update selection image to new size
           const tempCanvas = document.createElement('canvas')
           tempCanvas.width = selectionImageRef.current.width
@@ -2209,7 +2233,7 @@ export default function Canvas({
           const tempCtx = tempCanvas.getContext('2d')
           if (tempCtx) {
             tempCtx.putImageData(selectionImageRef.current, 0, 0)
-            
+
             ctx.putImageData(selectionBaseImageRef.current, 0, 0)
             ctx.save()
             ctx.imageSmoothingEnabled = true
@@ -2223,17 +2247,17 @@ export default function Canvas({
             )
             ctx.restore()
           }
-          
+
           // Extract resized image
           const resizedImage = ctx.getImageData(newRect.x, newRect.y, newRect.width, newRect.height)
           selectionImageRef.current = resizedImage
-          
+
           drawGrid(ctx)
           ctx.putImageData(resizedImage, newRect.x, newRect.y)
           drawSelectionOutline(ctx, newRect)
           drawSelectionHandles(ctx, newRect)
           updateActiveShapeRegion(canvas, ctx, newRect, resizedImage)
-          
+
           // Capture background without layers, then add the resized selection
           const background = getBackgroundImageData()
           const backgroundCanvas = document.createElement('canvas')
@@ -2273,27 +2297,27 @@ export default function Canvas({
         if (selectionBaseImageRef.current && selectionImageRef.current && selectionRectRef.current) {
           ctx.putImageData(selectionBaseImageRef.current, 0, 0)
           const rect = selectionRectRef.current
-          
+
           // If there's accumulated rotation, apply it when committing drag
           if (cumulativeRotationAngleRef.current !== 0 && originalImageSizeRef.current) {
             const origWidth = originalImageSizeRef.current.width
             const origHeight = originalImageSizeRef.current.height
             const centerX = rect.x + rect.width / 2
             const centerY = rect.y + rect.height / 2
-            
+
             const tempCanvas = document.createElement('canvas')
             tempCanvas.width = origWidth
             tempCanvas.height = origHeight
             const tempCtx = tempCanvas.getContext('2d')
             if (tempCtx) {
               tempCtx.putImageData(selectionImageRef.current, 0, 0)
-              
+
               ctx.save()
               ctx.translate(centerX, centerY)
               ctx.rotate(cumulativeRotationAngleRef.current)
               ctx.drawImage(tempCanvas, -origWidth / 2, -origHeight / 2)
               ctx.restore()
-              
+
               // Calculate bounding box
               const angle = cumulativeRotationAngleRef.current
               const corners = [
@@ -2302,24 +2326,24 @@ export default function Canvas({
                 { x: origWidth / 2, y: origHeight / 2 },
                 { x: -origWidth / 2, y: origHeight / 2 },
               ]
-              
+
               const rotatedCorners = corners.map(corner => ({
                 x: corner.x * Math.cos(angle) - corner.y * Math.sin(angle),
                 y: corner.x * Math.sin(angle) + corner.y * Math.cos(angle),
               }))
-              
+
               const minX = Math.min(...rotatedCorners.map(c => c.x))
               const maxX = Math.max(...rotatedCorners.map(c => c.x))
               const minY = Math.min(...rotatedCorners.map(c => c.y))
               const maxY = Math.max(...rotatedCorners.map(c => c.y))
-              
+
               const rotatedRect = {
                 x: centerX + minX,
                 y: centerY + minY,
                 width: maxX - minX,
                 height: maxY - minY,
               }
-              
+
               const rotatedImage = ctx.getImageData(rotatedRect.x, rotatedRect.y, rotatedRect.width, rotatedRect.height)
               selectionRectRef.current = rotatedRect
               drawSelectionOutline(ctx, rotatedRect)
@@ -2332,7 +2356,7 @@ export default function Canvas({
             drawSelectionHandles(ctx, rect)
             updateActiveShapeRegion(canvas, ctx, rect, selectionImageRef.current)
           }
-          
+
           // Capture background without layers, then add the dragged selection
           const background = getBackgroundImageData()
           const tempCanvas = document.createElement('canvas')
@@ -2443,7 +2467,7 @@ export default function Canvas({
     // Solution: Get background, then extract only the pen stroke pixels from current canvas
     const background = getBackgroundImageData()
     const currentState = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    
+
     // Create a new ImageData with background, then add only pen strokes
     const tempCanvas = document.createElement('canvas')
     tempCanvas.width = canvas.width
@@ -2452,13 +2476,13 @@ export default function Canvas({
     if (tempCtx) {
       // Start with clean background
       tempCtx.putImageData(background, 0, 0)
-      
+
       // Extract pen strokes by comparing current state with background
       // For each pixel, if it's different from background and not a layer pixel, keep it
       const bgData = background.data
       const currData = currentState.data
       const resultData = new Uint8ClampedArray(bgData)
-      
+
       // Get layer bounds to exclude layer pixels
       const layerBounds = new Set<string>()
       shapeLayersRef.current.forEach(layer => {
@@ -2479,13 +2503,13 @@ export default function Canvas({
           }
         }
       })
-      
+
       // Copy pen strokes (pixels that differ from background and aren't in layer bounds)
       for (let i = 0; i < currData.length; i += 4) {
         const x = (i / 4) % canvas.width
         const y = Math.floor((i / 4) / canvas.width)
         const pixelKey = `${x},${y}`
-        
+
         // If pixel is different from background and not in a layer area, it's a pen stroke
         if (!layerBounds.has(pixelKey)) {
           const bgR = bgData[i]
@@ -2496,12 +2520,12 @@ export default function Canvas({
           const currG = currData[i + 1]
           const currB = currData[i + 2]
           const currA = currData[i + 3]
-          
+
           // If pixel differs significantly from background, it's a pen stroke
           if (bgR !== undefined && bgG !== undefined && bgB !== undefined && bgA !== undefined &&
-              currR !== undefined && currG !== undefined && currB !== undefined && currA !== undefined &&
-              (Math.abs(bgR - currR) > 5 || Math.abs(bgG - currG) > 5 || 
-               Math.abs(bgB - currB) > 5 || Math.abs(bgA - currA) > 5)) {
+            currR !== undefined && currG !== undefined && currB !== undefined && currA !== undefined &&
+            (Math.abs(bgR - currR) > 5 || Math.abs(bgG - currG) > 5 ||
+              Math.abs(bgB - currB) > 5 || Math.abs(bgA - currA) > 5)) {
             resultData[i] = currR
             resultData[i + 1] = currG
             resultData[i + 2] = currB
@@ -2509,7 +2533,7 @@ export default function Canvas({
           }
         }
       }
-      
+
       const finalImageData = new ImageData(resultData, canvas.width, canvas.height)
       tempCtx.putImageData(finalImageData, 0, 0)
       const imageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height)
@@ -2539,10 +2563,10 @@ export default function Canvas({
           const scaleX = rect.width / canvas.width
           const scaleY = rect.height / canvas.height
           const scale = (scaleX + scaleY) / 2
-          
+
           // Scale fontSize for measurement (to get correct dimensions)
           const scaledFontSize = fontSize / scale
-          
+
           // Measure text to determine new width and height using current font settings
           ctx.font = `${scaledFontSize}px ${font}`
           ctx.textAlign = 'left'
@@ -2556,14 +2580,14 @@ export default function Canvas({
           const updatedLayers = textLayersRef.current.map((layer) =>
             layer.id === editingTextLayerIdRef.current
               ? {
-                  ...layer,
-                  text: textInput,
-                  font: font,
-                  fontSize: fontSize, // Store original CSS pixel size, not scaled
-                  color: color,
-                  width: textWidth,
-                  height: textHeight,
-                }
+                ...layer,
+                text: textInput,
+                font: font,
+                fontSize: fontSize, // Store original CSS pixel size, not scaled
+                color: color,
+                width: textWidth,
+                height: textHeight,
+              }
               : layer
           )
 
@@ -2602,10 +2626,10 @@ export default function Canvas({
       const scaleX = rect.width / canvas.width
       const scaleY = rect.height / canvas.height
       const scale = (scaleX + scaleY) / 2
-      
+
       // Scale fontSize for measurement (to get correct dimensions)
       const scaledFontSize = fontSize / scale
-      
+
       ctx.font = `${scaledFontSize}px ${font}`
       ctx.textAlign = 'left'
       ctx.textBaseline = 'top'
@@ -2687,7 +2711,7 @@ export default function Canvas({
         onMouseLeave={stopDrawing}
       />
       {textInputPos && textInputScreenPos && (() => {
-        const editingLayer = editingTextLayerIdRef.current 
+        const editingLayer = editingTextLayerIdRef.current
           ? textLayersRef.current.find(l => l.id === editingTextLayerIdRef.current)
           : null
         // When editing, use current font/fontSize/color props (they update the layer in real-time)
@@ -2695,7 +2719,7 @@ export default function Canvas({
         const inputFont = editingLayer ? font : font
         const inputFontSize = fontSize // Always use current fontSize prop (CSS pixels)
         const inputColor = editingLayer ? color : color
-        
+
         return (
           <input
             ref={inputRef}

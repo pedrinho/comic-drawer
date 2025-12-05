@@ -5,6 +5,7 @@ import Canvas from './components/Canvas'
 import Toolbar from './components/Toolbar'
 import PanelLayout from './components/PanelLayout'
 import PanelLayoutModal from './components/PanelLayoutModal'
+import Presentation from './components/Presentation'
 import { ShapeLayer, TextLayer, migrateLayers } from './types/layers'
 import { traceShapePath, drawGrid as drawGridUtil, debugLog, debugError, debugWarn, cloneImageData, createBlankImageData } from './utils/canvasUtils'
 
@@ -113,6 +114,8 @@ function App() {
     { id: 0, name: 'Panel 1', data: null, layout: { rows: 1, columns: [1] }, shapeLayers: [], textLayers: [] }
   ])
   const [showModal, setShowModal] = useState(false)
+  const [isPresenting, setIsPresenting] = useState(false)
+  const [presentationIndex, setPresentationIndex] = useState<number>(0)
   
   // History for each panel: Map<panelIndex, {undo: ImageData[], redo: ImageData[]}>
   const historyRef = useRef<Map<number, PanelHistory>>(new Map())
@@ -399,6 +402,29 @@ function App() {
       setSelectedPanel(index)
     }
     // Otherwise, selected panel stays the same
+  }
+
+  const handleStartPresentation = () => {
+    debugLog('App', 'Starting presentation', { panelCount: panels.length })
+    setPresentationIndex(0)
+    setIsPresenting(true)
+  }
+
+  const handleStopPresentation = () => {
+    debugLog('App', 'Stopping presentation')
+    setIsPresenting(false)
+  }
+
+  const handlePresentationNext = () => {
+    if (presentationIndex < panels.length - 1) {
+      setPresentationIndex(presentationIndex + 1)
+    }
+  }
+
+  const handlePresentationPrevious = () => {
+    if (presentationIndex > 0) {
+      setPresentationIndex(presentationIndex - 1)
+    }
   }
 
   const handleDeletePanel = (index: number) => {
@@ -721,6 +747,9 @@ function App() {
             <button onClick={handleExportPDF} style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', cursor: 'pointer' }}>
               📄 Export PDF
             </button>
+            <button onClick={handleStartPresentation} style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', cursor: 'pointer' }}>
+              🎬 Present
+            </button>
           </div>
         </div>
       </header>
@@ -777,6 +806,15 @@ function App() {
         onClose={() => setShowModal(false)}
         onConfirm={handlePanelLayoutConfirm}
       />
+      {isPresenting && (
+        <Presentation
+          panels={panels}
+          currentIndex={presentationIndex}
+          onNext={handlePresentationNext}
+          onPrevious={handlePresentationPrevious}
+          onClose={handleStopPresentation}
+        />
+      )}
     </div>
   )
 }

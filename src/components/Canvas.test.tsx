@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi } from 'vitest'
 import Canvas from './Canvas'
@@ -9,6 +9,8 @@ describe('Canvas', () => {
     const onCanvasChange = vi.fn()
     render(
       <Canvas
+        font="Arial"
+        fontSize={20}
         tool="pen"
         color="#000000"
         panelData={null}
@@ -24,6 +26,8 @@ describe('Canvas', () => {
     const onCanvasChange = vi.fn()
     render(
       <Canvas
+        font="Arial"
+        fontSize={20}
         tool="pen"
         color="#000000"
         panelData={null}
@@ -40,6 +44,8 @@ describe('Canvas', () => {
     const onCanvasChange = vi.fn()
     render(
       <Canvas
+        font="Arial"
+        fontSize={20}
         tool="pen"
         color="#000000"
         panelData={null}
@@ -56,6 +62,8 @@ describe('Canvas', () => {
     const onCanvasChange = vi.fn()
     const { rerender } = render(
       <Canvas
+        font="Arial"
+        fontSize={20}
         tool="pen"
         color="#000000"
         panelData={null}
@@ -66,6 +74,8 @@ describe('Canvas', () => {
 
     rerender(
       <Canvas
+        font="Arial"
+        fontSize={20}
         tool="pen"
         color="#000000"
         panelData={null}
@@ -82,6 +92,8 @@ describe('Canvas', () => {
     const onCanvasChange = vi.fn()
     render(
       <Canvas
+        font="Arial"
+        fontSize={20}
         tool="fill"
         color="#ff0000"
         panelData={null}
@@ -98,6 +110,8 @@ describe('Canvas', () => {
     const onCanvasChange = vi.fn()
     render(
       <Canvas
+        font="Arial"
+        fontSize={20}
         tool="text"
         color="#000000"
         panelData={null}
@@ -114,6 +128,8 @@ describe('Canvas', () => {
     const onCanvasChange = vi.fn()
     render(
       <Canvas
+        font="Arial"
+        fontSize={20}
         tool="balloon"
         color="#000000"
         panelData={null}
@@ -147,6 +163,8 @@ describe('Canvas', () => {
 
       render(
         <Canvas
+          font="Arial"
+          fontSize={20}
           tool="select"
           color="#000000"
           panelData={null}
@@ -166,7 +184,7 @@ describe('Canvas', () => {
         const clickX = rect.left + (100 + 25) * (rect.width / 1200) // Center of shape
         const clickY = rect.top + (100 + 25) * (rect.height / 800)
 
-        await userEvent.click(canvas, {
+        fireEvent.mouseDown(canvas, {
           clientX: clickX,
           clientY: clickY,
         })
@@ -174,7 +192,7 @@ describe('Canvas', () => {
 
       // Wait for delete button to appear
       await waitFor(() => {
-        const deleteButton = screen.queryByText('🗑️ Delete')
+        const deleteButton = screen.queryByText('🗑️')
         expect(deleteButton).toBeInTheDocument()
       })
     })
@@ -199,6 +217,8 @@ describe('Canvas', () => {
 
       render(
         <Canvas
+          font="Arial"
+          fontSize={20}
           tool="select"
           color="#000000"
           panelData={null}
@@ -218,7 +238,7 @@ describe('Canvas', () => {
         const clickX = rect.left + (100 + 25) * (rect.width / 1200) // Center of text
         const clickY = rect.top + (100 + 15) * (rect.height / 800)
 
-        await userEvent.click(canvas, {
+        fireEvent.mouseDown(canvas, {
           clientX: clickX,
           clientY: clickY,
         })
@@ -226,7 +246,7 @@ describe('Canvas', () => {
 
       // Wait for delete button to appear
       await waitFor(() => {
-        const deleteButton = screen.queryByText('🗑️ Delete')
+        const deleteButton = screen.queryByText('🗑️')
         expect(deleteButton).toBeInTheDocument()
       })
     })
@@ -251,6 +271,8 @@ describe('Canvas', () => {
 
       render(
         <Canvas
+          font="Arial"
+          fontSize={20}
           tool="select"
           color="#000000"
           panelData={null}
@@ -267,7 +289,7 @@ describe('Canvas', () => {
         const clickX = rect.left + (100 + 25) * (rect.width / 1200)
         const clickY = rect.top + (100 + 25) * (rect.height / 800)
 
-        await userEvent.click(canvas, {
+        fireEvent.mouseDown(canvas, {
           clientX: clickX,
           clientY: clickY,
         })
@@ -275,7 +297,7 @@ describe('Canvas', () => {
 
       // Wait for delete button and click it
       await waitFor(async () => {
-        const deleteButton = screen.queryByText('🗑️ Delete')
+        const deleteButton = screen.queryByText('🗑️')
         expect(deleteButton).toBeInTheDocument()
         if (deleteButton) {
           await userEvent.click(deleteButton)
@@ -312,6 +334,8 @@ describe('Canvas', () => {
 
       render(
         <Canvas
+          font="Arial"
+          fontSize={20}
           tool="select"
           color="#000000"
           panelData={null}
@@ -328,7 +352,7 @@ describe('Canvas', () => {
         const clickX = rect.left + (100 + 25) * (rect.width / 1200)
         const clickY = rect.top + (100 + 15) * (rect.height / 800)
 
-        await userEvent.click(canvas, {
+        fireEvent.mouseDown(canvas, {
           clientX: clickX,
           clientY: clickY,
         })
@@ -336,7 +360,7 @@ describe('Canvas', () => {
 
       // Wait for delete button and click it
       await waitFor(async () => {
-        const deleteButton = screen.queryByText('🗑️ Delete')
+        const deleteButton = screen.queryByText('🗑️')
         expect(deleteButton).toBeInTheDocument()
         if (deleteButton) {
           await userEvent.click(deleteButton)
@@ -372,6 +396,8 @@ describe('Canvas', () => {
 
       render(
         <Canvas
+          font="Arial"
+          fontSize={20}
           tool="select"
           color="#000000"
           panelData={null}
@@ -388,7 +414,7 @@ describe('Canvas', () => {
         const clickX = rect.left + (100 + 25) * (rect.width / 1200)
         const clickY = rect.top + (100 + 25) * (rect.height / 800)
 
-        await userEvent.click(canvas, {
+        fireEvent.mouseDown(canvas, {
           clientX: clickX,
           clientY: clickY,
         })
@@ -423,6 +449,8 @@ describe('Canvas', () => {
 
       render(
         <Canvas
+          font="Arial"
+          fontSize={20}
           tool="select"
           color="#000000"
           panelData={null}
@@ -439,7 +467,7 @@ describe('Canvas', () => {
         const clickX = rect.left + (100 + 25) * (rect.width / 1200)
         const clickY = rect.top + (100 + 15) * (rect.height / 800)
 
-        await userEvent.click(canvas, {
+        fireEvent.mouseDown(canvas, {
           clientX: clickX,
           clientY: clickY,
         })
@@ -473,6 +501,8 @@ describe('Canvas', () => {
 
       render(
         <Canvas
+          font="Arial"
+          fontSize={20}
           tool="pen"
           color="#000000"
           panelData={null}
@@ -509,6 +539,8 @@ describe('Canvas', () => {
 
       render(
         <Canvas
+          font="Arial"
+          fontSize={20}
           tool="select"
           color="#000000"
           panelData={null}
@@ -528,7 +560,7 @@ describe('Canvas', () => {
         const clickX = rect.left + (100 + 25) * (rect.width / 1200) // Center of shape
         const clickY = rect.top + (100 + 25) * (rect.height / 800)
 
-        await userEvent.click(canvas, {
+        fireEvent.mouseDown(canvas, {
           clientX: clickX,
           clientY: clickY,
         })
@@ -536,7 +568,7 @@ describe('Canvas', () => {
 
       // Wait for duplicate button to appear
       await waitFor(() => {
-        const duplicateButton = screen.queryByText('📋 Duplicate')
+        const duplicateButton = screen.queryByText('📋')
         expect(duplicateButton).toBeInTheDocument()
       })
     })
@@ -561,6 +593,8 @@ describe('Canvas', () => {
 
       render(
         <Canvas
+          font="Arial"
+          fontSize={20}
           tool="select"
           color="#000000"
           panelData={null}
@@ -580,7 +614,7 @@ describe('Canvas', () => {
         const clickX = rect.left + (100 + 25) * (rect.width / 1200) // Center of text
         const clickY = rect.top + (100 + 15) * (rect.height / 800)
 
-        await userEvent.click(canvas, {
+        fireEvent.mouseDown(canvas, {
           clientX: clickX,
           clientY: clickY,
         })
@@ -588,7 +622,7 @@ describe('Canvas', () => {
 
       // Wait for duplicate button to appear
       await waitFor(() => {
-        const duplicateButton = screen.queryByText('📋 Duplicate')
+        const duplicateButton = screen.queryByText('📋')
         expect(duplicateButton).toBeInTheDocument()
       })
     })
@@ -597,6 +631,7 @@ describe('Canvas', () => {
       const onShapeLayersChange = vi.fn()
       const shapeLayers: ShapeLayer[] = [
         {
+          type: 'shape',
           id: 'shape-1',
           shape: 'rectangle',
           x: 100,
@@ -612,6 +647,8 @@ describe('Canvas', () => {
 
       render(
         <Canvas
+          font="Arial"
+          fontSize={20}
           tool="select"
           color="#000000"
           panelData={null}
@@ -628,7 +665,7 @@ describe('Canvas', () => {
         const clickX = rect.left + (100 + 25) * (rect.width / 1200)
         const clickY = rect.top + (100 + 25) * (rect.height / 800)
 
-        await userEvent.click(canvas, {
+        fireEvent.mouseDown(canvas, {
           clientX: clickX,
           clientY: clickY,
         })
@@ -636,7 +673,7 @@ describe('Canvas', () => {
 
       // Wait for duplicate button and click it
       await waitFor(async () => {
-        const duplicateButton = screen.queryByText('📋 Duplicate')
+        const duplicateButton = screen.queryByText('📋')
         expect(duplicateButton).toBeInTheDocument()
         if (duplicateButton) {
           await userEvent.click(duplicateButton)
@@ -690,6 +727,8 @@ describe('Canvas', () => {
 
       render(
         <Canvas
+          font="Arial"
+          fontSize={20}
           tool="select"
           color="#000000"
           panelData={null}
@@ -706,7 +745,7 @@ describe('Canvas', () => {
         const clickX = rect.left + (100 + 25) * (rect.width / 1200)
         const clickY = rect.top + (100 + 15) * (rect.height / 800)
 
-        await userEvent.click(canvas, {
+        fireEvent.mouseDown(canvas, {
           clientX: clickX,
           clientY: clickY,
         })
@@ -714,7 +753,7 @@ describe('Canvas', () => {
 
       // Wait for duplicate button and click it
       await waitFor(async () => {
-        const duplicateButton = screen.queryByText('📋 Duplicate')
+        const duplicateButton = screen.queryByText('📋')
         expect(duplicateButton).toBeInTheDocument()
         if (duplicateButton) {
           await userEvent.click(duplicateButton)
@@ -769,6 +808,8 @@ describe('Canvas', () => {
 
       render(
         <Canvas
+          font="Arial"
+          fontSize={20}
           tool="select"
           color="#000000"
           panelData={null}
@@ -785,15 +826,16 @@ describe('Canvas', () => {
         const clickX = rect.left + (1150 + 25) * (rect.width / 1200)
         const clickY = rect.top + (100 + 25) * (rect.height / 800)
 
-        await userEvent.click(canvas, {
-          clientX: clickX,
-          clientY: clickY,
+        await userEvent.pointer({
+          keys: '[MouseLeft]',
+          target: canvas,
+          coords: { x: clickX, y: clickY },
         })
       }
 
       // Wait for duplicate button and click it
       await waitFor(async () => {
-        const duplicateButton = screen.queryByText('📋 Duplicate')
+        const duplicateButton = screen.queryByText('📋')
         expect(duplicateButton).toBeInTheDocument()
         if (duplicateButton) {
           await userEvent.click(duplicateButton)
@@ -836,6 +878,8 @@ describe('Canvas', () => {
         <Canvas
           tool="pen"
           color="#000000"
+          font="Arial"
+          fontSize={20}
           panelData={null}
           layout={{ rows: 1, columns: [1] }}
           onCanvasChange={vi.fn()}
@@ -844,7 +888,7 @@ describe('Canvas', () => {
         />
       )
 
-      const duplicateButton = screen.queryByText('📋 Duplicate')
+      const duplicateButton = screen.queryByText('📋')
       expect(duplicateButton).not.toBeInTheDocument()
     })
   })
