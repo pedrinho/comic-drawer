@@ -1,4 +1,4 @@
-import { Tool, Shape, PenType } from '../App'
+import { Tool, Shape, PenType } from '../types/common'
 import './Toolbar.css'
 import React, { useState, useEffect } from 'react'
 import ShapePicker from './ShapePicker'
@@ -144,14 +144,14 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
               tool.name === 'pen'
                 ? handlePenButtonClick
                 : tool.name === 'shapes' || tool.name === 'objectShapes'
-                ? () => handleShapeToolClick(tool.name)
-                : tool.name === 'text'
-                ? handleTextButtonClick
-                : tool.name === 'balloon'
-                ? handleBalloonButtonClick
-                : tool.name === 'emoji'
-                ? handleEmojiButtonClick
-                : () => handleOtherToolClick(tool.name)
+                  ? () => handleShapeToolClick(tool.name)
+                  : tool.name === 'text'
+                    ? handleTextButtonClick
+                    : tool.name === 'balloon'
+                      ? handleBalloonButtonClick
+                      : tool.name === 'emoji'
+                        ? handleEmojiButtonClick
+                        : () => handleOtherToolClick(tool.name)
             }
             title={tool.label}
           >

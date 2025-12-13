@@ -1,4 +1,4 @@
-import { Shape } from '../App'
+import { Shape } from '../types/common'
 
 /**
  * Debug logging utility
@@ -310,4 +310,41 @@ export const isPointNearPolyline = (point: Point, polyline: Point[], threshold: 
     }
   }
   return false;
+}
+
+/**
+ * Helper function to convert ImageData to base64
+ */
+export const imageDataToBase64 = (imageData: ImageData): string => {
+  const canvas = document.createElement('canvas')
+  canvas.width = imageData.width
+  canvas.height = imageData.height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return ''
+  ctx.putImageData(imageData, 0, 0)
+  return canvas.toDataURL('image/png')
+}
+
+/**
+ * Helper function to convert base64 to ImageData
+ */
+export const base64ToImageData = async (base64: string): Promise<ImageData | null> => {
+  return new Promise((resolve) => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 1200
+    canvas.height = 800
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      resolve(null)
+      return
+    }
+
+    const img = new Image()
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0)
+      resolve(ctx.getImageData(0, 0, 1200, 800))
+    }
+    img.onerror = () => resolve(null)
+    img.src = base64
+  })
 }

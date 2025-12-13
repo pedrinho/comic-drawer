@@ -1,4 +1,4 @@
-import { Shape } from '../App'
+import { Shape } from './common'
 
 /**
  * Base properties shared by all object layers

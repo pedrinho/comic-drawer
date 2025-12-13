@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { PanelData } from '../App'
+import { PanelData } from '../types/common'
 import { ShapeLayer, TextLayer, PathObjectLayer, isPathObjectLayer, isShapeObjectLayer } from '../types/layers'
 import { traceShapePath } from '../utils/canvasUtils'
 import './Presentation.css'

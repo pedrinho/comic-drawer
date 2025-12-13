@@ -1,4 +1,4 @@
-import { Shape } from '../App'
+import { Shape } from '../types/common'
 import './ShapePicker.css'
 
 interface ShapePickerProps {

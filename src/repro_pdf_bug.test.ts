@@ -1,7 +1,7 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import { TextLayer } from './types/layers'
-import { renderTextLayerOnContext } from './App'
+import { renderTextLayer } from './utils/renderUtils'
 
 
 describe('PDF Text Rendering Bug', () => {
@@ -47,7 +47,7 @@ describe('PDF Text Rendering Bug', () => {
             color: '#000000'
         }
 
-        renderTextLayerOnContext(ctx, textLayer)
+        renderTextLayer(ctx, textLayer)
 
         // With the bug, scale is 0/1200 = 0.
         // fontSize / 0 = Infinity

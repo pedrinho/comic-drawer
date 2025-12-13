@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import './PanelLayout.css'
-import { PanelData } from '../App'
+import { PanelData } from '../types/common'
 
 interface PanelLayoutProps {
   panels: PanelData[]

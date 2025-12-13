@@ -6,135 +6,12 @@ import Toolbar from './components/Toolbar'
 import PanelLayout from './components/PanelLayout'
 import PanelLayoutModal from './components/PanelLayoutModal'
 import Presentation from './components/Presentation'
-import { ShapeLayer, TextLayer, PathObjectLayer, ObjectLayer, isPathObjectLayer, isShapeObjectLayer, migrateLayers } from './types/layers'
-import { traceShapePath, drawGrid as drawGridUtil, debugLog, debugError, debugWarn, cloneImageData, createBlankImageData } from './utils/canvasUtils'
-
-export type Tool = 'select' | 'pen' | 'eraser' | 'shapes' | 'objectShapes' | 'text' | 'fill' | 'balloon' | 'emoji'
-export type Shape = 'rectangle' | 'circle' | 'triangle' | 'star' | 'heart' | 'diamond' | 'hexagon' | 'pentagon' | 'arrow' | 'cross' | 'heptagon' | 'octagon'
-export type PenType = 'fine' | 'small' | 'medium' | 'large' | 'thick' | 'verythick'
-
-export interface PanelData {
-  id: number
-  name: string
-  data: ImageData | null
-  layout: {
-    rows: number
-    columns: number[]
-  }
-  shapeLayers: ObjectLayer[]
-  textLayers: TextLayer[]
-}
-
-interface SavedPanel {
-  id: number
-  name?: string  // Optional for backward compatibility
-  data: string | null  // Base64 encoded ImageData
-  layout: {
-    rows: number
-    columns: number[]
-  }
-  shapeLayers?: ObjectLayer[]
-  textLayers?: TextLayer[]
-}
-
-interface ComicFile {
-  version: string
-  panels: SavedPanel[]
-}
-
-interface PanelState {
-  data: ImageData | null
-  shapeLayers: ObjectLayer[]
-  textLayers: TextLayer[]
-}
-
-interface PanelHistory {
-  undo: PanelState[]
-  redo: PanelState[]
-}
+import { ShapeLayer, TextLayer, ObjectLayer, isPathObjectLayer, migrateLayers } from './types/layers'
+import { drawGrid as drawGridUtil, debugLog, debugError, debugWarn, cloneImageData, createBlankImageData, imageDataToBase64, base64ToImageData } from './utils/canvasUtils'
+import { Tool, Shape, PenType, PanelData, SavedPanel, ComicFile, PanelState, PanelHistory } from './types/common'
+import { renderObjectLayer, renderTextLayer } from './utils/renderUtils'
 
 const MAX_HISTORY = 10
-
-const renderPathLayerOnContext = (ctx: CanvasRenderingContext2D, layer: PathObjectLayer) => {
-  const { x, y, width, height, rotation, strokeColor, strokeWidth, points } = layer
-  const centerX = x + width / 2
-  const centerY = y + height / 2
-
-  ctx.save()
-  ctx.translate(centerX, centerY)
-  ctx.rotate(rotation)
-
-  ctx.strokeStyle = strokeColor
-  ctx.lineWidth = strokeWidth
-  ctx.beginPath()
-
-  if (points.length > 0 && points[0]) {
-    // Offset points to center them around (0,0) in the rotated context
-    const offsetX = -width / 2
-    const offsetY = -height / 2
-
-    ctx.moveTo(points[0].x + offsetX, points[0].y + offsetY)
-    for (let i = 1; i < points.length; i++) {
-      const p = points[i]
-      if (p) ctx.lineTo(p.x + offsetX, p.y + offsetY)
-    }
-  }
-
-  ctx.stroke()
-  ctx.restore()
-}
-
-const renderShapeLayerOnContext = (ctx: CanvasRenderingContext2D, layer: ShapeLayer) => {
-  const { x, y, width, height, rotation, strokeColor, strokeWidth, fillColor, shape } = layer
-  const centerX = x + width / 2
-  const centerY = y + height / 2
-  ctx.save()
-  ctx.translate(centerX, centerY)
-  ctx.rotate(rotation)
-  traceShapePath(ctx, shape, -width / 2, -height / 2, width / 2, height / 2)
-  if (fillColor) {
-    ctx.fillStyle = fillColor
-    ctx.fill()
-  }
-  ctx.strokeStyle = strokeColor
-  ctx.lineWidth = strokeWidth
-  ctx.stroke()
-  ctx.restore()
-}
-
-const renderObjectLayerOnContext = (ctx: CanvasRenderingContext2D, layer: ObjectLayer) => {
-  if (isPathObjectLayer(layer)) {
-    renderPathLayerOnContext(ctx, layer)
-  } else if (isShapeObjectLayer(layer)) {
-    renderShapeLayerOnContext(ctx, layer)
-  }
-}
-
-export const renderTextLayerOnContext = (ctx: CanvasRenderingContext2D, layer: TextLayer) => {
-  const canvas = ctx.canvas
-  const { x, y, width, height, rotation, text, font, fontSize, color } = layer
-  const centerX = x + width / 2
-  const centerY = y + height / 2
-
-  // Calculate current scale factor for consistent rendering
-  const rect = canvas.getBoundingClientRect()
-  const scaleX = rect.width ? rect.width / canvas.width : 1
-  const scaleY = rect.height ? rect.height / canvas.height : 1
-  const scale = (scaleX + scaleY) / 2 || 1
-
-  // Scale fontSize to match visual size (fontSize is stored in CSS pixels, need to scale up for canvas)
-  const scaledFontSize = fontSize / scale
-
-  ctx.save()
-  ctx.translate(centerX, centerY)
-  ctx.rotate(rotation)
-  ctx.fillStyle = color
-  ctx.font = `${scaledFontSize}px ${font}`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(text, 0, 0)
-  ctx.restore()
-}
 
 function App() {
   const [currentTool, setCurrentTool] = useState<Tool>('pen')
@@ -576,39 +453,6 @@ function App() {
     input.click()
   }
 
-  // Helper function to convert ImageData to base64
-  const imageDataToBase64 = (imageData: ImageData): string => {
-    const canvas = document.createElement('canvas')
-    canvas.width = imageData.width
-    canvas.height = imageData.height
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return ''
-    ctx.putImageData(imageData, 0, 0)
-    return canvas.toDataURL('image/png')
-  }
-
-  // Helper function to convert base64 to ImageData
-  const base64ToImageData = async (base64: string): Promise<ImageData | null> => {
-    return new Promise((resolve) => {
-      const canvas = document.createElement('canvas')
-      canvas.width = 1200
-      canvas.height = 800
-      const ctx = canvas.getContext('2d')
-      if (!ctx) {
-        resolve(null)
-        return
-      }
-
-      const img = new Image()
-      img.onload = () => {
-        ctx.drawImage(img, 0, 0)
-        resolve(ctx.getImageData(0, 0, 1200, 800))
-      }
-      img.onerror = () => resolve(null)
-      img.src = base64
-    })
-  }
-
 
   // Helper function to render panel to canvas with grid
   const renderPanelToCanvas = (panel: PanelData): HTMLCanvasElement | null => {
@@ -633,14 +477,14 @@ function App() {
     // Draw shape layers if any
     if (panel.shapeLayers && panel.shapeLayers.length > 0) {
       panel.shapeLayers.forEach((layer) => {
-        renderObjectLayerOnContext(ctx, layer)
+        renderObjectLayer(ctx, layer)
       })
     }
 
     // Draw text layers if any
     if (panel.textLayers && panel.textLayers.length > 0) {
       panel.textLayers.forEach((layer) => {
-        renderTextLayerOnContext(ctx, layer)
+        renderTextLayer(ctx, layer)
       })
     }
 

@@ -1,4 +1,4 @@
-import { PenType } from '../App'
+import { PenType } from '../types/common'
 import './PenPicker.css'
 
 interface PenPickerProps {
