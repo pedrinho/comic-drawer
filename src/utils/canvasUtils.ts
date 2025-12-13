@@ -3,8 +3,8 @@ import { Shape } from '../App'
 /**
  * Debug logging utility
  */
-const DEBUG_ENABLED = typeof import.meta !== 'undefined' && 
-  import.meta.env && 
+const DEBUG_ENABLED = typeof import.meta !== 'undefined' &&
+  import.meta.env &&
   (import.meta.env.DEV || import.meta.env.MODE === 'development')
 
 export const debugLog = (category: string, message: string, ...args: any[]) => {
@@ -36,8 +36,8 @@ export const traceShapePath = (
   endX: number,
   endY: number
 ) => {
-  debugLog('CanvasUtils', `Tracing shape: ${shape}`, { startX, startY, endX, endY })
-  
+  // debugLog('CanvasUtils', `Tracing shape: ${shape}`, { startX, startY, endX, endY })
+
   const width = endX - startX
   const height = endY - startY
   const centerX = (startX + endX) / 2
@@ -173,7 +173,7 @@ export const drawGrid = (
   canvasHeight: number = 800
 ) => {
   debugLog('CanvasUtils', 'Drawing grid', { rows: layout.rows, columns: layout.columns })
-  
+
   ctx.save()
   ctx.strokeStyle = '#000000'
   ctx.lineWidth = 3
@@ -183,13 +183,13 @@ export const drawGrid = (
 
   for (let row = 0; row < totalRows; row++) {
     const columnsInRow = layout.columns[row] || 1
-    
+
     // Calculate spacing: gutter on each side + gutters between cells
     const totalVerticalGutters = gutter * 2 + (totalRows - 1) * gutter
     const totalHorizontalGutters = gutter * 2 + (columnsInRow - 1) * gutter
     const panelHeight = (canvasHeight - totalVerticalGutters) / totalRows
     const panelWidth = (canvasWidth - totalHorizontalGutters) / columnsInRow
-    
+
     let currentX = gutter
     const currentY = gutter + (row * (panelHeight + gutter))
 
@@ -237,3 +237,77 @@ export const createBlankImageData = (width: number = 1200, height: number = 800)
   return ctx.getImageData(0, 0, canvas.width, canvas.height)
 }
 
+// Helper types
+interface Point { x: number; y: number; }
+
+/**
+ * Calculates squared distance from a point p to a line segment p1-p2
+ */
+const getSqSegDist = (p: Point, p1: Point, p2: Point): number => {
+  let x = p1.x, y = p1.y, dx = p2.x - x, dy = p2.y - y;
+  if (dx !== 0 || dy !== 0) {
+    const t = ((p.x - x) * dx + (p.y - y) * dy) / (dx * dx + dy * dy);
+    if (t > 1) {
+      x = p2.x;
+      y = p2.y;
+    } else if (t > 0) {
+      x += dx * t;
+      y += dy * t;
+    }
+  }
+  dx = p.x - x;
+  dy = p.y - y;
+  return dx * dx + dy * dy;
+}
+
+/**
+ * Simplifies a path using Ramer-Douglas-Peucker algorithm
+ */
+export const simplifyPath = (points: Point[], tolerance: number): Point[] => {
+  if (points.length <= 2) return points;
+  const sqTolerance = tolerance * tolerance;
+  return simplifyDPStep(points, 0, points.length - 1, sqTolerance);
+}
+
+const simplifyDPStep = (points: Point[], first: number, last: number, sqTolerance: number): Point[] => {
+  let maxSqDist = sqTolerance;
+  let index = -1;
+  const p1 = points[first];
+  const p2 = points[last];
+
+  if (!p1 || !p2) return [];
+
+  for (let i = first + 1; i < last; i++) {
+    const p = points[i]
+    if (p) {
+      const sqDist = getSqSegDist(p, p1, p2);
+      if (sqDist > maxSqDist) {
+        index = i;
+        maxSqDist = sqDist;
+      }
+    }
+  }
+
+  if (index > -1) {
+    const recResults1 = simplifyDPStep(points, first, index, sqTolerance);
+    const recResults2 = simplifyDPStep(points, index, last, sqTolerance);
+    return [...recResults1.slice(0, -1), ...recResults2];
+  } else {
+    return [p1, p2];
+  }
+}
+
+/**
+ * Checks if a point is near a polyline within a given threshold
+ */
+export const isPointNearPolyline = (point: Point, polyline: Point[], threshold: number): boolean => {
+  const sqThreshold = threshold * threshold;
+  for (let i = 0; i < polyline.length - 1; i++) {
+    const p1 = polyline[i];
+    const p2 = polyline[i + 1];
+    if (p1 && p2 && getSqSegDist(point, p1, p2) < sqThreshold) {
+      return true;
+    }
+  }
+  return false;
+}

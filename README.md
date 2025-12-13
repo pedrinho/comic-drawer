@@ -5,6 +5,7 @@ A web-based application for creating comics! Draw panels, add dialogue, and let 
 ## Features
 
 - ✏️ **Drawing Tools**: Pen, eraser, and text
+- ✍️ **Vector Pen**: Draw smooth paths that can be selected, moved, resized, and rotated!
 - 😀 **Emoji Tool**: Add emojis to your comics with a comprehensive emoji picker
 - 🔷 **Shapes**: 12 different shapes (rectangle, circle, triangle, star, heart, diamond, hexagon, pentagon, heptagon, octagon, arrow, cross)
 - ⬚ **Object Shapes**: Create editable shape objects that can be moved, resized, rotated, and deleted

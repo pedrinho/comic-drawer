@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Tool, Shape, PenType } from '../App'
-import { ShapeLayer, TextLayer } from '../types/layers'
-import { traceShapePath, drawGrid as drawGridUtil, debugLog, debugError, debugWarn } from '../utils/canvasUtils'
+import { ShapeLayer, TextLayer, PathObjectLayer, ObjectLayer, isPathObjectLayer, isShapeObjectLayer } from '../types/layers'
+import { traceShapePath, drawGrid as drawGridUtil, debugLog, debugError, debugWarn, simplifyPath, isPointNearPolyline } from '../utils/canvasUtils'
 import './Canvas.css'
 
 interface SelectionRect {
@@ -37,8 +37,8 @@ interface CanvasProps {
   panelData: ImageData | null
   layout: { rows: number; columns: number[] }
   onCanvasChange: (data: ImageData) => void
-  shapeLayers?: ShapeLayer[]
-  onShapeLayersChange?: (layers: ShapeLayer[], skipHistory?: boolean) => void
+  shapeLayers?: ObjectLayer[]
+  onShapeLayersChange?: (layers: ObjectLayer[], skipHistory?: boolean) => void
   textLayers?: TextLayer[]
   onTextLayersChange?: (layers: TextLayer[], skipHistory?: boolean) => void
   onTextEditingChange?: (isEditing: boolean) => void
@@ -391,10 +391,11 @@ export default function Canvas({
   const resizeClickStartRef = useRef({ x: 0, y: 0 })
   const rotationCenterRef = useRef({ x: 0, y: 0 })
   const originalImageSizeRef = useRef<{ width: number; height: number } | null>(null)
-  const shapeLayersRef = useRef<ShapeLayer[]>(shapeLayers)
+  const shapeLayersRef = useRef<ObjectLayer[]>(shapeLayers)
   const activeShapeLayerIdRef = useRef<string | null>(null)
   const isDraggingShapeLayerRef = useRef(false)
   const isResizingShapeLayerRef = useRef(false)
+  const currentPathPointsRef = useRef<{ x: number; y: number }[]>([])
   const isRotatingShapeLayerRef = useRef(false)
   const shapeDragOffsetRef = useRef({ x: 0, y: 0 })
   const shapeResizeHandleRef = useRef<SelectionHandle | null>(null)
@@ -436,6 +437,41 @@ export default function Canvas({
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     drawGridUtil(ctx, layout)
   }, [layout])
+
+  const renderPathLayer = (ctx: CanvasRenderingContext2D, layer: PathObjectLayer) => {
+    const { x, y, width, height, rotation, strokeColor, strokeWidth, points } = layer
+    const centerX = x + width / 2
+    const centerY = y + height / 2
+
+    ctx.save()
+    ctx.translate(centerX, centerY)
+    ctx.rotate(rotation)
+
+    // Points are stored relative to the layer origin (x, y)
+    // But we are translating to center, so we need to offset drawing by -width/2, -height/2
+    // PLUS the original points were relative to x,y. 
+    // If points are [0,0], [10,10] and bbox is x=0, y=0, w=10, h=10
+    // We want to draw at -5, -5 relative to center
+
+    ctx.strokeStyle = strokeColor
+    ctx.lineWidth = strokeWidth
+    ctx.beginPath()
+
+    if (points.length > 0 && points[0]) {
+      // Offset points to center them around (0,0) in the rotated context
+      const offsetX = -width / 2
+      const offsetY = -height / 2
+
+      ctx.moveTo(points[0].x + offsetX, points[0].y + offsetY)
+      for (let i = 1; i < points.length; i++) {
+        const p = points[i]
+        if (p) ctx.lineTo(p.x + offsetX, p.y + offsetY)
+      }
+    }
+
+    ctx.stroke()
+    ctx.restore()
+  }
 
   const renderShapeLayer = (ctx: CanvasRenderingContext2D, layer: ShapeLayer) => {
     const { x, y, width, height, rotation, strokeColor, strokeWidth, fillColor, shape: layerShape } = layer
@@ -492,7 +528,11 @@ export default function Canvas({
 
   const drawShapeLayers = useCallback((ctx: CanvasRenderingContext2D) => {
     shapeLayersRef.current.forEach((layer) => {
-      renderShapeLayer(ctx, layer)
+      if (isPathObjectLayer(layer)) {
+        renderPathLayer(ctx, layer)
+      } else if (isShapeObjectLayer(layer)) {
+        renderShapeLayer(ctx, layer)
+      }
     })
   }, [])
 
@@ -972,10 +1012,9 @@ export default function Canvas({
     setIsDrawing(true)
 
     if (tool === 'pen') {
-      // Ensure we can draw over erased areas
-      ctx.globalCompositeOperation = 'source-over'
-      ctx.beginPath()
-      ctx.moveTo(pos.x, pos.y)
+      currentPathPointsRef.current = [pos]
+      setIsDrawing(true)
+      repaintCanvas()
     } else if (tool === 'fill') {
       floodFill(ctx, pos.x, pos.y, color)
       drawGrid(ctx)
@@ -1109,6 +1148,26 @@ export default function Canvas({
     drawShapeLayers(ctx)
     drawTextLayers(ctx)
 
+    // Draw current pen path preview
+    if (tool === 'pen' && currentPathPointsRef.current.length > 0) {
+      const points = currentPathPointsRef.current
+      if (points[0]) {
+        ctx.save()
+        ctx.lineCap = 'round'
+        ctx.lineJoin = 'round'
+        ctx.strokeStyle = color // This relies on closure 'color', verified available
+        ctx.lineWidth = getPenWidth(penType)
+        ctx.beginPath()
+        ctx.moveTo(points[0].x, points[0].y)
+        for (let i = 1; i < points.length; i++) {
+          const p = points[i]
+          if (p) ctx.lineTo(p.x, p.y)
+        }
+        ctx.stroke()
+        ctx.restore()
+      }
+    }
+
     // Update delete and duplicate button positions when selection changes
     const rect = canvas.getBoundingClientRect()
     const scaleX = rect.width / canvas.width
@@ -1186,9 +1245,9 @@ export default function Canvas({
       setDeleteButtonPos(null)
       setDuplicateButtonPos(null)
     }
-  }, [panelData, drawShapeLayers, drawTextLayers])
+  }, [panelData, drawShapeLayers, drawTextLayers, tool, color, penType])
 
-  const updateShapeLayers = useCallback((layers: ShapeLayer[], skipHistory = false) => {
+  const updateShapeLayers = useCallback((layers: ObjectLayer[], skipHistory = false) => {
     debugLog('Canvas', 'Updating shape layers', { layerCount: layers.length, skipHistory })
     shapeLayersRef.current = layers
     if (onShapeLayersChange) {
@@ -1211,17 +1270,50 @@ export default function Canvas({
     return `${Date.now()}-${Math.random().toString(36).slice(2)}`
   }
 
-  const hitTestShapeLayers = useCallback((point: { x: number; y: number }): ShapeLayer | null => {
+  const hitTestShapeLayers = useCallback((point: { x: number; y: number }): ObjectLayer | null => {
     const layers = shapeLayersRef.current
     for (let i = layers.length - 1; i >= 0; i--) {
       const layer = layers[i]
-      if (layer && (
-        point.x >= layer.x &&
-        point.x <= layer.x + layer.width &&
-        point.y >= layer.y &&
-        point.y <= layer.y + layer.height
-      )) {
-        return layer
+      if (layer) {
+        // Quick bounding box check (approximate for rotated layers but good for optimization)
+        // For rotated layers, this is not strictly correct as it checks the unrotated AABB,
+        // but since we don't have rotated AABB logic easily available, we check if interactions might hit.
+        // For Path interactions, we will do a precise check below.
+
+        // For paths, always do precise check if within generous bounds
+        // For shapes, stick to current logic (which is likely just AABB)
+
+        if (isPathObjectLayer(layer)) {
+          // Transform point to local layer space
+          const centerX = layer.x + layer.width / 2
+          const centerY = layer.y + layer.height / 2
+          // Rotate point negatively around center
+          const angle = -layer.rotation
+          const dx = point.x - centerX
+          const dy = point.y - centerY
+          const localX = dx * Math.cos(angle) - dy * Math.sin(angle) + centerX
+          const localY = dx * Math.sin(angle) + dy * Math.cos(angle) + centerY
+
+          // Translate to relative coordinates
+          const relativePoint = {
+            x: localX - layer.x,
+            y: localY - layer.y
+          }
+
+          if (isPointNearPolyline(relativePoint, layer.points, 10 / (layer.strokeWidth || 1) + 5)) {
+            return layer
+          }
+        } else {
+          // Existing logic for shapes/text (assuming AABB for now as per original code)
+          if (
+            point.x >= layer.x &&
+            point.x <= layer.x + layer.width &&
+            point.y >= layer.y &&
+            point.y <= layer.y + layer.height
+          ) {
+            return layer
+          }
+        }
       }
     }
     return null
@@ -1556,12 +1648,19 @@ export default function Canvas({
       }
 
       // Create duplicate with new ID and offset position
-      const duplicatedLayer: ShapeLayer = {
+      let duplicatedLayer: ObjectLayer = {
         ...originalLayer,
-        type: 'shape',
         id: generateLayerId(),
         x: Math.min(originalLayer.x + DUPLICATE_OFFSET, canvas.width - originalLayer.width),
         y: Math.min(originalLayer.y + DUPLICATE_OFFSET, canvas.height - originalLayer.height),
+      } as ObjectLayer
+
+      if (isPathObjectLayer(originalLayer)) {
+        // Deep copy points
+        duplicatedLayer = {
+          ...duplicatedLayer,
+          points: originalLayer.points.map(p => ({ ...p }))
+        } as PathObjectLayer
       }
 
       // Add the duplicated layer
@@ -1974,10 +2073,8 @@ export default function Canvas({
     }
 
     if (tool === 'pen') {
-      // Ensure we can draw over erased areas
-      ctx.globalCompositeOperation = 'source-over'
-      ctx.lineTo(pos.x, pos.y)
-      ctx.stroke()
+      currentPathPointsRef.current.push(pos)
+      repaintCanvas()
     } else if (tool === 'eraser') {
       ctx.save()
       ctx.globalCompositeOperation = 'destination-out'
@@ -2461,7 +2558,52 @@ export default function Canvas({
 
     setIsDrawing(false)
 
-    // Capture pen/eraser strokes without layers
+    if (tool === 'pen' && currentPathPointsRef.current.length > 1) {
+      // Finalize path layer
+      // Simplify points first
+      const rawPoints = currentPathPointsRef.current
+      const points = simplifyPath(rawPoints, 1.0) // 1px tolerance
+
+      // Calculate bounding box
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+      points.forEach(p => {
+        minX = Math.min(minX, p.x)
+        minY = Math.min(minY, p.y)
+        maxX = Math.max(maxX, p.x)
+        maxY = Math.max(maxY, p.y)
+      })
+
+      const width = maxX - minX
+      const height = maxY - minY
+
+      // Normalize points to be relative to (minX, minY)
+      const normalizedPoints = points.map(p => ({ x: p.x - minX, y: p.y - minY }))
+
+      const newLayer: PathObjectLayer = {
+        type: 'path',
+        id: generateLayerId(),
+        x: minX,
+        y: minY,
+        width: Math.max(width, 1), // Ensure non-zero size
+        height: Math.max(height, 1),
+        rotation: 0,
+        strokeColor: color,
+        strokeWidth: getPenWidth(penType),
+        points: normalizedPoints
+      }
+
+      // Save history before adding layer
+      if (onShapeLayersChange) {
+        onShapeLayersChange([...shapeLayersRef.current], false)
+      }
+
+      updateShapeLayers([...shapeLayersRef.current, newLayer], true)
+      currentPathPointsRef.current = []
+      repaintCanvas()
+      return
+    }
+
+    // Capture eraser strokes without layers
     // The canvas currently has: background + layers + pen strokes
     // We want to save: background + pen strokes (without layers)
     // Solution: Get background, then extract only the pen stroke pixels from current canvas
@@ -2477,7 +2619,7 @@ export default function Canvas({
       // Start with clean background
       tempCtx.putImageData(background, 0, 0)
 
-      // Extract pen strokes by comparing current state with background
+      // Extract eraser strokes by comparing current state with background
       // For each pixel, if it's different from background and not a layer pixel, keep it
       const bgData = background.data
       const currData = currentState.data
@@ -2504,13 +2646,13 @@ export default function Canvas({
         }
       })
 
-      // Copy pen strokes (pixels that differ from background and aren't in layer bounds)
+      // Copy eraser strokes (pixels that differ from background and aren't in layer bounds)
       for (let i = 0; i < currData.length; i += 4) {
         const x = (i / 4) % canvas.width
         const y = Math.floor((i / 4) / canvas.width)
         const pixelKey = `${x},${y}`
 
-        // If pixel is different from background and not in a layer area, it's a pen stroke
+        // If pixel is different from background and not in a layer area, it's an eraser stroke
         if (!layerBounds.has(pixelKey)) {
           const bgR = bgData[i]
           const bgG = bgData[i + 1]
@@ -2521,7 +2663,7 @@ export default function Canvas({
           const currB = currData[i + 2]
           const currA = currData[i + 3]
 
-          // If pixel differs significantly from background, it's a pen stroke
+          // If pixel differs significantly from background, it's an eraser stroke
           if (bgR !== undefined && bgG !== undefined && bgB !== undefined && bgA !== undefined &&
             currR !== undefined && currG !== undefined && currB !== undefined && currA !== undefined &&
             (Math.abs(bgR - currR) > 5 || Math.abs(bgG - currG) > 5 ||

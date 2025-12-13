@@ -35,10 +35,20 @@ export interface TextObjectLayer extends BaseObjectLayer {
 }
 
 /**
+ * Path object layer (for freehand drawing)
+ */
+export interface PathObjectLayer extends BaseObjectLayer {
+  type: 'path'
+  points: { x: number; y: number }[]
+  strokeColor: string
+  strokeWidth: number
+}
+
+/**
  * Union type for all object layers
  * Add new object types here as discriminated union members
  */
-export type ObjectLayer = ShapeObjectLayer | TextObjectLayer
+export type ObjectLayer = ShapeObjectLayer | TextObjectLayer | PathObjectLayer
 
 /**
  * Type guards for object layers
@@ -51,12 +61,17 @@ export function isTextObjectLayer(layer: ObjectLayer): layer is TextObjectLayer 
   return layer.type === 'text'
 }
 
+export function isPathObjectLayer(layer: ObjectLayer): layer is PathObjectLayer {
+  return layer.type === 'path'
+}
+
 /**
  * Legacy type aliases for backward compatibility during migration
  * @deprecated Use ObjectLayer with type guards instead
  */
 export type ShapeLayer = ShapeObjectLayer
 export type TextLayer = TextObjectLayer
+export type PathLayer = PathObjectLayer
 
 /**
  * Migration helper: ensures old layers have the 'type' field
@@ -64,10 +79,21 @@ export type TextLayer = TextObjectLayer
  */
 export function migrateLayer(layer: Partial<ObjectLayer> & { id: string; x: number; y: number; width: number; height: number; rotation: number }): ObjectLayer {
   // If type is already set, return as-is
-  if ('type' in layer && (layer.type === 'shape' || layer.type === 'text')) {
+  if ('type' in layer && (layer.type === 'shape' || layer.type === 'text' || layer.type === 'path')) {
     return layer as ObjectLayer
   }
-  
+
+  // Check for path properties
+  if ('points' in layer) {
+    return {
+      ...layer,
+      type: 'path',
+      points: (layer as any).points || [],
+      strokeColor: (layer as any).strokeColor || '#000000',
+      strokeWidth: (layer as any).strokeWidth || 2,
+    } as PathObjectLayer
+  }
+
   // Otherwise, infer type from properties
   if ('shape' in layer || 'strokeColor' in layer || 'strokeWidth' in layer) {
     return {
@@ -79,7 +105,7 @@ export function migrateLayer(layer: Partial<ObjectLayer> & { id: string; x: numb
       fillColor: (layer as any).fillColor ?? null,
     } as ShapeObjectLayer
   }
-  
+
   if ('text' in layer || 'font' in layer || 'fontSize' in layer || 'color' in layer) {
     return {
       ...layer,
@@ -90,7 +116,7 @@ export function migrateLayer(layer: Partial<ObjectLayer> & { id: string; x: numb
       color: (layer as any).color || '#000000',
     } as TextObjectLayer
   }
-  
+
   // Default to shape if we can't determine
   return {
     ...layer,

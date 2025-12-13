@@ -6,7 +6,7 @@ import Toolbar from './components/Toolbar'
 import PanelLayout from './components/PanelLayout'
 import PanelLayoutModal from './components/PanelLayoutModal'
 import Presentation from './components/Presentation'
-import { ShapeLayer, TextLayer, migrateLayers } from './types/layers'
+import { ShapeLayer, TextLayer, PathObjectLayer, ObjectLayer, isPathObjectLayer, isShapeObjectLayer, migrateLayers } from './types/layers'
 import { traceShapePath, drawGrid as drawGridUtil, debugLog, debugError, debugWarn, cloneImageData, createBlankImageData } from './utils/canvasUtils'
 
 export type Tool = 'select' | 'pen' | 'eraser' | 'shapes' | 'objectShapes' | 'text' | 'fill' | 'balloon' | 'emoji'
@@ -21,7 +21,7 @@ export interface PanelData {
     rows: number
     columns: number[]
   }
-  shapeLayers: ShapeLayer[]
+  shapeLayers: ObjectLayer[]
   textLayers: TextLayer[]
 }
 
@@ -33,7 +33,7 @@ interface SavedPanel {
     rows: number
     columns: number[]
   }
-  shapeLayers?: ShapeLayer[]
+  shapeLayers?: ObjectLayer[]
   textLayers?: TextLayer[]
 }
 
@@ -44,7 +44,7 @@ interface ComicFile {
 
 interface PanelState {
   data: ImageData | null
-  shapeLayers: ShapeLayer[]
+  shapeLayers: ObjectLayer[]
   textLayers: TextLayer[]
 }
 
@@ -54,6 +54,35 @@ interface PanelHistory {
 }
 
 const MAX_HISTORY = 10
+
+const renderPathLayerOnContext = (ctx: CanvasRenderingContext2D, layer: PathObjectLayer) => {
+  const { x, y, width, height, rotation, strokeColor, strokeWidth, points } = layer
+  const centerX = x + width / 2
+  const centerY = y + height / 2
+
+  ctx.save()
+  ctx.translate(centerX, centerY)
+  ctx.rotate(rotation)
+
+  ctx.strokeStyle = strokeColor
+  ctx.lineWidth = strokeWidth
+  ctx.beginPath()
+
+  if (points.length > 0 && points[0]) {
+    // Offset points to center them around (0,0) in the rotated context
+    const offsetX = -width / 2
+    const offsetY = -height / 2
+
+    ctx.moveTo(points[0].x + offsetX, points[0].y + offsetY)
+    for (let i = 1; i < points.length; i++) {
+      const p = points[i]
+      if (p) ctx.lineTo(p.x + offsetX, p.y + offsetY)
+    }
+  }
+
+  ctx.stroke()
+  ctx.restore()
+}
 
 const renderShapeLayerOnContext = (ctx: CanvasRenderingContext2D, layer: ShapeLayer) => {
   const { x, y, width, height, rotation, strokeColor, strokeWidth, fillColor, shape } = layer
@@ -73,21 +102,29 @@ const renderShapeLayerOnContext = (ctx: CanvasRenderingContext2D, layer: ShapeLa
   ctx.restore()
 }
 
-const renderTextLayerOnContext = (ctx: CanvasRenderingContext2D, layer: TextLayer) => {
+const renderObjectLayerOnContext = (ctx: CanvasRenderingContext2D, layer: ObjectLayer) => {
+  if (isPathObjectLayer(layer)) {
+    renderPathLayerOnContext(ctx, layer)
+  } else if (isShapeObjectLayer(layer)) {
+    renderShapeLayerOnContext(ctx, layer)
+  }
+}
+
+export const renderTextLayerOnContext = (ctx: CanvasRenderingContext2D, layer: TextLayer) => {
   const canvas = ctx.canvas
   const { x, y, width, height, rotation, text, font, fontSize, color } = layer
   const centerX = x + width / 2
   const centerY = y + height / 2
-  
+
   // Calculate current scale factor for consistent rendering
   const rect = canvas.getBoundingClientRect()
-  const scaleX = rect.width / canvas.width
-  const scaleY = rect.height / canvas.height
-  const scale = (scaleX + scaleY) / 2
-  
+  const scaleX = rect.width ? rect.width / canvas.width : 1
+  const scaleY = rect.height ? rect.height / canvas.height : 1
+  const scale = (scaleX + scaleY) / 2 || 1
+
   // Scale fontSize to match visual size (fontSize is stored in CSS pixels, need to scale up for canvas)
   const scaledFontSize = fontSize / scale
-  
+
   ctx.save()
   ctx.translate(centerX, centerY)
   ctx.rotate(rotation)
@@ -116,7 +153,7 @@ function App() {
   const [showModal, setShowModal] = useState(false)
   const [isPresenting, setIsPresenting] = useState(false)
   const [presentationIndex, setPresentationIndex] = useState<number>(0)
-  
+
   // History for each panel: Map<panelIndex, {undo: ImageData[], redo: ImageData[]}>
   const historyRef = useRef<Map<number, PanelHistory>>(new Map())
 
@@ -144,8 +181,13 @@ function App() {
   }
 
   // Deep clone shape layers for history
-  const cloneShapeLayers = (layers: ShapeLayer[]): ShapeLayer[] => {
-    return layers.map(layer => ({ ...layer }))
+  const cloneShapeLayers = (layers: ObjectLayer[]): ObjectLayer[] => {
+    return layers.map(layer => {
+      if (isPathObjectLayer(layer)) {
+        return { ...layer, points: layer.points.map(p => ({ ...p })) }
+      }
+      return { ...layer }
+    })
   }
 
   // Deep clone text layers for history
@@ -154,16 +196,16 @@ function App() {
   }
 
   // Save current state to history before making changes
-  const saveToHistory = (panelIndex: number, currentData: ImageData | null, currentShapeLayers: ShapeLayer[] = [], currentTextLayers: TextLayer[] = []) => {
+  const saveToHistory = (panelIndex: number, currentData: ImageData | null, currentShapeLayers: ObjectLayer[] = [], currentTextLayers: TextLayer[] = []) => {
     debugLog('App', 'Saving to history', { panelIndex, hasData: !!currentData, shapeLayerCount: currentShapeLayers.length, textLayerCount: currentTextLayers.length })
     const history = getPanelHistory(panelIndex)
-    
+
     let stateToSave: PanelState = {
       data: null,
       shapeLayers: cloneShapeLayers(currentShapeLayers),
       textLayers: cloneTextLayers(currentTextLayers)
     }
-    
+
     if (currentData) {
       // Clone the existing ImageData for history
       stateToSave.data = cloneImageData(currentData)
@@ -171,16 +213,16 @@ function App() {
       // If canvas is empty, create a blank white canvas as the initial state
       stateToSave.data = createBlankImageData()
     }
-    
+
     // Add to undo stack
     history.undo.push(stateToSave)
-    
+
     // Limit to MAX_HISTORY
     if (history.undo.length > MAX_HISTORY) {
       history.undo.shift()
       debugWarn('App', 'History limit reached, removing oldest state')
     }
-    
+
     // Clear redo stack when new action is performed
     history.redo = []
     debugLog('App', 'History saved', { undoStackSize: history.undo.length })
@@ -190,7 +232,7 @@ function App() {
     debugLog('App', 'Canvas changed', { selectedPanel, skipHistory })
     const panel = panels[selectedPanel]
     if (!panel) return
-    
+
     if (!skipHistory) {
       // Save current state to history before making changes
       const currentData = panel.data
@@ -198,7 +240,7 @@ function App() {
       const currentTextLayers = panel.textLayers
       saveToHistory(selectedPanel, currentData, currentShapeLayers, currentTextLayers)
     }
-    
+
     const updatedPanels = [...panels]
     const updatedPanel = updatedPanels[selectedPanel]
     if (updatedPanel) {
@@ -207,11 +249,11 @@ function App() {
     }
   }
 
-  const handleShapeLayersChange = useCallback((layers: ShapeLayer[], skipHistory = false) => {
-    debugLog('App', 'handleShapeLayersChange called', { 
-      newLayerCount: layers.length, 
+  const handleShapeLayersChange = useCallback((layers: ObjectLayer[], skipHistory = false) => {
+    debugLog('App', 'handleShapeLayersChange called', {
+      newLayerCount: layers.length,
       skipHistory,
-      selectedPanel: selectedPanelRef.current 
+      selectedPanel: selectedPanelRef.current
     })
     setPanels((prevPanels) => {
       const currentPanelIndex = selectedPanelRef.current
@@ -221,13 +263,13 @@ function App() {
         debugWarn('App', 'Panel not found', { currentPanelIndex })
         return prevPanels
       }
-      
+
       if (!skipHistory) {
         // Save current state to history before making changes
         const currentData = panel.data
         const currentShapeLayers = panel.shapeLayers
         const currentTextLayers = panel.textLayers
-        debugLog('App', 'Saving to history before shape change', { 
+        debugLog('App', 'Saving to history before shape change', {
           currentShapeLayerCount: currentShapeLayers.length,
           newShapeLayerCount: layers.length,
           panelIndex: currentPanelIndex
@@ -236,17 +278,17 @@ function App() {
       } else {
         debugLog('App', 'Skipping history save')
       }
-      
+
       nextPanels[currentPanelIndex] = { ...panel, shapeLayers: layers }
       return nextPanels
     })
   }, [])
 
   const handleTextLayersChange = useCallback((layers: TextLayer[], skipHistory = false) => {
-    debugLog('App', 'handleTextLayersChange called', { 
-      newLayerCount: layers.length, 
+    debugLog('App', 'handleTextLayersChange called', {
+      newLayerCount: layers.length,
       skipHistory,
-      selectedPanel: selectedPanelRef.current 
+      selectedPanel: selectedPanelRef.current
     })
     setPanels((prevPanels) => {
       const currentPanelIndex = selectedPanelRef.current
@@ -256,13 +298,13 @@ function App() {
         debugWarn('App', 'Panel not found', { currentPanelIndex })
         return prevPanels
       }
-      
+
       if (!skipHistory) {
         // Save current state to history before making changes
         const currentData = panel.data
         const currentShapeLayers = panel.shapeLayers
         const currentTextLayers = panel.textLayers
-        debugLog('App', 'Saving to history before text change', { 
+        debugLog('App', 'Saving to history before text change', {
           currentTextLayerCount: currentTextLayers.length,
           newTextLayerCount: layers.length,
           panelIndex: currentPanelIndex
@@ -271,7 +313,7 @@ function App() {
       } else {
         debugLog('App', 'Skipping history save')
       }
-      
+
       nextPanels[currentPanelIndex] = { ...panel, textLayers: layers }
       return nextPanels
     })
@@ -281,24 +323,24 @@ function App() {
     debugLog('App', 'Undo requested', { selectedPanel, historySize: getPanelHistory(selectedPanel).undo.length })
     const panel = panels[selectedPanel]
     if (!panel) return
-    
+
     const history = getPanelHistory(selectedPanel)
     const currentData = panel.data
     const currentShapeLayers = panel.shapeLayers
     const currentTextLayers = panel.textLayers
-    
-    debugLog('App', 'Undo check', { 
-      undoStackLength: history.undo.length, 
+
+    debugLog('App', 'Undo check', {
+      undoStackLength: history.undo.length,
       currentShapeLayerCount: currentShapeLayers.length,
       currentTextLayerCount: currentTextLayers.length,
-      hasData: !!currentData 
+      hasData: !!currentData
     })
-    
+
     if (history.undo.length === 0) {
       debugWarn('App', 'Nothing to undo - history is empty')
       return // Nothing to undo
     }
-    
+
     // Move current state to redo stack
     const currentState: PanelState = {
       data: currentData ? cloneImageData(currentData) : null,
@@ -309,7 +351,7 @@ function App() {
     if (history.redo.length > MAX_HISTORY) {
       history.redo.shift()
     }
-    
+
     // Restore previous state from undo stack
     const previousState = history.undo.pop()!
     const updatedPanels = [...panels]
@@ -326,17 +368,17 @@ function App() {
     debugLog('App', 'Redo requested', { selectedPanel })
     const panel = panels[selectedPanel]
     if (!panel) return
-    
+
     const history = getPanelHistory(selectedPanel)
     const currentData = panel.data
     const currentShapeLayers = panel.shapeLayers
     const currentTextLayers = panel.textLayers
-    
+
     if (history.redo.length === 0) {
       debugWarn('App', 'Nothing to redo')
       return // Nothing to redo
     }
-    
+
     // Move current state to undo stack
     const currentState: PanelState = {
       data: currentData ? cloneImageData(currentData) : null,
@@ -347,7 +389,7 @@ function App() {
     if (history.undo.length > MAX_HISTORY) {
       history.undo.shift()
     }
-    
+
     // Restore next state from redo stack
     const nextState = history.redo.pop()!
     const updatedPanels = [...panels]
@@ -378,21 +420,21 @@ function App() {
 
   const handleMovePanel = (index: number, direction: 'up' | 'down') => {
     debugLog('App', 'Move panel requested', { index, direction, totalPanels: panels.length })
-    
+
     // Validate move
     if (direction === 'up' && index === 0) return // Can't move first panel up
     if (direction === 'down' && index === panels.length - 1) return // Can't move last panel down
-    
+
     const newIndex = direction === 'up' ? index - 1 : index + 1
-    
+
     // Create new array with panels swapped
     const updatedPanels = [...panels]
     const [movedPanel] = updatedPanels.splice(index, 1)
     if (!movedPanel) return // Safety check
     updatedPanels.splice(newIndex, 0, movedPanel)
-    
+
     setPanels(updatedPanels)
-    
+
     // Update selected panel index
     if (selectedPanel === index) {
       // If we moved the selected panel, update its index
@@ -507,7 +549,7 @@ function App() {
           const jsonStr = event.target?.result as string
           const comicFile: ComicFile = JSON.parse(jsonStr)
           debugLog('App', 'Comic file parsed', { version: comicFile.version, panelCount: comicFile.panels.length })
-          
+
           // Convert base64 back to ImageData (async)
           const loadedPanels: PanelData[] = await Promise.all(
             comicFile.panels.map(async (panel, index) => ({
@@ -556,7 +598,7 @@ function App() {
         resolve(null)
         return
       }
-      
+
       const img = new Image()
       img.onload = () => {
         ctx.drawImage(img, 0, 0)
@@ -591,7 +633,7 @@ function App() {
     // Draw shape layers if any
     if (panel.shapeLayers && panel.shapeLayers.length > 0) {
       panel.shapeLayers.forEach((layer) => {
-        renderShapeLayerOnContext(ctx, layer)
+        renderObjectLayerOnContext(ctx, layer)
       })
     }
 
@@ -634,7 +676,7 @@ function App() {
           continue
         }
         const canvas = renderPanelToCanvas(panel)
-        
+
         if (!canvas) {
           console.error(`Failed to render panel ${i + 1}`)
           continue
@@ -642,7 +684,7 @@ function App() {
 
         // Convert canvas to image
         const imgData = canvas.toDataURL('image/png')
-        
+
         // Add new page for each panel except the first
         if (i > 0) {
           pdf.addPage()
@@ -724,15 +766,15 @@ function App() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h1>🎨 Comic Drawer</h1>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button 
-              onClick={handleUndo} 
+            <button
+              onClick={handleUndo}
               style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', cursor: 'pointer' }}
               title="Undo (Ctrl+Z)"
             >
               ↶ Undo
             </button>
-            <button 
-              onClick={handleRedo} 
+            <button
+              onClick={handleRedo}
               style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', cursor: 'pointer' }}
               title="Redo (Ctrl+Shift+Z)"
             >
@@ -754,8 +796,8 @@ function App() {
         </div>
       </header>
       <main>
-        <Toolbar 
-          currentTool={currentTool} 
+        <Toolbar
+          currentTool={currentTool}
           onToolChange={setCurrentTool}
           color={selectedColor}
           onColorChange={setSelectedColor}
@@ -771,7 +813,7 @@ function App() {
           selectedEmoji={selectedEmoji}
           onSelectEmoji={setSelectedEmoji}
         />
-        <PanelLayout 
+        <PanelLayout
           panels={panels}
           selectedPanel={selectedPanel}
           onPanelSelect={handlePanelSwitch}
@@ -781,8 +823,8 @@ function App() {
           onMovePanel={handleMovePanel}
         />
         {panels[selectedPanel] && (
-          <Canvas 
-            tool={currentTool} 
+          <Canvas
+            tool={currentTool}
             shape={selectedShape}
             penType={selectedPenType}
             color={selectedColor}

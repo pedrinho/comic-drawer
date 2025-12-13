@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { PanelData } from '../App'
-import { ShapeLayer, TextLayer } from '../types/layers'
+import { ShapeLayer, TextLayer, PathObjectLayer, isPathObjectLayer, isShapeObjectLayer } from '../types/layers'
 import { traceShapePath } from '../utils/canvasUtils'
 import './Presentation.css'
 
@@ -30,11 +30,40 @@ const renderShapeLayerOnContext = (ctx: CanvasRenderingContext2D, layer: ShapeLa
   ctx.restore()
 }
 
+const renderPathLayerOnContext = (ctx: CanvasRenderingContext2D, layer: PathObjectLayer) => {
+  const { x, y, width, height, rotation, strokeColor, strokeWidth, points } = layer
+  const centerX = x + width / 2
+  const centerY = y + height / 2
+
+  ctx.save()
+  ctx.translate(centerX, centerY)
+  ctx.rotate(rotation)
+
+  ctx.strokeStyle = strokeColor
+  ctx.lineWidth = strokeWidth
+  ctx.beginPath()
+
+  if (points.length > 0 && points[0]) {
+    // Offset points to center them around (0,0) in the rotated context
+    const offsetX = -width / 2
+    const offsetY = -height / 2
+
+    ctx.moveTo(points[0].x + offsetX, points[0].y + offsetY)
+    for (let i = 1; i < points.length; i++) {
+      const p = points[i]
+      if (p) ctx.lineTo(p.x + offsetX, p.y + offsetY)
+    }
+  }
+
+  ctx.stroke()
+  ctx.restore()
+}
+
 const renderTextLayerOnContext = (ctx: CanvasRenderingContext2D, layer: TextLayer) => {
   const { x, y, width, height, rotation, text, font, fontSize, color } = layer
   const centerX = x + width / 2
   const centerY = y + height / 2
-  
+
   // In presentation mode, the context is already scaled, so we use fontSize directly
   ctx.save()
   ctx.translate(centerX, centerY)
@@ -64,7 +93,7 @@ export default function Presentation({ panels, currentIndex, onNext, onPrevious,
     // Account for padding when calculating available space
     const container = canvas.parentElement
     if (!container) return
-    
+
     // Use requestAnimationFrame to ensure layout is calculated
     requestAnimationFrame(() => {
       const containerRect = container.getBoundingClientRect()
@@ -73,17 +102,17 @@ export default function Presentation({ panels, currentIndex, onNext, onPrevious,
       const paddingBottom = parseFloat(containerStyle.paddingBottom) || 0
       const paddingLeft = parseFloat(containerStyle.paddingLeft) || 0
       const paddingRight = parseFloat(containerStyle.paddingRight) || 0
-      
+
       // Available space for drawing (excluding padding)
       const availableWidth = containerRect.width - paddingLeft - paddingRight
       const availableHeight = containerRect.height - paddingTop - paddingBottom
-      
+
       // Set canvas size to match container (accounting for device pixel ratio for crisp rendering)
       const dpr = window.devicePixelRatio || 1
       canvas.width = containerRect.width * dpr
       canvas.height = containerRect.height * dpr
       ctx.scale(dpr, dpr)
-      
+
       // Adjust available dimensions for device pixel ratio
       const scaledAvailableWidth = availableWidth
       const scaledAvailableHeight = availableHeight
@@ -102,13 +131,13 @@ export default function Presentation({ panels, currentIndex, onNext, onPrevious,
       // Calculate scale factors for both dimensions using available space
       const scaleToFitWidth = scaledAvailableWidth / 1200
       const scaleToFitHeight = scaledAvailableHeight / 800
-    
+
       // Use the smaller scale to ensure the entire panel fits (both width and height)
       const scale = Math.min(scaleToFitWidth, scaleToFitHeight)
-      
+
       drawWidth = 1200 * scale
       drawHeight = 800 * scale
-      
+
       // Center in the available space (accounting for padding)
       offsetX = paddingLeft + (scaledAvailableWidth - drawWidth) / 2
       offsetY = paddingTop + (scaledAvailableHeight - drawHeight) / 2
@@ -141,19 +170,19 @@ export default function Presentation({ panels, currentIndex, onNext, onPrevious,
       ctx.save()
       ctx.strokeStyle = '#000000'
       ctx.lineWidth = 3 // Fixed pixel width in screen space
-      
+
       const totalRows = panel.layout.rows
       const gutter = 12 // Space between panels (and around edges)
 
       for (let row = 0; row < totalRows; row++) {
         const columnsInRow = panel.layout.columns[row] || 1
-        
+
         // Calculate spacing: gutter on each side + gutters between cells
         const totalVerticalGutters = gutter * 2 + (totalRows - 1) * gutter
         const totalHorizontalGutters = gutter * 2 + (columnsInRow - 1) * gutter
         const panelHeight = (800 - totalVerticalGutters) / totalRows
         const panelWidth = (1200 - totalHorizontalGutters) / columnsInRow
-        
+
         // Convert to screen coordinates
         let currentX = offsetX + gutter * scaleX
         const currentY = offsetY + (gutter + (row * (panelHeight + gutter))) * scaleY
@@ -179,7 +208,11 @@ export default function Presentation({ panels, currentIndex, onNext, onPrevious,
       // Draw shape layers
       if (panel.shapeLayers && panel.shapeLayers.length > 0) {
         panel.shapeLayers.forEach((layer) => {
-          renderShapeLayerOnContext(ctx, layer)
+          if (isPathObjectLayer(layer)) {
+            renderPathLayerOnContext(ctx, layer)
+          } else if (isShapeObjectLayer(layer)) {
+            renderShapeLayerOnContext(ctx, layer)
+          }
         })
       }
 
