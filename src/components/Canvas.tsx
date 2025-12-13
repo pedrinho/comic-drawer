@@ -274,14 +274,42 @@ const drawSelectionOutline = (ctx: CanvasRenderingContext2D, rect: SelectionRect
   ctx.lineWidth = 1.5
   ctx.setLineDash([6, 4])
 
+  const drawLabel = (text: string, x: number, y: number) => {
+    ctx.save()
+    ctx.setLineDash([])
+    ctx.font = '12px sans-serif'
+    ctx.textBaseline = 'middle'
+    ctx.textAlign = 'center'
+
+    const metrics = ctx.measureText(text)
+    const padding = 4
+    const height = 16
+    const width = metrics.width + padding * 2
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
+    ctx.fillRect(x - width / 2, y - height / 2, width, height)
+
+    ctx.fillStyle = '#4c6ef5'
+    ctx.fillText(text, x, y)
+    ctx.restore()
+  }
+
   if (rotation === 0) {
     ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.width, rect.height)
+
+    // Draw dimensions
+    drawLabel(`${Math.round(rect.width)}`, rect.x + rect.width / 2, rect.y + rect.height + 15)
+    drawLabel(`${Math.round(rect.height)}`, rect.x + rect.width + 25, rect.y + rect.height / 2)
   } else {
     const centerX = rect.x + rect.width / 2
     const centerY = rect.y + rect.height / 2
     ctx.translate(centerX, centerY)
     ctx.rotate(rotation)
     ctx.strokeRect(-rect.width / 2 + 0.5, -rect.height / 2 + 0.5, rect.width, rect.height)
+
+    // Draw dimensions relative to center
+    drawLabel(`${Math.round(rect.width)}`, 0, rect.height / 2 + 15)
+    drawLabel(`${Math.round(rect.height)}`, rect.width / 2 + 25, 0)
   }
 
   ctx.restore()
