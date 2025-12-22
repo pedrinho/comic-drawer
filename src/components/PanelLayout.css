@@ -1,148 +1,187 @@
 .panel-layout {
+  height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 1rem;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 12px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  min-width: 150px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
 }
 
 .panel-layout h3 {
-  margin-bottom: 1rem;
-  color: #333;
-  font-size: 1.1rem;
+  padding: 16px;
+  margin: 0;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(10px);
 }
 
-.panels-container {
+.panels-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 4px;
 }
 
-.panel {
-  padding: 0.5rem;
-  border: 2px solid #e0e0e0;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  background: white;
-  text-align: center;
-  font-size: 0.9rem;
+.panel-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  position: relative;
+  padding: 8px;
+  background: transparent;
+  border-radius: var(--radius-md);
+  cursor: default;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+  user-select: none;
+  border: 1px solid transparent;
+  gap: 8px;
 }
 
-.panel > span,
-.panel-name {
+.panel-item:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.panel-item.selected {
+  background: #e3ebf5;
+  /* Light blue tint */
+  border-color: rgba(0, 122, 255, 0.1);
+}
+
+.panel-item.selected .panel-name {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.panel-item.dragging {
+  background: white;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  border-color: var(--primary);
+  transform: scale(1.02);
+  z-index: 100;
+  opacity: 0.9;
+}
+
+.drag-handle {
+  color: var(--text-muted);
+  cursor: grab;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  /* Hidden by default */
+  transition: opacity 0.2s ease;
+}
+
+.panel-item:hover .drag-handle,
+.panel-item.selected .drag-handle,
+.drag-handle:active {
+  opacity: 1;
+}
+
+.drag-handle:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-main);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.panel-content {
   flex: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  /* Text truncation fix */
+}
+
+.panel-name {
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .panel-name-input {
-  flex: 1;
-  border: 2px solid #667eea;
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--primary);
   border-radius: 4px;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.9rem;
-  font-family: inherit;
-  background: white;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
   outline: none;
-  min-width: 0;
-}
-
-.panel:hover {
-  border-color: #667eea;
-  transform: scale(1.02);
-}
-
-.panel.selected {
-  font-weight: 600;
-}
-
-.add-panel-btn {
-  padding: 0.5rem;
-  border: 2px dashed #999;
-  border-radius: 8px;
-  background: white;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  color: #667eea;
-  font-weight: 600;
-  font-size: 0.9rem;
-}
-
-.add-panel-btn:hover {
-  border-color: #667eea;
-  background: #eef2ff;
-}
-
-.panel-controls {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  flex-shrink: 0;
-}
-
-.panel-move-btn {
-  padding: 0.25rem 0.4rem;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  color: #999;
-  font-size: 1rem;
-  font-weight: bold;
-  line-height: 1;
-  width: 1.5rem;
-  height: 1.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.panel-move-btn:hover:not(:disabled) {
-  background: #eef2ff;
-  color: #667eea;
-  transform: scale(1.1);
-}
-
-.panel-move-btn:active:not(:disabled) {
-  transform: scale(0.95);
-}
-
-.panel-move-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
+  box-shadow: 0 0 0 2px var(--primary-light);
 }
 
 .panel-delete-btn {
-  padding: 0.25rem 0.5rem;
-  border: none;
-  border-radius: 4px;
   background: transparent;
+  border: none;
+  color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.2s ease;
-  color: #999;
-  font-size: 1.2rem;
-  font-weight: bold;
-  line-height: 1;
-  width: 1.5rem;
-  height: 1.5rem;
+  padding: 4px;
+  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
+  opacity: 0;
+  transition: all 0.2s ease;
+  position: relative;
+  z-index: 20;
+  /* Ensure it's above drag layer */
+}
+
+.panel-item:hover .panel-delete-btn {
+  opacity: 1;
 }
 
 .panel-delete-btn:hover {
-  background: #fee;
-  color: #e74c3c;
-  transform: scale(1.1);
+  background: rgba(255, 59, 48, 0.1);
+  /* Red tint */
+  color: #FF3B30;
+  /* System Red */
 }
 
-.panel-delete-btn:active {
-  transform: scale(0.95);
+.panel-move-handle-zone {
+  /* Create a specific zone for dragging if needed, but for now we rely on the handle */
+  display: flex;
+  align-items: center;
+}
+
+.add-panel-btn {
+  margin: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.add-panel-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: #fcfcfd;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.add-panel-btn:active {
+  transform: scale(0.98);
 }

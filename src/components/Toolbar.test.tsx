@@ -96,10 +96,10 @@ describe('Toolbar', () => {
   it('shows pen picker when pen tool is active and clicked', async () => {
     const user = userEvent.setup()
     render(<Toolbar {...defaultProps} currentTool="pen" />)
-    
+
     // Click pen button to show submenu
     await user.click(screen.getByText('Pen').closest('button')!)
-    
+
     expect(screen.getByText('Fine')).toBeInTheDocument()
     expect(screen.getByText('Small')).toBeInTheDocument()
     expect(screen.getByText('Medium')).toBeInTheDocument()
@@ -108,10 +108,10 @@ describe('Toolbar', () => {
   it('shows shape picker when shapes tool is active and clicked', async () => {
     const user = userEvent.setup()
     render(<Toolbar {...defaultProps} currentTool="shapes" />)
-    
+
     // Click shapes button to show submenu
     await user.click(screen.getByText('Shapes').closest('button')!)
-    
+
     expect(screen.getByTitle('rectangle')).toBeInTheDocument()
     expect(screen.getByTitle('circle')).toBeInTheDocument()
   })
@@ -123,7 +123,7 @@ describe('Toolbar', () => {
 
     // First click to show submenu
     await user.click(screen.getByText('Pen').closest('button')!)
-    
+
     // Then click pen type
     await user.click(screen.getByText('Fine'))
     expect(onSelectPenType).toHaveBeenCalledWith('fine')
@@ -136,7 +136,7 @@ describe('Toolbar', () => {
 
     // First click to show submenu
     await user.click(screen.getByText('Shapes').closest('button')!)
-    
+
     // Then click shape (using title attribute)
     await user.click(screen.getByTitle('circle'))
     expect(onSelectShape).toHaveBeenCalledWith('circle')
@@ -145,12 +145,13 @@ describe('Toolbar', () => {
   it('shows font controls when text tool is active', async () => {
     const user = userEvent.setup()
     render(<Toolbar {...defaultProps} currentTool="text" />)
-    
+
     // Click text button to show submenu
     await user.click(screen.getByText('Text').closest('button')!)
-    
-    expect(screen.getByLabelText('Font:')).toBeInTheDocument()
-    expect(screen.getByLabelText('Size:')).toBeInTheDocument()
+
+    expect(screen.getByTitle('Select font')).toBeInTheDocument()
+    expect(screen.getByTitle('Decrease size')).toBeInTheDocument()
+    expect(screen.getByTitle('Increase size')).toBeInTheDocument()
   })
 
   it('calls onFontChange when font is changed', async () => {
@@ -161,7 +162,7 @@ describe('Toolbar', () => {
     // Click text button to show submenu
     await user.click(screen.getByText('Text').closest('button')!)
 
-    const fontSelect = screen.getByLabelText('Font:') as HTMLSelectElement
+    const fontSelect = screen.getByTitle('Select font') as HTMLSelectElement
     await user.selectOptions(fontSelect, 'Times New Roman')
 
     expect(onFontChange).toHaveBeenCalledWith('Times New Roman')
@@ -170,16 +171,16 @@ describe('Toolbar', () => {
   it('calls onFontSizeChange when font size is changed', async () => {
     const user = userEvent.setup()
     const onFontSizeChange = vi.fn()
-    render(<Toolbar {...defaultProps} currentTool="text" onFontSizeChange={onFontSizeChange} />)
+    // Start with 24px
+    render(<Toolbar {...defaultProps} currentTool="text" fontSize={24} onFontSizeChange={onFontSizeChange} />)
 
     // Click text button to show submenu
     await user.click(screen.getByText('Text').closest('button')!)
 
-    const fontSizeInput = screen.getByLabelText('Size:') as HTMLInputElement
-    await user.clear(fontSizeInput)
-    await user.type(fontSizeInput, '32')
+    const increaseBtn = screen.getByTitle('Increase size')
+    await user.click(increaseBtn)
 
-    expect(onFontSizeChange).toHaveBeenCalled()
+    expect(onFontSizeChange).toHaveBeenCalledWith(26) // 24 + 2
   })
 
   it('hides pen picker when pen tool is not active', () => {
@@ -194,8 +195,8 @@ describe('Toolbar', () => {
 
   it('hides font controls when text tool is not active', () => {
     render(<Toolbar {...defaultProps} currentTool="pen" />)
-    expect(screen.queryByLabelText('Font:')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Size:')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Select font')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Increase size')).not.toBeInTheDocument()
   })
 
   it('toggles pen submenu when pen button is clicked', async () => {
@@ -205,13 +206,13 @@ describe('Toolbar', () => {
 
     // Click pen button to toggle submenu
     await user.click(screen.getByText('Pen').closest('button')!)
-    
+
     // Should show pen picker
     expect(screen.getByText('Fine')).toBeInTheDocument()
-    
+
     // Click again to hide
     await user.click(screen.getByText('Pen').closest('button')!)
-    
+
     // Should hide pen picker
     expect(screen.queryByText('Fine')).not.toBeInTheDocument()
   })
@@ -223,13 +224,13 @@ describe('Toolbar', () => {
 
     // Click shapes button to toggle submenu
     await user.click(screen.getByText('Shapes').closest('button')!)
-    
+
     // Should show shape picker (check by title attribute)
     expect(screen.getByTitle('rectangle')).toBeInTheDocument()
-    
+
     // Click again to hide
     await user.click(screen.getByText('Shapes').closest('button')!)
-    
+
     // Should hide shape picker
     expect(screen.queryByTitle('rectangle')).not.toBeInTheDocument()
   })

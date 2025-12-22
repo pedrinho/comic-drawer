@@ -1,13 +1,59 @@
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+  /* Colors - Apple Inspired */
+  --primary: #007AFF;
+  --primary-hover: #0062CC;
+  --primary-light: #E5F1FF;
+
+  --secondary: #5E5CE6;
+  --secondary-hover: #4F4BC9;
+
+  --bg-app: #F5F5F7;
+  /* Apple classic light gray background */
+  --surface: #FFFFFF;
+  --surface-translucent: rgba(255, 255, 255, 0.8);
+
+  --text-main: #1D1D1F;
+  --text-secondary: #86868B;
+  --text-muted: #A1A1A6;
+
+  --border: #D2D2D7;
+  --border-light: #E5E5EA;
+
+  --danger: #FF3B30;
+  --success: #34C759;
+  --warning: #FF9500;
+
+  /* Typography */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-heading: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 18px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.12);
+  --shadow-inner: inset 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
@@ -15,6 +61,9 @@ body {
   display: flex;
   min-width: 320px;
   min-height: 100vh;
+  font-family: var(--font-sans);
+  color: var(--text-main);
+  background-color: var(--bg-app);
 }
 
 #root {
@@ -25,28 +74,80 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--bg-app);
 }
 
 header {
-  background: rgba(255, 255, 255, 0.95);
-  padding: 0.5rem 1rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.85);
+  /* Translucent background */
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: 0 var(--spacing-lg);
+  height: 52px;
+  /* Standard toolbar height */
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
+  /* Very subtle separator */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 header h1 {
-  font-size: 1.2rem;
-  color: #333;
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.header-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.header-btn {
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-main);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.header-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.header-btn:active {
+  background: rgba(0, 0, 0, 0.1);
+  transform: scale(0.98);
 }
 
 main {
   display: flex;
   flex: 1;
-  gap: 1rem;
-  padding: 1rem;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-lg);
   overflow: hidden;
+  max-width: 1400px;
+  /* Constrain max width for readability on huge screens */
+  margin: 0 auto;
+  width: 100%;
 }
 
-main > :first-child {
+main> :first-child {
   flex-shrink: 0;
 }

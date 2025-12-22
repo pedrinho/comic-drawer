@@ -20,14 +20,18 @@ export default function FontPicker({ isOpen, font, onFontChange, fontSize, onFon
     'Comic Sans MS',
     'Impact',
     'Trebuchet MS',
+    'Helvetica',
+    '-apple-system'
   ]
 
+  const handleDecreaseSize = () => onFontSizeChange(Math.max(8, fontSize - 2))
+  const handleIncreaseSize = () => onFontSizeChange(Math.min(200, fontSize + 2))
+
   return (
-    <div className="font-picker-inline">
-      <div className="font-selector-inline">
-        <label htmlFor="font-picker">Font:</label>
+    <div className="font-picker-container">
+      <div className="font-control-row">
         <select
-          id="font-picker"
+          className="font-select"
           value={font}
           onChange={(e) => onFontChange(e.target.value)}
           title="Select font"
@@ -39,17 +43,15 @@ export default function FontPicker({ isOpen, font, onFontChange, fontSize, onFon
           ))}
         </select>
       </div>
-      <div className="font-size-selector-inline">
-        <label htmlFor="font-size-picker">Size:</label>
-        <input
-          id="font-size-picker"
-          type="number"
-          min="8"
-          max="200"
-          value={fontSize}
-          onChange={(e) => onFontSizeChange(parseInt(e.target.value) || 24)}
-          title="Font size"
-        />
+
+      <div className="font-size-controls">
+        <button className="font-size-btn" onClick={handleDecreaseSize} title="Decrease size">
+          A-
+        </button>
+        <div className="font-size-display">{fontSize}px</div>
+        <button className="font-size-btn" onClick={handleIncreaseSize} title="Increase size">
+          A+
+        </button>
       </div>
     </div>
   )

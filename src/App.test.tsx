@@ -6,7 +6,7 @@ import App from './App'
 describe('App', () => {
   it('renders the app title', () => {
     render(<App />)
-    expect(screen.getByText('🎨 Comic Drawer')).toBeInTheDocument()
+    expect(screen.getByText('Comic Drawer')).toBeInTheDocument()
   })
 
   it('renders toolbar', () => {
@@ -23,7 +23,7 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByText('+ Add Panel'))
+    await user.click(screen.getByText('New Panel'))
 
     await waitFor(() => {
       expect(screen.getByText('Configure Panel Layout')).toBeInTheDocument()
@@ -40,7 +40,7 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByText('+ Add Panel'))
+    await user.click(screen.getByText('New Panel'))
 
     await waitFor(() => {
       expect(screen.getByText('Configure Panel Layout')).toBeInTheDocument()
@@ -52,7 +52,7 @@ describe('App', () => {
     render(<App />)
 
     // Add a second panel
-    await user.click(screen.getByText('+ Add Panel'))
+    await user.click(screen.getByText('New Panel'))
     await waitFor(() => {
       expect(screen.getByText('Configure Panel Layout')).toBeInTheDocument()
     })
@@ -67,7 +67,7 @@ describe('App', () => {
     const panel2 = screen.getByText('Panel 2')
     await user.click(panel2)
 
-    const panel2Div = panel2.closest('div')
+    const panel2Div = panel2.closest('.panel-item')
     expect(panel2Div).toHaveClass('selected')
   })
 
@@ -99,16 +99,16 @@ describe('App', () => {
     await user.click(screen.getByText('Pen'))
 
     await waitFor(() => {
-      expect(screen.getByTitle('Fine')).toBeInTheDocument()
+      expect(screen.getByTitle('Fine (2px)')).toBeInTheDocument()
     })
   })
 
   it('has undo, redo, save, load, and export PDF buttons', () => {
     render(<App />)
-    expect(screen.getByText('↶ Undo')).toBeInTheDocument()
-    expect(screen.getByText('↷ Redo')).toBeInTheDocument()
-    expect(screen.getByText('💾 Save')).toBeInTheDocument()
-    expect(screen.getByText('📂 Load')).toBeInTheDocument()
-    expect(screen.getByText('📄 Export PDF')).toBeInTheDocument()
+    expect(screen.getByTitle(/Undo/)).toBeInTheDocument()
+    expect(screen.getByTitle(/Redo/)).toBeInTheDocument()
+    expect(screen.getByText(/Save/)).toBeInTheDocument()
+    expect(screen.getByText(/Load/)).toBeInTheDocument()
+    expect(screen.getByText(/Export PDF/)).toBeInTheDocument()
   })
 })

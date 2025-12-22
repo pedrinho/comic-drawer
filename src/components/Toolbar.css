@@ -1,87 +1,111 @@
 .toolbar {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 1rem;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 12px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  gap: 2px;
+  /* Super tight gap for segmented control look */
+  padding: 4px;
+  /* Small padding wrapper */
+  background: rgba(235, 235, 240, 0.8);
+  /* Light gray translucent */
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05), var(--shadow-lg);
   width: fit-content;
   min-width: 200px;
   max-width: 200px;
   flex-shrink: 0;
   position: relative;
+  /* Reset border */
+  border: none;
 }
 
 .tool-btn {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem;
-  border: 2px solid transparent;
-  border-radius: 8px;
-  background: white;
+  gap: var(--spacing-md);
+  padding: 8px 12px;
+  border: none;
+  /* Removed border */
+  border-radius: var(--radius-sm);
+  background: transparent;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
+  font-family: var(--font-sans);
   font-size: 0.9rem;
+  color: var(--text-main);
   text-align: left;
   width: 100%;
 }
 
 .tool-btn:hover {
-  background: #f0f0f0;
-  transform: translateX(4px);
+  background: rgba(0, 0, 0, 0.05);
+  /* Subtle hover */
+  transform: none;
+  /* No movement on hover, typical of pro apps */
 }
 
 .tool-btn.active {
-  font-weight: 600;
+  background: var(--surface);
+  /* White card active state */
+  color: var(--primary);
+  font-weight: 500;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  /* Lifted effect */
 }
 
 .tool-icon {
-  font-size: 1rem;
+  font-size: 1.1rem;
+  width: 20px;
+  text-align: center;
 }
 
 .tool-label {
-  font-weight: 500;
+  font-weight: 400;
+  /* Regular weight */
 }
 
 .color-selector {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 1rem;
-  border: 2px solid transparent;
-  border-radius: 8px;
-  background: white;
-  margin-top: 0.5rem;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  border: none;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.5);
+  /* Slightly lighter background */
+  margin-top: var(--spacing-sm);
 }
 
 .color-selector label {
-  font-weight: 600;
-  color: #333;
-  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-family: var(--font-sans);
+  flex: 1;
 }
 
 .color-selector input[type="color"] {
-  width: 60px;
-  height: 40px;
-  border: 2px solid #e0e0e0;
-  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  border: 2px solid white;
+  /* White ring */
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-full);
   cursor: pointer;
-  transition: all 0.2s ease;
+  overflow: hidden;
+  padding: 0;
 }
 
 .color-selector input[type="color"]:hover {
-  border-color: #667eea;
-  transform: scale(1.05);
+  transform: none;
 }
 
 .color-selector input[type="color"]::-webkit-color-swatch-wrapper {
   padding: 0;
-  border-radius: 4px;
 }
 
 .color-selector input[type="color"]::-webkit-color-swatch {
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-full);
 }

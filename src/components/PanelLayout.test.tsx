@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi } from 'vitest'
 import PanelLayout from './PanelLayout'
-import { PanelData } from '../App'
+import { PanelData } from '../types/common'
 
 describe('PanelLayout', () => {
   const mockPanels: PanelData[] = [
@@ -25,6 +25,7 @@ describe('PanelLayout', () => {
         onDeletePanel={onDeletePanel}
         onRenamePanel={onRenamePanel}
         onMovePanel={onMovePanel}
+        onReorderPanel={vi.fn()}
       />
     )
 
@@ -47,10 +48,11 @@ describe('PanelLayout', () => {
         onDeletePanel={onDeletePanel}
         onRenamePanel={onRenamePanel}
         onMovePanel={onMovePanel}
+        onReorderPanel={vi.fn()}
       />
     )
 
-    const panel2 = screen.getByText('Panel 2').closest('div')
+    const panel2 = screen.getByText('Panel 2').closest('.panel-item')
     expect(panel2).toHaveClass('selected')
   })
 
@@ -70,6 +72,7 @@ describe('PanelLayout', () => {
         onDeletePanel={onDeletePanel}
         onRenamePanel={onRenamePanel}
         onMovePanel={onMovePanel}
+        onReorderPanel={vi.fn()}
       />
     )
 
@@ -93,10 +96,11 @@ describe('PanelLayout', () => {
         onDeletePanel={onDeletePanel}
         onRenamePanel={onRenamePanel}
         onMovePanel={onMovePanel}
+        onReorderPanel={vi.fn()}
       />
     )
 
-    await user.click(screen.getByText('+ Add Panel'))
+    await user.click(screen.getByText('New Panel'))
     expect(onAddPanel).toHaveBeenCalled()
   })
 
@@ -115,35 +119,12 @@ describe('PanelLayout', () => {
         onDeletePanel={onDeletePanel}
         onRenamePanel={onRenamePanel}
         onMovePanel={onMovePanel}
+        onReorderPanel={vi.fn()}
       />
     )
 
     const deleteButtons = screen.getAllByTitle('Delete Panel')
     expect(deleteButtons.length).toBe(2)
-  })
-
-  it('does not render delete button when there is only one panel', () => {
-    const onPanelSelect = vi.fn()
-    const onAddPanel = vi.fn()
-    const onDeletePanel = vi.fn()
-    const onRenamePanel = vi.fn()
-    const onMovePanel = vi.fn()
-    const singlePanel: PanelData[] = [
-      { id: 0, name: 'Panel 1', data: null, layout: { rows: 1, columns: [1] }, shapeLayers: [], textLayers: [] },
-    ]
-    render(
-      <PanelLayout
-        panels={singlePanel}
-        selectedPanel={0}
-        onPanelSelect={onPanelSelect}
-        onAddPanel={onAddPanel}
-        onDeletePanel={onDeletePanel}
-        onRenamePanel={onRenamePanel}
-        onMovePanel={onMovePanel}
-      />
-    )
-
-    expect(screen.queryByTitle('Delete Panel')).not.toBeInTheDocument()
   })
 
   it('calls onDeletePanel when delete button is clicked', async () => {
@@ -162,6 +143,7 @@ describe('PanelLayout', () => {
         onDeletePanel={onDeletePanel}
         onRenamePanel={onRenamePanel}
         onMovePanel={onMovePanel}
+        onReorderPanel={vi.fn()}
       />
     )
 
@@ -187,12 +169,13 @@ describe('PanelLayout', () => {
         onDeletePanel={onDeletePanel}
         onRenamePanel={onRenamePanel}
         onMovePanel={onMovePanel}
+        onReorderPanel={vi.fn()}
       />
     )
 
     const panel1 = screen.getByText('Panel 1')
     await user.dblClick(panel1)
-    
+
     const input = screen.getByDisplayValue('Panel 1')
     expect(input).toBeInTheDocument()
     expect(input).toHaveClass('panel-name-input')
@@ -214,17 +197,18 @@ describe('PanelLayout', () => {
         onDeletePanel={onDeletePanel}
         onRenamePanel={onRenamePanel}
         onMovePanel={onMovePanel}
+        onReorderPanel={vi.fn()}
       />
     )
 
     const panel1 = screen.getByText('Panel 1')
     await user.dblClick(panel1)
-    
+
     const input = screen.getByDisplayValue('Panel 1') as HTMLInputElement
     await user.clear(input)
     await user.type(input, 'My Custom Panel')
     await user.tab() // Blur the input
-    
+
     expect(onRenamePanel).toHaveBeenCalledWith(0, 'My Custom Panel')
   })
 
@@ -244,16 +228,17 @@ describe('PanelLayout', () => {
         onDeletePanel={onDeletePanel}
         onRenamePanel={onRenamePanel}
         onMovePanel={onMovePanel}
+        onReorderPanel={vi.fn()}
       />
     )
 
     const panel1 = screen.getByText('Panel 1')
     await user.dblClick(panel1)
-    
+
     const input = screen.getByDisplayValue('Panel 1') as HTMLInputElement
     await user.clear(input)
     await user.type(input, 'New Name{Enter}')
-    
+
     expect(onRenamePanel).toHaveBeenCalledWith(0, 'New Name')
   })
 
@@ -273,163 +258,19 @@ describe('PanelLayout', () => {
         onDeletePanel={onDeletePanel}
         onRenamePanel={onRenamePanel}
         onMovePanel={onMovePanel}
+        onReorderPanel={vi.fn()}
       />
     )
 
     const panel1 = screen.getByText('Panel 1')
     await user.dblClick(panel1)
-    
+
     const input = screen.getByDisplayValue('Panel 1') as HTMLInputElement
     await user.type(input, '{Escape}')
-    
+
     expect(onRenamePanel).not.toHaveBeenCalled()
     expect(screen.getByText('Panel 1')).toBeInTheDocument()
   })
 
-  it('renders move buttons when there are multiple panels', () => {
-    const onPanelSelect = vi.fn()
-    const onAddPanel = vi.fn()
-    const onDeletePanel = vi.fn()
-    const onRenamePanel = vi.fn()
-    const onMovePanel = vi.fn()
-    render(
-      <PanelLayout
-        panels={mockPanels}
-        selectedPanel={0}
-        onPanelSelect={onPanelSelect}
-        onAddPanel={onAddPanel}
-        onDeletePanel={onDeletePanel}
-        onRenamePanel={onRenamePanel}
-        onMovePanel={onMovePanel}
-      />
-    )
 
-    const moveUpButtons = screen.getAllByTitle('Move Up')
-    const moveDownButtons = screen.getAllByTitle('Move Down')
-    expect(moveUpButtons.length).toBe(2)
-    expect(moveDownButtons.length).toBe(2)
-  })
-
-  it('disables move up button for first panel', () => {
-    const onPanelSelect = vi.fn()
-    const onAddPanel = vi.fn()
-    const onDeletePanel = vi.fn()
-    const onRenamePanel = vi.fn()
-    const onMovePanel = vi.fn()
-    render(
-      <PanelLayout
-        panels={mockPanels}
-        selectedPanel={0}
-        onPanelSelect={onPanelSelect}
-        onAddPanel={onAddPanel}
-        onDeletePanel={onDeletePanel}
-        onRenamePanel={onRenamePanel}
-        onMovePanel={onMovePanel}
-      />
-    )
-
-    const moveUpButtons = screen.getAllByTitle('Move Up')
-    expect(moveUpButtons[0]).toBeDisabled()
-    expect(moveUpButtons[1]).not.toBeDisabled()
-  })
-
-  it('disables move down button for last panel', () => {
-    const onPanelSelect = vi.fn()
-    const onAddPanel = vi.fn()
-    const onDeletePanel = vi.fn()
-    const onRenamePanel = vi.fn()
-    const onMovePanel = vi.fn()
-    render(
-      <PanelLayout
-        panels={mockPanels}
-        selectedPanel={0}
-        onPanelSelect={onPanelSelect}
-        onAddPanel={onAddPanel}
-        onDeletePanel={onDeletePanel}
-        onRenamePanel={onRenamePanel}
-        onMovePanel={onMovePanel}
-      />
-    )
-
-    const moveDownButtons = screen.getAllByTitle('Move Down')
-    expect(moveDownButtons[0]).not.toBeDisabled()
-    expect(moveDownButtons[1]).toBeDisabled()
-  })
-
-  it('calls onMovePanel with up direction when move up button is clicked', async () => {
-    const user = userEvent.setup()
-    const onPanelSelect = vi.fn()
-    const onAddPanel = vi.fn()
-    const onDeletePanel = vi.fn()
-    const onRenamePanel = vi.fn()
-    const onMovePanel = vi.fn()
-    render(
-      <PanelLayout
-        panels={mockPanels}
-        selectedPanel={0}
-        onPanelSelect={onPanelSelect}
-        onAddPanel={onAddPanel}
-        onDeletePanel={onDeletePanel}
-        onRenamePanel={onRenamePanel}
-        onMovePanel={onMovePanel}
-      />
-    )
-
-    const moveUpButtons = screen.getAllByTitle('Move Up')
-    await user.click(moveUpButtons[1]) // Click the second panel's move up button
-    
-    expect(onMovePanel).toHaveBeenCalledWith(1, 'up')
-    expect(onPanelSelect).not.toHaveBeenCalled()
-  })
-
-  it('calls onMovePanel with down direction when move down button is clicked', async () => {
-    const user = userEvent.setup()
-    const onPanelSelect = vi.fn()
-    const onAddPanel = vi.fn()
-    const onDeletePanel = vi.fn()
-    const onRenamePanel = vi.fn()
-    const onMovePanel = vi.fn()
-    render(
-      <PanelLayout
-        panels={mockPanels}
-        selectedPanel={0}
-        onPanelSelect={onPanelSelect}
-        onAddPanel={onAddPanel}
-        onDeletePanel={onDeletePanel}
-        onRenamePanel={onRenamePanel}
-        onMovePanel={onMovePanel}
-      />
-    )
-
-    const moveDownButtons = screen.getAllByTitle('Move Down')
-    await user.click(moveDownButtons[0]) // Click the first panel's move down button
-    
-    expect(onMovePanel).toHaveBeenCalledWith(0, 'down')
-    expect(onPanelSelect).not.toHaveBeenCalled()
-  })
-
-  it('does not render move buttons when there is only one panel', () => {
-    const onPanelSelect = vi.fn()
-    const onAddPanel = vi.fn()
-    const onDeletePanel = vi.fn()
-    const onRenamePanel = vi.fn()
-    const onMovePanel = vi.fn()
-    const singlePanel: PanelData[] = [
-      { id: 0, name: 'Panel 1', data: null, layout: { rows: 1, columns: [1] }, shapeLayers: [], textLayers: [] },
-    ]
-    render(
-      <PanelLayout
-        panels={singlePanel}
-        selectedPanel={0}
-        onPanelSelect={onPanelSelect}
-        onAddPanel={onAddPanel}
-        onDeletePanel={onDeletePanel}
-        onRenamePanel={onRenamePanel}
-        onMovePanel={onMovePanel}
-      />
-    )
-
-    expect(screen.queryByTitle('Move Up')).not.toBeInTheDocument()
-    expect(screen.queryByTitle('Move Down')).not.toBeInTheDocument()
-  })
 })

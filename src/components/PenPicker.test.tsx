@@ -12,37 +12,36 @@ describe('PenPicker', () => {
 
   it('renders when open', () => {
     render(<PenPicker {...defaultProps} />)
-    expect(screen.getByTitle('Fine')).toBeInTheDocument()
+    expect(screen.getByTitle('Fine (2px)')).toBeInTheDocument()
   })
 
   it('does not render when closed', () => {
     render(<PenPicker {...defaultProps} isOpen={false} />)
-    expect(screen.queryByTitle('Fine')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Fine (2px)')).not.toBeInTheDocument()
   })
 
   it('renders all 6 pen types', () => {
     render(<PenPicker {...defaultProps} />)
-    expect(screen.getByTitle('Fine')).toBeInTheDocument()
-    expect(screen.getByTitle('Small')).toBeInTheDocument()
-    expect(screen.getByTitle('Medium')).toBeInTheDocument()
-    expect(screen.getByTitle('Large')).toBeInTheDocument()
-    expect(screen.getByTitle('Thick')).toBeInTheDocument()
-    expect(screen.getByTitle('Very Thick')).toBeInTheDocument()
+    expect(screen.getByTitle('Fine (2px)')).toBeInTheDocument()
+    expect(screen.getByTitle('Small (4px)')).toBeInTheDocument()
+    expect(screen.getByTitle('Medium (6px)')).toBeInTheDocument()
+    expect(screen.getByTitle('Large (10px)')).toBeInTheDocument()
+    expect(screen.getByTitle('Thick (14px)')).toBeInTheDocument()
+    expect(screen.getByTitle('Heavy (20px)')).toBeInTheDocument()
   })
 
   it('calls onSelectPenType when a pen is clicked', async () => {
     const user = userEvent.setup()
     const onSelectPenType = vi.fn()
     render(<PenPicker {...defaultProps} onSelectPenType={onSelectPenType} />)
-    
-    await user.click(screen.getByTitle('Small'))
+
+    await user.click(screen.getByTitle('Small (4px)'))
     expect(onSelectPenType).toHaveBeenCalledWith('small')
   })
 
   it('highlights the selected pen type', () => {
     render(<PenPicker {...defaultProps} selectedPenType="large" />)
-    const largeButton = screen.getByTitle('Large').closest('button')
+    const largeButton = screen.getByTitle('Large (10px)').closest('button')
     expect(largeButton).toHaveClass('selected')
   })
 })
-

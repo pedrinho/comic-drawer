@@ -45,8 +45,9 @@ function App() {
   }
 
   const handlePanelLayoutConfirm = (rows: number, columns: number[]) => {
-    debugLog('App', 'Panel layout confirmed', { rows, columns, newPanelId: panels.length })
-    setPanels([...panels, { id: panels.length, name: `Panel ${panels.length + 1}`, data: null, layout: { rows, columns }, shapeLayers: [], textLayers: [] }])
+    const newId = Date.now()
+    debugLog('App', 'Panel layout confirmed', { rows, columns, newPanelId: newId })
+    setPanels([...panels, { id: newId, name: `Panel ${panels.length + 1}`, data: null, layout: { rows, columns }, shapeLayers: [], textLayers: [] }])
   }
 
   // Helper to get or initialize history for a panel
@@ -295,6 +296,30 @@ function App() {
     }
   }
 
+  const handleReorderPanels = (oldIndex: number, newIndex: number) => {
+    debugLog('App', 'Reordering panels', { oldIndex, newIndex })
+    if (oldIndex === newIndex) return
+
+    const updatedPanels = [...panels]
+    const [movedPanel] = updatedPanels.splice(oldIndex, 1)
+    if (!movedPanel) return
+    updatedPanels.splice(newIndex, 0, movedPanel)
+
+    setPanels(updatedPanels)
+
+    // Update selected panel index if needed
+    if (selectedPanel === oldIndex) {
+      setSelectedPanel(newIndex)
+    } else {
+      // If we moved a panel above/below selected panel, selected index might shift
+      if (oldIndex < selectedPanel && newIndex >= selectedPanel) {
+        setSelectedPanel(selectedPanel - 1)
+      } else if (oldIndex > selectedPanel && newIndex <= selectedPanel) {
+        setSelectedPanel(selectedPanel + 1)
+      }
+    }
+  }
+
   const handleMovePanel = (index: number, direction: 'up' | 'down') => {
     debugLog('App', 'Move panel requested', { index, direction, totalPanels: panels.length })
 
@@ -303,24 +328,7 @@ function App() {
     if (direction === 'down' && index === panels.length - 1) return // Can't move last panel down
 
     const newIndex = direction === 'up' ? index - 1 : index + 1
-
-    // Create new array with panels swapped
-    const updatedPanels = [...panels]
-    const [movedPanel] = updatedPanels.splice(index, 1)
-    if (!movedPanel) return // Safety check
-    updatedPanels.splice(newIndex, 0, movedPanel)
-
-    setPanels(updatedPanels)
-
-    // Update selected panel index
-    if (selectedPanel === index) {
-      // If we moved the selected panel, update its index
-      setSelectedPanel(newIndex)
-    } else if (selectedPanel === newIndex) {
-      // If we moved a panel into the selected panel's position, update selected index
-      setSelectedPanel(index)
-    }
-    // Otherwise, selected panel stays the same
+    handleReorderPanels(index, newIndex)
   }
 
   const handleStartPresentation = () => {
@@ -347,34 +355,43 @@ function App() {
   }
 
   const handleDeletePanel = (index: number) => {
-    debugLog('App', 'Delete panel requested', { index, totalPanels: panels.length })
+    console.log('[App] handleDeletePanel CALLED', {
+      indexToDelete: index,
+      totalPanels: panels.length,
+      panelIds: panels.map(p => p.id),
+      panelNames: panels.map(p => p.name)
+    })
+
     // Don't allow deleting the last panel
     if (panels.length <= 1) {
-      debugWarn('App', 'Cannot delete last panel')
+      console.warn('[App] Delete ABORTED: Cannot delete last panel')
       return
     }
 
     // Ask for confirmation before deleting
     const panelName = panels[index]?.name || `Panel ${index + 1}`
-    const confirmed = window.confirm(`Are you sure you want to delete ${panelName}? This action cannot be undone.`)
-    if (!confirmed) {
-      debugLog('App', 'Panel deletion cancelled')
-      return
-    }
+    console.log('[App] Requesting confirmation for:', panelName)
 
-    // Remove the panel
-    const updatedPanels = panels.filter((_, i) => i !== index)
-    setPanels(updatedPanels)
+    // Use a simpler confirm in development/debug
+    // const confirmed = window.confirm(`Are you sure you want to delete ${panelName}?`)
 
-    // Adjust selected panel if necessary
-    if (selectedPanel >= updatedPanels.length) {
-      // If we deleted the last panel, select the new last panel
-      setSelectedPanel(updatedPanels.length - 1)
-    } else if (selectedPanel > index) {
-      // If we deleted a panel before the selected one, adjust index
-      setSelectedPanel(selectedPanel - 1)
+    if (window.confirm(`Are you sure you want to delete ${panelName}? This action cannot be undone.`)) {
+      console.log('[App] User CONFIRMED deletion')
+
+      const updatedPanels = panels.filter((_, i) => i !== index)
+      console.log('[App] Setting panels to new list:', updatedPanels.length, updatedPanels.map(p => p.id))
+
+      setPanels(updatedPanels)
+
+      // Adjust selected panel if necessary
+      if (selectedPanel >= updatedPanels.length) {
+        setSelectedPanel(updatedPanels.length - 1)
+      } else if (selectedPanel > index) {
+        setSelectedPanel(selectedPanel - 1)
+      }
+    } else {
+      console.log('[App] User CANCELLED deletion')
     }
-    // If we deleted a panel after the selected one, no adjustment needed
   }
 
   const handleSave = () => {
@@ -430,7 +447,8 @@ function App() {
           // Convert base64 back to ImageData (async)
           const loadedPanels: PanelData[] = await Promise.all(
             comicFile.panels.map(async (panel, index) => ({
-              id: panel.id,
+              // Reassign unique timestamp-based IDs
+              id: Date.now() + index,
               name: panel.name || `Panel ${index + 1}`,  // Fallback for backward compatibility
               data: panel.data ? await base64ToImageData(panel.data) : null,
               layout: panel.layout,
@@ -607,36 +625,28 @@ function App() {
   return (
     <div className="app">
       <header>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h1>🎨 Comic Drawer</h1>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button
-              onClick={handleUndo}
-              style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', cursor: 'pointer' }}
-              title="Undo (Ctrl+Z)"
-            >
-              ↶ Undo
-            </button>
-            <button
-              onClick={handleRedo}
-              style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', cursor: 'pointer' }}
-              title="Redo (Ctrl+Shift+Z)"
-            >
-              ↷ Redo
-            </button>
-            <button onClick={handleSave} style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', cursor: 'pointer' }}>
-              💾 Save
-            </button>
-            <button onClick={handleLoad} style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', cursor: 'pointer' }}>
-              📂 Load
-            </button>
-            <button onClick={handleExportPDF} style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', cursor: 'pointer' }}>
-              📄 Export PDF
-            </button>
-            <button onClick={handleStartPresentation} style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', cursor: 'pointer' }}>
-              🎬 Present
-            </button>
-          </div>
+        <h1>Comic Drawer</h1>
+        <div className="header-actions">
+          <button className="header-btn" onClick={handleUndo} title="Undo (Ctrl+Z)">
+            <span>↶</span> Undo
+          </button>
+          <button className="header-btn" onClick={handleRedo} title="Redo (Ctrl+Shift+Z)">
+            <span>↷</span> Redo
+          </button>
+          <div style={{ width: '1px', height: '16px', background: 'var(--border)', margin: '0 4px' }} />
+          <button className="header-btn" onClick={handleSave}>
+            <span>💾</span> Save
+          </button>
+          <button className="header-btn" onClick={handleLoad}>
+            <span>📂</span> Load
+          </button>
+          <div style={{ width: '1px', height: '16px', background: 'var(--border)', margin: '0 4px' }} />
+          <button className="header-btn" onClick={handleExportPDF}>
+            <span>📄</span> Export PDF
+          </button>
+          <button className="header-btn" onClick={handleStartPresentation}>
+            <span>🎬</span> Present
+          </button>
         </div>
       </header>
       <main>
@@ -665,6 +675,7 @@ function App() {
           onDeletePanel={handleDeletePanel}
           onRenamePanel={handleRenamePanel}
           onMovePanel={handleMovePanel}
+          onReorderPanel={handleReorderPanels}
         />
         {panels[selectedPanel] && (
           <Canvas

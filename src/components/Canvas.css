@@ -1,18 +1,32 @@
 .canvas-container {
-  position: relative;
   flex: 1;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   align-items: center;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  padding: 2rem;
-  overflow: auto;
+  justify-content: center;
+  background: transparent;
+  /* Remove container background for cleaner look */
+  padding: var(--spacing-md);
+  overflow: hidden;
+  position: relative;
 }
 
 .canvas-wrapper {
   position: relative;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+  /* Deep diffuse shadow */
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: white;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* Ensure canvas itself doesn't have border radius if it interferes with drawing */
+.canvas-layer {
+  display: block;
+  touch-action: none;
+  /* Prevent scrolling while drawing on touch devices */
 }
 
 .drawing-canvas,
