@@ -25,7 +25,6 @@ describe('Toolbar', () => {
     expect(screen.getByText('Select')).toBeInTheDocument()
     expect(screen.getByText('Pen')).toBeInTheDocument()
     expect(screen.getByText('Eraser')).toBeInTheDocument()
-    expect(screen.getByText('Shapes')).toBeInTheDocument()
     expect(screen.getByText('Object Shapes')).toBeInTheDocument()
     expect(screen.getByText('Text')).toBeInTheDocument()
     expect(screen.getByText('Balloon')).toBeInTheDocument()
@@ -54,7 +53,6 @@ describe('Toolbar', () => {
     expect(toolIcons.length).toBeGreaterThan(0)
     expect(screen.getByText('🖱️')).toBeInTheDocument()
     expect(screen.getByText('🧹')).toBeInTheDocument()
-    expect(screen.getByText('🔷')).toBeInTheDocument()
     expect(screen.getByText('⬚')).toBeInTheDocument()
     expect(screen.getByText('🪣')).toBeInTheDocument()
     expect(screen.getByText('💬')).toBeInTheDocument()
@@ -105,12 +103,12 @@ describe('Toolbar', () => {
     expect(screen.getByText('Medium')).toBeInTheDocument()
   })
 
-  it('shows shape picker when shapes tool is active and clicked', async () => {
+  it('shows shape picker when object shapes tool is active and clicked', async () => {
     const user = userEvent.setup()
-    render(<Toolbar {...defaultProps} currentTool="shapes" />)
+    render(<Toolbar {...defaultProps} currentTool="objectShapes" />)
 
     // Click shapes button to show submenu
-    await user.click(screen.getByText('Shapes').closest('button')!)
+    await user.click(screen.getByText('Object Shapes').closest('button')!)
 
     expect(screen.getByTitle('rectangle')).toBeInTheDocument()
     expect(screen.getByTitle('circle')).toBeInTheDocument()
@@ -132,10 +130,10 @@ describe('Toolbar', () => {
   it('calls onSelectShape when shape is clicked', async () => {
     const user = userEvent.setup()
     const onSelectShape = vi.fn()
-    render(<Toolbar {...defaultProps} currentTool="shapes" onSelectShape={onSelectShape} />)
+    render(<Toolbar {...defaultProps} currentTool="objectShapes" onSelectShape={onSelectShape} />)
 
     // First click to show submenu
-    await user.click(screen.getByText('Shapes').closest('button')!)
+    await user.click(screen.getByText('Object Shapes').closest('button')!)
 
     // Then click shape (using title attribute)
     await user.click(screen.getByTitle('circle'))
@@ -220,16 +218,16 @@ describe('Toolbar', () => {
   it('toggles shape submenu when shapes button is clicked', async () => {
     const user = userEvent.setup()
     const onToolChange = vi.fn()
-    render(<Toolbar {...defaultProps} currentTool="shapes" onToolChange={onToolChange} />)
+    render(<Toolbar {...defaultProps} currentTool="objectShapes" onToolChange={onToolChange} />)
 
     // Click shapes button to toggle submenu
-    await user.click(screen.getByText('Shapes').closest('button')!)
+    await user.click(screen.getByText('Object Shapes').closest('button')!)
 
     // Should show shape picker (check by title attribute)
     expect(screen.getByTitle('rectangle')).toBeInTheDocument()
 
     // Click again to hide
-    await user.click(screen.getByText('Shapes').closest('button')!)
+    await user.click(screen.getByText('Object Shapes').closest('button')!)
 
     // Should hide shape picker
     expect(screen.queryByTitle('rectangle')).not.toBeInTheDocument()

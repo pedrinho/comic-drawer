@@ -33,7 +33,6 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     { name: 'select', icon: '🖱️', label: 'Select' },
     { name: 'pen', icon: '✏️', label: 'Pen' },
     { name: 'eraser', icon: '🧹', label: 'Eraser' },
-    { name: 'shapes', icon: '🔷', label: 'Shapes' },
     { name: 'objectShapes', icon: '⬚', label: 'Object Shapes' },
     { name: 'fill', icon: '🪣', label: 'Fill' },
     { name: 'text', icon: '💬', label: 'Text' },
@@ -45,7 +44,7 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     if (currentTool !== 'pen') {
       setShowPenSubmenu(false)
     }
-    if (currentTool !== 'shapes' && currentTool !== 'objectShapes') {
+    if (currentTool !== 'objectShapes') {
       setShowShapesSubmenu(false)
     }
     // Show text submenu when editing text or when text/balloon tool is active
@@ -143,7 +142,7 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
             onClick={
               tool.name === 'pen'
                 ? handlePenButtonClick
-                : tool.name === 'shapes' || tool.name === 'objectShapes'
+                : tool.name === 'objectShapes'
                   ? () => handleShapeToolClick(tool.name)
                   : tool.name === 'text'
                     ? handleTextButtonClick
@@ -165,13 +164,7 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
               onSelectPenType={onSelectPenType}
             />
           )}
-          {tool.name === 'shapes' && currentTool === 'shapes' && showShapesSubmenu && (
-            <ShapePicker
-              isOpen={true}
-              selectedShape={selectedShape}
-              onSelectShape={onSelectShape}
-            />
-          )}
+
           {tool.name === 'objectShapes' && currentTool === 'objectShapes' && showShapesSubmenu && (
             <ShapePicker
               isOpen={true}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Tool, Shape, PenType } from '../types/common'
 import { ShapeLayer, TextLayer, PathObjectLayer, ObjectLayer, isPathObjectLayer, isShapeObjectLayer } from '../types/layers'
-import { traceShapePath, drawGrid as drawGridUtil, debugLog, debugError, debugWarn, simplifyPath, isPointNearPolyline } from '../utils/canvasUtils'
+import { drawGrid as drawGridUtil, debugLog, debugError, debugWarn, simplifyPath, isPointNearPolyline } from '../utils/canvasUtils'
 import { renderPathLayer, renderShapeLayer, renderTextLayer } from '../utils/renderUtils'
 import './Canvas.css'
 
@@ -22,11 +22,7 @@ type SelectionHandle =
   | 'bottom-center'
   | 'bottom-right'
 
-interface ShapeRegion {
-  id: number
-  rect: SelectionRect
-  contentPixelCount: number
-}
+
 
 interface CanvasProps {
   tool: Tool
@@ -71,45 +67,7 @@ const clamp = (value: number, min: number, max: number) => {
   return Math.min(Math.max(value, min), max)
 }
 
-const MIN_CONTENT_PIXELS = 12
 
-const clampRectToCanvas = (rect: SelectionRect, canvasWidth: number, canvasHeight: number): SelectionRect => {
-  const clampedWidth = Math.min(rect.width, canvasWidth)
-  const clampedHeight = Math.min(rect.height, canvasHeight)
-
-  return {
-    x: clamp(rect.x, 0, Math.max(0, canvasWidth - clampedWidth)),
-    y: clamp(rect.y, 0, Math.max(0, canvasHeight - clampedHeight)),
-    width: clampedWidth,
-    height: clampedHeight,
-  }
-}
-
-const expandRect = (rect: SelectionRect, padding: number, canvasWidth: number, canvasHeight: number): SelectionRect => {
-  const expanded = {
-    x: rect.x - padding,
-    y: rect.y - padding,
-    width: rect.width + padding * 2,
-    height: rect.height + padding * 2,
-  }
-
-  return clampRectToCanvas(expanded, canvasWidth, canvasHeight)
-}
-
-const countContentPixels = (imageData: ImageData) => {
-  const data = imageData.data
-  let count = 0
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i]
-    const g = data[i + 1]
-    const b = data[i + 2]
-    const a = data[i + 3]
-    if (r !== undefined && g !== undefined && b !== undefined && a !== undefined && a !== 0 && (r < 250 || g < 250 || b < 250)) {
-      count++
-    }
-  }
-  return count
-}
 
 const getHandleAtPoint = (point: { x: number; y: number }, rect: SelectionRect, handleSize = 12, rotation: number = 0): SelectionHandle | null => {
   // Use larger hit area than visual handle for easier clicking
@@ -399,9 +357,6 @@ export default function Canvas({
   const [isDrawing, setIsDrawing] = useState(false)
   const [startPos, setStartPos] = useState({ x: 0, y: 0 })
   const savedImageRef = useRef<ImageData | null>(null)
-  const shapeRegionsRef = useRef<ShapeRegion[]>([])
-  const shapeIdCounterRef = useRef(0)
-  const activeShapeIndexRef = useRef<number | null>(null)
   const selectionRectRef = useRef<SelectionRect | null>(null)
   const selectionOriginalImageRef = useRef<ImageData | null>(null)
   const selectionBaseImageRef = useRef<ImageData | null>(null)
@@ -518,35 +473,7 @@ export default function Canvas({
     return tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height)
   }, [panelData, drawGrid])
 
-  const updateActiveShapeRegion = useCallback(
-    (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, rect: SelectionRect, selectionImage?: ImageData | null) => {
-      const activeIndex = activeShapeIndexRef.current
-      if (typeof activeIndex !== 'number') return
 
-      const region = shapeRegionsRef.current[activeIndex]
-      if (!region) {
-        activeShapeIndexRef.current = null
-        return
-      }
-
-      const clampedRect = clampRectToCanvas(rect, canvas.width, canvas.height)
-      let contentPixels = 0
-
-      if (selectionImage) {
-        contentPixels = countContentPixels(selectionImage)
-      } else {
-        const snapshot = ctx.getImageData(clampedRect.x, clampedRect.y, clampedRect.width, clampedRect.height)
-        contentPixels = countContentPixels(snapshot)
-      }
-
-      shapeRegionsRef.current[activeIndex] = {
-        ...region,
-        rect: clampedRect,
-        contentPixelCount: Math.max(contentPixels, MIN_CONTENT_PIXELS),
-      }
-    },
-    []
-  )
 
   const commitSelection = useCallback(() => {
     debugLog('Canvas', 'Committing selection')
@@ -569,7 +496,7 @@ export default function Canvas({
       isRotatingRef.current = false
       isDraggingShapeLayerRef.current = false
       activeShapeLayerIdRef.current = null
-      activeShapeIndexRef.current = null
+
       resizeHandleRef.current = null
       rotationAngleRef.current = 0
       return
@@ -579,8 +506,6 @@ export default function Canvas({
     const rect = selectionRectRef.current
     ctx.putImageData(selectionImageRef.current, rect.x, rect.y)
     drawGrid(ctx)
-
-    updateActiveShapeRegion(canvas, ctx, rect, selectionImageRef.current)
 
     // Capture background without layers, then add the selection
     const background = getBackgroundImageData()
@@ -606,11 +531,11 @@ export default function Canvas({
     isResizingRef.current = false
     isRotatingRef.current = false
     isDraggingShapeLayerRef.current = false
-    activeShapeIndexRef.current = null
+
     resizeHandleRef.current = null
     rotationAngleRef.current = 0
     cumulativeRotationAngleRef.current = 0
-  }, [drawGrid, onCanvasChange, updateActiveShapeRegion])
+  }, [drawGrid, onCanvasChange])
 
   useEffect(() => {
     if (tool !== 'select') {
@@ -1052,7 +977,7 @@ export default function Canvas({
       updateTextLayers([...textLayersRef.current, newLayer], true)
       repaintCanvas()
       setIsDrawing(false)
-    } else if (tool === 'shapes' || tool === 'balloon') {
+    } else if (tool === 'balloon') {
       savedImageRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height)
     } else if (tool === 'eraser') {
       ctx.beginPath()
@@ -1061,10 +986,7 @@ export default function Canvas({
   }
 
 
-  const drawShape = (ctx: CanvasRenderingContext2D, shape: Shape, startX: number, startY: number, endX: number, endY: number) => {
-    traceShapePath(ctx, shape, startX, startY, endX, endY)
-    ctx.stroke()
-  }
+
 
   const repaintCanvas = useCallback(() => {
     debugLog('Canvas', 'Repainting canvas', {
@@ -2027,15 +1949,13 @@ export default function Canvas({
       ctx.restore()
       // Explicitly reset composite operation for next drawing
       ctx.globalCompositeOperation = 'source-over'
-    } else if (tool === 'shapes' || tool === 'balloon') {
+    } else if (tool === 'balloon') {
       if (savedImageRef.current) {
         ctx.putImageData(savedImageRef.current, 0, 0)
       }
       drawGrid(ctx)
 
-      if (tool === 'shapes' && shape) {
-        drawShape(ctx, shape, startPos.x, startPos.y, pos.x, pos.y)
-      } else if (tool === 'balloon') {
+      if (tool === 'balloon') {
         ctx.beginPath()
         const radiusX = Math.abs(pos.x - startPos.x) / 2
         const radiusY = Math.abs(pos.y - startPos.y) / 2
@@ -2203,11 +2123,11 @@ export default function Canvas({
               height: maxY - minY,
             }
 
-            // Extract the rotated image from the canvas to display
-            const rotatedImage = ctx.getImageData(rotatedRect.x, rotatedRect.y, rotatedRect.width, rotatedRect.height)
-
             drawGrid(ctx)
-            ctx.putImageData(rotatedImage, rotatedRect.x, rotatedRect.y)
+            if (rotatedRect.width > 0 && rotatedRect.height > 0) {
+              const rotatedImage = ctx.getImageData(rotatedRect.x, rotatedRect.y, rotatedRect.width, rotatedRect.height)
+              ctx.putImageData(rotatedImage, rotatedRect.x, rotatedRect.y)
+            }
             drawSelectionOutline(ctx, rotatedRect)
             drawSelectionHandles(ctx, rotatedRect)
 
@@ -2219,8 +2139,6 @@ export default function Canvas({
             rotationAngleRef.current = 0
             selectionRectRef.current = rotatedRect
             // Keep selectionImageRef as the original unrotated image - don't update it!
-
-            updateActiveShapeRegion(canvas, ctx, rotatedRect, rotatedImage)
 
             // Capture background without layers, then add the selection
             const background = getBackgroundImageData()
@@ -2296,7 +2214,7 @@ export default function Canvas({
           ctx.putImageData(resizedImage, newRect.x, newRect.y)
           drawSelectionOutline(ctx, newRect)
           drawSelectionHandles(ctx, newRect)
-          updateActiveShapeRegion(canvas, ctx, newRect, resizedImage)
+
 
           // Capture background without layers, then add the resized selection
           const background = getBackgroundImageData()
@@ -2384,17 +2302,16 @@ export default function Canvas({
                 height: maxY - minY,
               }
 
-              const rotatedImage = ctx.getImageData(rotatedRect.x, rotatedRect.y, rotatedRect.width, rotatedRect.height)
               selectionRectRef.current = rotatedRect
               drawSelectionOutline(ctx, rotatedRect)
               drawSelectionHandles(ctx, rotatedRect)
-              updateActiveShapeRegion(canvas, ctx, rotatedRect, rotatedImage)
+
             }
           } else {
             ctx.putImageData(selectionImageRef.current, rect.x, rect.y)
             drawSelectionOutline(ctx, rect)
             drawSelectionHandles(ctx, rect)
-            updateActiveShapeRegion(canvas, ctx, rect, selectionImageRef.current)
+
           }
 
           // Capture background without layers, then add the dragged selection
@@ -2448,22 +2365,7 @@ export default function Canvas({
 
     const pos = getMousePos(e)
 
-    if (tool === 'shapes' && shape) {
-      drawShape(ctx, shape, startPos.x, startPos.y, pos.x, pos.y)
-      const rawRect = normalizeRect(startPos, pos)
-      const paddedRect = expandRect(rawRect, 6, canvas.width, canvas.height)
-      if (paddedRect.width > 0 && paddedRect.height > 0) {
-        const snapshot = ctx.getImageData(paddedRect.x, paddedRect.y, paddedRect.width, paddedRect.height)
-        const contentPixels = countContentPixels(snapshot)
-        if (contentPixels >= MIN_CONTENT_PIXELS) {
-          shapeRegionsRef.current.push({
-            id: shapeIdCounterRef.current++,
-            rect: paddedRect,
-            contentPixelCount: contentPixels,
-          })
-        }
-      }
-    } else if (tool === 'balloon') {
+    if (tool === 'balloon') {
       ctx.beginPath()
       const radiusX = Math.abs(pos.x - startPos.x) / 2
       const radiusY = Math.abs(pos.y - startPos.y) / 2
