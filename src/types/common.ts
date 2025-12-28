@@ -1,6 +1,6 @@
 import { ObjectLayer, TextLayer } from './layers'
 
-export type Tool = 'select' | 'pen' | 'eraser' | 'objectShapes' | 'text' | 'fill' | 'balloon' | 'emoji'
+export type Tool = 'select' | 'scissor' | 'pen' | 'eraser' | 'objectShapes' | 'text' | 'fill' | 'balloon' | 'emoji'
 export type Shape = 'rectangle' | 'circle' | 'triangle' | 'star' | 'heart' | 'diamond' | 'hexagon' | 'pentagon' | 'arrow' | 'cross' | 'heptagon' | 'octagon'
 export type PenType = 'fine' | 'small' | 'medium' | 'large' | 'thick' | 'verythick'
 

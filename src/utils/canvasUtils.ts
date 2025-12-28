@@ -348,3 +348,21 @@ export const base64ToImageData = async (base64: string): Promise<ImageData | nul
     img.src = base64
   })
 }
+
+/**
+ * Converts white (and near-white) pixels in ImageData to transparent
+ * This is used for the scissor tool to make cutouts strictly transparent instead of white boxes
+ */
+export const makeWhiteTransparent = (imageData: ImageData, threshold: number = 250): ImageData => {
+  const data = imageData.data
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i]
+    const g = data[i + 1]
+    const b = data[i + 2]
+    // If pixel is near white
+    if (r !== undefined && g !== undefined && b !== undefined && r > threshold && g > threshold && b > threshold) {
+      data[i + 3] = 0 // Set alpha to 0 (transparent)
+    }
+  }
+  return imageData
+}

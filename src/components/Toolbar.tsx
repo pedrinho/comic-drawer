@@ -31,6 +31,7 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
   const [showEmojiSubmenu, setShowEmojiSubmenu] = useState(false)
   const tools: { name: Tool; icon: string; label: string }[] = [
     { name: 'select', icon: '🖱️', label: 'Select' },
+    { name: 'scissor', icon: '✂️', label: 'Scissor' },
     { name: 'pen', icon: '✏️', label: 'Pen' },
     { name: 'eraser', icon: '🧹', label: 'Eraser' },
     { name: 'objectShapes', icon: '⬚', label: 'Object Shapes' },

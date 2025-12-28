@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Tool, Shape, PenType } from '../types/common'
-import { ShapeLayer, TextLayer, PathObjectLayer, ObjectLayer, isPathObjectLayer, isShapeObjectLayer } from '../types/layers'
-import { drawGrid as drawGridUtil, debugLog, debugError, debugWarn, simplifyPath, isPointNearPolyline } from '../utils/canvasUtils'
-import { renderPathLayer, renderShapeLayer, renderTextLayer } from '../utils/renderUtils'
+import { ShapeLayer, TextLayer, PathObjectLayer, ObjectLayer, ImageObjectLayer, isPathObjectLayer, isShapeObjectLayer, isImageObjectLayer } from '../types/layers'
+import { drawGrid as drawGridUtil, debugLog, debugError, debugWarn, simplifyPath, isPointNearPolyline, imageDataToBase64, makeWhiteTransparent } from '../utils/canvasUtils'
+import { renderPathLayer, renderShapeLayer, renderTextLayer, renderImageLayer } from '../utils/renderUtils'
 import './Canvas.css'
 
 interface SelectionRect {
@@ -39,6 +39,7 @@ interface CanvasProps {
   textLayers?: TextLayer[]
   onTextLayersChange?: (layers: TextLayer[], skipHistory?: boolean) => void
   onTextEditingChange?: (isEditing: boolean) => void
+  onToolChange?: (tool: Tool) => void // Added to allow switching tools
   emoji?: string
 }
 
@@ -350,6 +351,7 @@ export default function Canvas({
   textLayers = [],
   onTextLayersChange,
   onTextEditingChange,
+  onToolChange, // Destructure new prop
   emoji = '😀',
 }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -358,6 +360,7 @@ export default function Canvas({
   const [startPos, setStartPos] = useState({ x: 0, y: 0 })
   const savedImageRef = useRef<ImageData | null>(null)
   const selectionRectRef = useRef<SelectionRect | null>(null)
+  const scissorRectRef = useRef<SelectionRect | null>(null)
   const selectionOriginalImageRef = useRef<ImageData | null>(null)
   const selectionBaseImageRef = useRef<ImageData | null>(null)
   const selectionImageRef = useRef<ImageData | null>(null)
@@ -430,6 +433,8 @@ export default function Canvas({
         renderPathLayer(ctx, layer)
       } else if (isShapeObjectLayer(layer)) {
         renderShapeLayer(ctx, layer)
+      } else if (isImageObjectLayer(layer)) {
+        renderImageLayer(ctx, layer)
       }
     })
   }, [])
@@ -540,6 +545,12 @@ export default function Canvas({
   useEffect(() => {
     if (tool !== 'select') {
       commitSelection()
+      // Commit pending scissor selection if valid
+      if (scissorRectRef.current) {
+        // If we switch away while selecting, we probably just want to cancel
+        scissorRectRef.current = null
+        repaintCanvas()
+      }
       // Clear text layer selection when switching away from select tool
       activeTextLayerIdRef.current = null
       activeShapeLayerIdRef.current = null
@@ -790,6 +801,13 @@ export default function Canvas({
       return
     }
 
+    if (tool === 'scissor') {
+      setIsDrawing(true)
+      setStartPos(pos)
+      scissorRectRef.current = { x: pos.x, y: pos.y, width: 0, height: 0 }
+      return
+    }
+
     if (tool === 'fill') {
       const hitLayer = hitTestShapeLayers(pos)
       if (hitLayer) {
@@ -1031,6 +1049,11 @@ export default function Canvas({
         ctx.stroke()
         ctx.restore()
       }
+    }
+
+    // Draw scissor selection rectangle
+    if (tool === 'scissor' && scissorRectRef.current) {
+      drawSelectionOutline(ctx, scissorRectRef.current)
     }
 
     // Update delete and duplicate button positions when selection changes
@@ -1631,6 +1654,14 @@ export default function Canvas({
       return
     }
 
+    if (tool === 'scissor') {
+      // Update selection rect
+      const rect = normalizeRect(startPos, pos)
+      scissorRectRef.current = rect
+      repaintCanvas() // This draws the selection outline
+      return
+    }
+
     if (tool === 'select') {
       // Handle text layer interactions
       if (isRotatingTextLayerRef.current && activeTextLayerIdRef.current) {
@@ -1990,6 +2021,66 @@ export default function Canvas({
       pendingShapeLayerIdRef.current = null
       setIsDrawing(false)
       repaintCanvas()
+      return
+    }
+
+    if (tool === 'scissor') {
+      setIsDrawing(false)
+      if (!scissorRectRef.current) return
+
+      const rect = scissorRectRef.current
+      scissorRectRef.current = null
+
+      if (rect.width < 5 || rect.height < 5) {
+        repaintCanvas()
+        return
+      }
+
+      // 1. Capture image data
+      const imageData = ctx.getImageData(rect.x, rect.y, rect.width, rect.height)
+
+      // 2. Clear from background
+      // Use getBackgroundImageData to get clean current background (without layers)
+      const currentBackground = getBackgroundImageData()
+      const tempCanvas = document.createElement('canvas')
+      tempCanvas.width = canvas.width
+      tempCanvas.height = canvas.height
+      const tempCtx = tempCanvas.getContext('2d')
+      if (!tempCtx) return
+
+      tempCtx.putImageData(currentBackground, 0, 0)
+      tempCtx.clearRect(rect.x, rect.y, rect.width, rect.height)
+
+      // Update background
+      onCanvasChange(tempCtx.getImageData(0, 0, canvas.width, canvas.height))
+
+      // 3. Create ImageObjectLayer
+      // Make white pixels transparent so the object doesn't have a white box background
+      const transparentImageData = makeWhiteTransparent(imageData)
+      const base64 = imageDataToBase64(transparentImageData)
+      const layerId = generateLayerId()
+      const newLayer: ImageObjectLayer = {
+        type: 'image',
+        id: layerId,
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+        rotation: 0,
+        data: base64
+      }
+
+      // 4. Add to shapeLayers (save history)
+      const updatedLayers = [...shapeLayersRef.current, newLayer]
+      updateShapeLayers(updatedLayers, false) // Save history for this action
+
+      // 5. Select the new object
+      activeShapeLayerIdRef.current = layerId
+
+      repaintCanvas()
+      if (onToolChange) {
+        onToolChange('select') // Switch to select tool
+      }
       return
     }
 

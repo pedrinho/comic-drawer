@@ -45,10 +45,18 @@ export interface PathObjectLayer extends BaseObjectLayer {
 }
 
 /**
+ * Image object layer (created by scissor tool)
+ */
+export interface ImageObjectLayer extends BaseObjectLayer {
+  type: 'image'
+  data: string // base64 encoded image data
+}
+
+/**
  * Union type for all object layers
  * Add new object types here as discriminated union members
  */
-export type ObjectLayer = ShapeObjectLayer | TextObjectLayer | PathObjectLayer
+export type ObjectLayer = ShapeObjectLayer | TextObjectLayer | PathObjectLayer | ImageObjectLayer
 
 /**
  * Type guards for object layers
@@ -65,6 +73,10 @@ export function isPathObjectLayer(layer: ObjectLayer): layer is PathObjectLayer 
   return layer.type === 'path'
 }
 
+export function isImageObjectLayer(layer: ObjectLayer): layer is ImageObjectLayer {
+  return layer.type === 'image'
+}
+
 /**
  * Legacy type aliases for backward compatibility during migration
  * @deprecated Use ObjectLayer with type guards instead
@@ -79,7 +91,7 @@ export type PathLayer = PathObjectLayer
  */
 export function migrateLayer(layer: Partial<ObjectLayer> & { id: string; x: number; y: number; width: number; height: number; rotation: number }): ObjectLayer {
   // If type is already set, return as-is
-  if ('type' in layer && (layer.type === 'shape' || layer.type === 'text' || layer.type === 'path')) {
+  if ('type' in layer && (layer.type === 'shape' || layer.type === 'text' || layer.type === 'path' || layer.type === 'image')) {
     return layer as ObjectLayer
   }
 

@@ -17,6 +17,7 @@ A web-based application for creating comics! Draw panels, add dialogue, and let 
 - 💾 **Save & Load**: Save your comics in .cd format and load them later
 - 📄 **Export to PDF**: Export your comic panels as a PDF file (each panel becomes one page)
 - 🖱️ **Object Selection**: Select, move, resize (with dimensions display), rotate, and delete shape, text, and emoji objects with the select tool
+- ✂️ **Scissor Tool**: Select and cut rectangular areas from the canvas to create movable image objects
 - 🗑️ **Delete Objects**: Delete selected objects using the delete button or Delete/Backspace keys
 - ↶ **Undo/Redo**: Undo and redo the last 10 actions (keyboard shortcuts: Ctrl+Z / Ctrl+Shift+Z)
 - 🎨 **Beautiful UI**: Modern, kid-friendly interface
@@ -81,6 +82,7 @@ This project is almost 100% developed by Cursor (AI pair programming assistant).
 
 - **Text Duplication After Editing**: After editing text and pressing Enter, the text may appear duplicated. The original text becomes part of the background and is not selectable. This is a known issue that needs to be addressed.
 - **Object Duplication After Loading**: After loading a saved file, moving objects may cause duplication. The original appears as part of the background and is not selectable. This is a known issue that needs to be addressed.
+- **Scissor Selection Visibility**: After selecting an area with the Scissor tool, the selection may initially appear blank/white. Moving the object usually resolves this, causing it to reappear correctly. This is a known rendering issue.
 
 ## Future Enhancements
 

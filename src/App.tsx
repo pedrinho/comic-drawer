@@ -680,6 +680,7 @@ function App() {
         {panels[selectedPanel] && (
           <Canvas
             tool={currentTool}
+            onToolChange={setCurrentTool}
             shape={selectedShape}
             penType={selectedPenType}
             color={selectedColor}

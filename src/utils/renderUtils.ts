@@ -1,5 +1,28 @@
-import { PathObjectLayer, ShapeLayer, TextLayer, ObjectLayer, isPathObjectLayer, isShapeObjectLayer } from '../types/layers'
+import { PathObjectLayer, ShapeLayer, TextLayer, ObjectLayer, ImageObjectLayer, isPathObjectLayer, isShapeObjectLayer, isImageObjectLayer } from '../types/layers'
 import { traceShapePath } from './canvasUtils'
+
+// Simple image cache to avoid recreating HTMLImageElements every frame
+const imageCache = new Map<string, HTMLImageElement>()
+const pendingImages = new Set<string>()
+
+export const preLoadImage = (base64: string): Promise<void> => {
+    if (imageCache.has(base64) || pendingImages.has(base64)) return Promise.resolve()
+
+    pendingImages.add(base64)
+    return new Promise((resolve) => {
+        const img = new Image()
+        img.onload = () => {
+            imageCache.set(base64, img)
+            pendingImages.delete(base64)
+            resolve()
+        }
+        img.onerror = () => {
+            pendingImages.delete(base64)
+            resolve() // Resolve anyway to avoid hanging
+        }
+        img.src = base64
+    })
+}
 
 export const renderPathLayer = (ctx: CanvasRenderingContext2D, layer: PathObjectLayer) => {
     const { x, y, width, height, rotation, strokeColor, strokeWidth, points } = layer
@@ -83,10 +106,40 @@ export const renderTextLayer = (ctx: CanvasRenderingContext2D, layer: TextLayer)
     ctx.restore()
 }
 
+export const renderImageLayer = (ctx: CanvasRenderingContext2D, layer: ImageObjectLayer) => {
+    const { x, y, width, height, rotation, data } = layer
+
+    // Check cache first
+    let img = imageCache.get(data)
+
+    // If not in cache and not pending, trigger load (will be ready next frame/repaint)
+    if (!img && !pendingImages.has(data)) {
+        preLoadImage(data) // We can't await here, so it will blink in for one frame or so
+        return
+    }
+
+    if (img) {
+        const centerX = x + width / 2
+        const centerY = y + height / 2
+
+        ctx.save()
+        ctx.translate(centerX, centerY)
+        ctx.rotate(rotation)
+
+        // Draw image centered at (0,0) with specified dimensions
+        // -width/2, -height/2 corresponds to top-left relative to center
+        ctx.drawImage(img, -width / 2, -height / 2, width, height)
+
+        ctx.restore()
+    }
+}
+
 export const renderObjectLayer = (ctx: CanvasRenderingContext2D, layer: ObjectLayer) => {
     if (isPathObjectLayer(layer)) {
         renderPathLayer(ctx, layer)
     } else if (isShapeObjectLayer(layer)) {
         renderShapeLayer(ctx, layer)
+    } else if (isImageObjectLayer(layer)) {
+        renderImageLayer(ctx, layer)
     }
 }
