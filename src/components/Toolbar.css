@@ -16,6 +16,7 @@
   max-width: 200px;
   flex-shrink: 0;
   position: relative;
+  z-index: 10;
   /* Reset border */
   border: none;
 }
