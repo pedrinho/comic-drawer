@@ -1,4 +1,4 @@
-import { PathObjectLayer, ShapeLayer, TextLayer, ObjectLayer, ImageObjectLayer, isPathObjectLayer, isShapeObjectLayer, isImageObjectLayer } from '../types/layers'
+import { PathObjectLayer, ShapeLayer, TextLayer, ObjectLayer, ImageObjectLayer, BalloonObjectLayer, isPathObjectLayer, isShapeObjectLayer, isImageObjectLayer, isBalloonObjectLayer } from '../types/layers'
 import { traceShapePath } from './canvasUtils'
 
 // Simple image cache to avoid recreating HTMLImageElements every frame
@@ -134,6 +134,134 @@ export const renderImageLayer = (ctx: CanvasRenderingContext2D, layer: ImageObje
     }
 }
 
+export const renderBalloonLayer = (ctx: CanvasRenderingContext2D, layer: BalloonObjectLayer) => {
+    const canvas = ctx.canvas
+    const { x, y, width, height, rotation, text, font: layerFont, fontSize: layerFontSize, color: layerColor } = layer
+    const centerX = x + width / 2
+    const centerY = y + height / 2
+
+    // Calculate scale factor for measurement
+    let scale = 1
+    try {
+        const rect = canvas.getBoundingClientRect()
+        if (rect && rect.width && rect.height) {
+            const scaleX = rect.width / canvas.width
+            const scaleY = rect.height / canvas.height
+            scale = (scaleX + scaleY) / 2
+        }
+    } catch {
+        scale = 1
+    }
+
+    const scaledFontSize = layerFontSize / scale
+
+    ctx.save()
+    ctx.translate(centerX, centerY)
+    ctx.rotate(rotation)
+
+    // Balloon configuration
+    const rx = width / 2
+    const ry = height / 2
+    const strokeWidth = 3 // Thicker stroke for comic look
+
+    // Draw balloon shape with tail merged
+    ctx.beginPath()
+
+    // We'll draw the ellipse, but we need to "open" it at the bottom to attach the tail
+    // A full ellipse is 0 to 2PI.
+    // Let's Put the tail at the bottom (around PI/2 if visual top is -PI/2? No, canvas 0 is right, PI/2 is bottom)
+    // Angles in canvas arc: 0 is right, PI/2 is bottom, PI is left, 3PI/2 is top.
+
+    // Tail placement: bottom, slightly left of center? Or dynamic?
+    // Let's keep it simple: Bottom left-ish.
+    // Angles for gap:
+    // Start of gap: PI/2 + 0.2
+    // End of gap: PI/2 - 0.2
+    // Wait, drawing counter-clockwise or clockwise? ellipse() doesn't easily support gaps with correct start/end points for curves without math.
+
+    // Easier approach: Draw full ellipse filled white. Then draw tail filled white. Then draw outline of both? 
+    // No, outlines would overlap. we want a single continuous path or masking.
+    // "Composite operations" might help, or just calculating points.
+
+    // Let's use points approximation for the ellipse (Bezier) or just `ellipse` and then overdraw the connection?
+    // Overdrawing the connection with white is easiest for "merging", then we need to draw the outline.
+    // To draw the outline correctly without inner lines:
+    // 1. Draw ellipse + tail filled white.
+    // 2. Draw ellipse outline (stroke).
+    // 3. Draw tail outline (stroke).
+    // This leaves the line between them.
+
+    // Correct approach for continuous outline:
+    // Define the path.
+    // Ellipse is roughly 4 bezier curves.
+    // We can use `arc` segments if we are careful.
+
+    // Let's try the "Fill both, then stroke specific parts" approach? No.
+    // Let's try drawing the path manually.
+
+    // Tail parameters
+    // Tail Tip Position relative to center: (-20, ry + 40)
+    // Tail Base Left on ellipse: slightly left of bottom
+    // Tail Base Right on ellipse: slightly right of bottom
+
+    const tailTipX = -rx * 0.3
+    const tailTipY = ry * 1.3
+
+    // Find points on ellipse for tail base
+    // Angle for right base: PI/2 - 0.2
+    // Angle for left base: PI/2 + 0.2
+    const angleRight = Math.PI / 2 - 0.3
+    const angleLeft = Math.PI / 2 + 0.3
+
+    const baseRightX = rx * Math.cos(angleRight)
+    const baseRightY = ry * Math.sin(angleRight)
+
+    const baseLeftX = rx * Math.cos(angleLeft)
+
+    ctx.beginPath()
+    // Start at right base
+    ctx.moveTo(baseRightX, baseRightY)
+
+    // Draw ellipse segment from right base around to left base (drawing the long way)
+    // ellipse(x, y, radiusX, radiusY, rotation, startAngle, endAngle, counterclockwise)
+    // We want to go from angleRight to angleLeft in CLOCKWISE direction? No, counter-clockwise is standard?
+    // standard is clockwise for positive angle increase?
+    // 0 -> PI/2 -> PI
+    // We want PI/2-0.3 -> ... -> PI/2+0.3. This is almost the full circle.
+    // If we go clockwise (default is false/counterclockwise?), wait.
+    // ctx.ellipse(0, 0, rx, ry, 0, angleRight, angleLeft, true) (true = counter-clockwise) => goes "backwards" over the top. Yes.
+    ctx.ellipse(0, 0, rx, ry, 0, angleRight, angleLeft, true)
+
+    // Now at baseLeft. Draw curve to tip.
+    // Quadratic or Bezier for curved tail.
+    // Curve out nicely.
+
+    // Actually, draw FROM left base TO tip
+    ctx.quadraticCurveTo(baseLeftX - 10, ry + 20, tailTipX, tailTipY)
+
+    // Draw FROM tip TO right base
+    ctx.quadraticCurveTo(baseRightX - 5, ry + 10, baseRightX, baseRightY)
+
+    ctx.closePath()
+
+    // Style
+    ctx.fillStyle = 'white'
+    ctx.fill()
+    ctx.lineWidth = strokeWidth
+    ctx.strokeStyle = layerColor // Use layer color for outline (usually black)
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.stroke()
+
+    // Render Text
+    ctx.fillStyle = layerColor
+    ctx.font = `${scaledFontSize}px ${layerFont}`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(text, 0, 0)
+    ctx.restore()
+}
+
 export const renderObjectLayer = (ctx: CanvasRenderingContext2D, layer: ObjectLayer) => {
     if (isPathObjectLayer(layer)) {
         renderPathLayer(ctx, layer)
@@ -141,5 +269,7 @@ export const renderObjectLayer = (ctx: CanvasRenderingContext2D, layer: ObjectLa
         renderShapeLayer(ctx, layer)
     } else if (isImageObjectLayer(layer)) {
         renderImageLayer(ctx, layer)
+    } else if (isBalloonObjectLayer(layer)) {
+        renderBalloonLayer(ctx, layer)
     }
 }

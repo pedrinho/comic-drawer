@@ -9,7 +9,7 @@ A web-based application for creating comics! Draw panels, add dialogue, and let 
 - 😀 **Emoji Tool**: Add emojis to your comics with a comprehensive emoji picker
 - 🔷 **Shapes**: 12 different shapes (rectangle, circle, triangle, star, heart, diamond, hexagon, pentagon, heptagon, octagon, arrow, cross)
 - ⬚ **Object Shapes**: Create editable shape objects that can be moved, resized, rotated, and deleted
-- 💬 **Speech Balloons**: Add dialogue bubbles with text
+- 💬 **Speech Balloons**: Add interactive dialogue bubbles! Select, move, resize, rotate, and double-click to edit text. Uses traditional comic style rendering.
 - 🪣 **Fill Tool**: Fill shapes and areas with color
 - 📐 **Panel Layout**: Customizable comic panel layouts
 - ✏️ **Panel Management**: Rename panels by double-clicking, and reorder panels with up/down arrows

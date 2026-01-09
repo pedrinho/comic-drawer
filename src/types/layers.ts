@@ -53,10 +53,21 @@ export interface ImageObjectLayer extends BaseObjectLayer {
 }
 
 /**
+ * Balloon object layer
+ */
+export interface BalloonObjectLayer extends BaseObjectLayer {
+  type: 'balloon'
+  text: string
+  font: string
+  fontSize: number
+  color: string
+}
+
+/**
  * Union type for all object layers
  * Add new object types here as discriminated union members
  */
-export type ObjectLayer = ShapeObjectLayer | TextObjectLayer | PathObjectLayer | ImageObjectLayer
+export type ObjectLayer = ShapeObjectLayer | TextObjectLayer | PathObjectLayer | ImageObjectLayer | BalloonObjectLayer
 
 /**
  * Type guards for object layers
@@ -75,6 +86,10 @@ export function isPathObjectLayer(layer: ObjectLayer): layer is PathObjectLayer 
 
 export function isImageObjectLayer(layer: ObjectLayer): layer is ImageObjectLayer {
   return layer.type === 'image'
+}
+
+export function isBalloonObjectLayer(layer: ObjectLayer): layer is BalloonObjectLayer {
+  return layer.type === 'balloon'
 }
 
 /**

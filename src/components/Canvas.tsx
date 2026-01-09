@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Tool, Shape, PenType } from '../types/common'
-import { ShapeLayer, TextLayer, PathObjectLayer, ObjectLayer, ImageObjectLayer, isPathObjectLayer, isShapeObjectLayer, isImageObjectLayer } from '../types/layers'
+import { ShapeLayer, TextLayer, PathObjectLayer, ObjectLayer, ImageObjectLayer, BalloonObjectLayer, isPathObjectLayer, isShapeObjectLayer, isImageObjectLayer, isBalloonObjectLayer } from '../types/layers'
 import { drawGrid as drawGridUtil, debugLog, debugError, debugWarn, simplifyPath, isPointNearPolyline, imageDataToBase64, makeWhiteTransparent } from '../utils/canvasUtils'
-import { renderPathLayer, renderShapeLayer, renderTextLayer, renderImageLayer } from '../utils/renderUtils'
+import { renderPathLayer, renderShapeLayer, renderTextLayer, renderImageLayer, renderBalloonLayer } from '../utils/renderUtils'
 import './Canvas.css'
 
 interface SelectionRect {
@@ -358,7 +358,6 @@ export default function Canvas({
 
   const [isDrawing, setIsDrawing] = useState(false)
   const [startPos, setStartPos] = useState({ x: 0, y: 0 })
-  const savedImageRef = useRef<ImageData | null>(null)
   const selectionRectRef = useRef<SelectionRect | null>(null)
   const scissorRectRef = useRef<SelectionRect | null>(null)
   const selectionOriginalImageRef = useRef<ImageData | null>(null)
@@ -435,6 +434,8 @@ export default function Canvas({
         renderShapeLayer(ctx, layer)
       } else if (isImageObjectLayer(layer)) {
         renderImageLayer(ctx, layer)
+      } else if (isBalloonObjectLayer(layer)) {
+        renderBalloonLayer(ctx, layer)
       }
     })
   }, [])
@@ -869,6 +870,40 @@ export default function Canvas({
         }
       } else {
         // No text layer hit, try shape layers
+        const hitShapeLayer = hitTestShapeLayers(pos)
+        if (hitShapeLayer) {
+          if (isDoubleClick && activeShapeLayerIdRef.current === hitShapeLayer.id && isBalloonObjectLayer(hitShapeLayer)) {
+            // Double-clicked on selected balloon layer - start editing
+            editingTextLayerIdRef.current = hitShapeLayer.id
+            setTextInput(hitShapeLayer.text)
+
+            // Set editing state similarly to new balloon creation
+            setBalloonOval({
+              centerX: hitShapeLayer.x + hitShapeLayer.width / 2,
+              centerY: hitShapeLayer.y + hitShapeLayer.height / 2,
+              radiusX: hitShapeLayer.width / 2,
+              radiusY: hitShapeLayer.height / 2,
+              screenPos: { x: 0, y: 0 } // Re-calced below
+            })
+            setTextInputPos({
+              x: hitShapeLayer.x + hitShapeLayer.width / 2,
+              y: hitShapeLayer.y + hitShapeLayer.height / 2
+            })
+
+            const rect = canvas.getBoundingClientRect()
+            setTextInputScreenPos({
+              x: rect.left + ((hitShapeLayer.x + hitShapeLayer.width / 2) * rect.width) / canvas.width,
+              y: rect.top + ((hitShapeLayer.y + hitShapeLayer.height / 2) * rect.height) / canvas.height,
+            })
+
+            setTimeout(() => inputRef.current?.focus(), 0)
+            setIsDrawing(false)
+            lastClickTimeRef.current = 0
+            lastClickPosRef.current = null
+            return
+          }
+        }
+
         if (beginShapeLayerInteraction(pos)) {
           setIsDrawing(true)
           return
@@ -996,7 +1031,32 @@ export default function Canvas({
       repaintCanvas()
       setIsDrawing(false)
     } else if (tool === 'balloon') {
-      savedImageRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      setIsDrawing(true)
+      setStartPos(pos)
+      const layerId = generateLayerId()
+      const newLayer: BalloonObjectLayer = {
+        type: 'balloon',
+        id: layerId,
+        x: pos.x,
+        y: pos.y,
+        width: 1,
+        height: 1,
+        rotation: 0,
+        text: '',
+        font: font,
+        fontSize: fontSize,
+        color: color,
+      }
+      pendingShapeLayerIdRef.current = layerId
+      isDrawingObjectShapeRef.current = true // Reuse this flag or create new one? Reusing seems fine if careful.
+      // Actually, let's just use isDrawingObjectShapeRef since it's an object shape effectively.
+
+      // Save history
+      if (onShapeLayersChange) {
+        onShapeLayersChange([...shapeLayersRef.current], false)
+      }
+      updateShapeLayers([...shapeLayersRef.current, newLayer], true)
+      repaintCanvas()
     } else if (tool === 'eraser') {
       ctx.beginPath()
       ctx.moveTo(pos.x, pos.y)
@@ -1637,18 +1697,19 @@ export default function Canvas({
 
     const pos = getMousePos(e)
 
-    if (tool === 'objectShapes' && isDrawingObjectShapeRef.current && pendingShapeLayerIdRef.current) {
+    if ((tool === 'objectShapes' || tool === 'balloon') && isDrawingObjectShapeRef.current && pendingShapeLayerIdRef.current) {
       const layerId = pendingShapeLayerIdRef.current
       const width = Math.max(1, Math.abs(pos.x - startPos.x))
       const height = Math.max(1, Math.abs(pos.y - startPos.y))
       const layerX = Math.min(startPos.x, pos.x)
       const layerY = Math.min(startPos.y, pos.y)
+
+      // Update the layer
       const updatedLayers = shapeLayersRef.current.map((layer) =>
         layer.id === layerId
           ? { ...layer, x: layerX, y: layerY, width, height }
           : layer
       )
-      // Skip history during drawing - we already saved when shape creation started
       updateShapeLayers(updatedLayers, true)
       repaintCanvas()
       return
@@ -1980,31 +2041,6 @@ export default function Canvas({
       ctx.restore()
       // Explicitly reset composite operation for next drawing
       ctx.globalCompositeOperation = 'source-over'
-    } else if (tool === 'balloon') {
-      if (savedImageRef.current) {
-        ctx.putImageData(savedImageRef.current, 0, 0)
-      }
-      drawGrid(ctx)
-
-      if (tool === 'balloon') {
-        ctx.beginPath()
-        const radiusX = Math.abs(pos.x - startPos.x) / 2
-        const radiusY = Math.abs(pos.y - startPos.y) / 2
-        const centerX = (startPos.x + pos.x) / 2
-        const centerY = (startPos.y + pos.y) / 2
-        ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI)
-        ctx.stroke()
-
-        const tailY = centerY + radiusY
-        ctx.beginPath()
-        ctx.moveTo(centerX, tailY)
-        ctx.lineTo(centerX - 15, tailY + 20)
-        ctx.lineTo(centerX + 15, tailY + 20)
-        ctx.closePath()
-        ctx.fillStyle = color
-        ctx.fill()
-        ctx.stroke()
-      }
     }
   }
 
@@ -2016,10 +2052,44 @@ export default function Canvas({
       return
     }
 
-    if (tool === 'objectShapes' && isDrawingObjectShapeRef.current) {
+    if ((tool === 'objectShapes' || tool === 'balloon') && isDrawingObjectShapeRef.current) {
+      const layerId = pendingShapeLayerIdRef.current
       isDrawingObjectShapeRef.current = false
       pendingShapeLayerIdRef.current = null
       setIsDrawing(false)
+
+      if (tool === 'balloon' && layerId) {
+        // Automatically start editing text for the new balloon
+        const layer = shapeLayersRef.current.find(l => l.id === layerId) as BalloonObjectLayer
+        if (layer) {
+          // Select it
+          activeShapeLayerIdRef.current = layerId
+          // Start editing
+          setBalloonOval({
+            centerX: layer.x + layer.width / 2,
+            centerY: layer.y + layer.height / 2,
+            radiusX: layer.width / 2,
+            radiusY: layer.height / 2,
+            screenPos: { x: 0, y: 0 } // Will be calculated below
+          })
+
+          setTextInput(layer.text)
+          setTextInputPos({ x: layer.x + layer.width / 2, y: layer.y + layer.height / 2 })
+
+          const rect = canvas.getBoundingClientRect()
+          setTextInputScreenPos({
+            x: rect.left + ((layer.x + layer.width / 2) * rect.width) / canvas.width,
+            y: rect.top + ((layer.y + layer.height / 2) * rect.height) / canvas.height,
+          })
+          editingTextLayerIdRef.current = layerId // Reuse this ref for balloon editing too?
+          // Wait, editingTextLayerIdRef is likely strictly for TextLayer. 
+          // If I use it for balloon, I need to make sure handleTextSubmit handles it.
+          // Let's check handleTextSubmit.
+
+          setTimeout(() => inputRef.current?.focus(), 0)
+        }
+      }
+
       repaintCanvas()
       return
     }
@@ -2454,43 +2524,6 @@ export default function Canvas({
       return
     }
 
-    const pos = getMousePos(e)
-
-    if (tool === 'balloon') {
-      ctx.beginPath()
-      const radiusX = Math.abs(pos.x - startPos.x) / 2
-      const radiusY = Math.abs(pos.y - startPos.y) / 2
-      const centerX = (startPos.x + pos.x) / 2
-      const centerY = (startPos.y + pos.y) / 2
-      ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI)
-      ctx.stroke()
-
-      const tailY = centerY + radiusY
-      ctx.beginPath()
-      ctx.moveTo(centerX, tailY)
-      ctx.lineTo(centerX - 15, tailY + 20)
-      ctx.lineTo(centerX + 15, tailY + 20)
-      ctx.closePath()
-      ctx.fillStyle = color
-      ctx.fill()
-      ctx.stroke()
-
-      const rect = canvas.getBoundingClientRect()
-      const screenPos = {
-        x: rect.left + (centerX * rect.width) / canvas.width,
-        y: rect.top + (centerY * rect.height) / canvas.height - 12,
-      }
-      setBalloonOval({
-        centerX,
-        centerY,
-        radiusX,
-        radiusY,
-        screenPos,
-      })
-      setTextInputPos({ x: centerX, y: centerY })
-      setTextInputScreenPos(screenPos)
-      setTimeout(() => inputRef.current?.focus(), 0)
-    }
 
     setIsDrawing(false)
 
@@ -2634,8 +2667,10 @@ export default function Canvas({
 
       // Check if we're editing an existing text layer
       if (editingTextLayerIdRef.current) {
-        const existingLayer = textLayersRef.current.find(l => l.id === editingTextLayerIdRef.current)
-        if (existingLayer) {
+        // Check text layers first
+        const existingTextLayer = textLayersRef.current.find(l => l.id === editingTextLayerIdRef.current)
+        if (existingTextLayer) {
+          // ... (existing text layer update logic) ...
           // Calculate scale factor for measurement
           const rect = canvas.getBoundingClientRect()
           const scaleX = rect.width / canvas.width
@@ -2676,6 +2711,42 @@ export default function Canvas({
           }
 
           updateTextLayers(updatedLayers, true)
+          repaintCanvas()
+
+          // Clear editing state
+          editingTextLayerIdRef.current = null
+          setTextInputPos(null)
+          setTextInputScreenPos(null)
+          setTextInput('')
+          setBalloonOval(null)
+          return
+        }
+
+        // Check shape layers (for balloons)
+        const existingShapeLayer = shapeLayersRef.current.find(l => l.id === editingTextLayerIdRef.current)
+        if (existingShapeLayer && isBalloonObjectLayer(existingShapeLayer)) {
+          // For balloon, we update text, font, color, but maybe not size? 
+          // Or maybe we verify if text fits? For now, just update text properties.
+          // The size of the balloon is independent of text in this simple version (user resizes balloon manually)
+
+          const updatedLayers = shapeLayersRef.current.map((layer) =>
+            layer.id === editingTextLayerIdRef.current && isBalloonObjectLayer(layer)
+              ? {
+                ...layer,
+                text: textInput,
+                font: font,
+                fontSize: fontSize,
+                color: color
+              }
+              : layer
+          )
+
+          // Save history
+          if (onShapeLayersChange) {
+            onShapeLayersChange([...shapeLayersRef.current], false)
+          }
+
+          updateShapeLayers(updatedLayers, true)
           repaintCanvas()
 
           // Clear editing state
@@ -2809,6 +2880,7 @@ export default function Canvas({
               position: 'fixed',
               left: `${textInputScreenPos.x}px`,
               top: `${textInputScreenPos.y}px`,
+              transform: balloonOval ? 'translate(-50%, -50%)' : 'none',
               border: '1px solid #667eea',
               borderRadius: '4px',
               padding: '4px 8px',
