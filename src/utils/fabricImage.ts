@@ -63,7 +63,10 @@ export const fabricImageToLayer = (obj: fabric.FabricImage): ImageObjectLayer =>
 }
 
 /** Discriminate a Fabric object's originating layer kind (for select-mode sync-back). */
-export const fabricObjectKind = (obj: fabric.FabricObject): 'text' | 'image' | 'shape' => {
+export const fabricObjectKind = (obj: fabric.FabricObject): 'text' | 'image' | 'shape' | 'group' => {
+  if (obj instanceof fabric.Group || (obj as any).type === 'group') {
+    return 'group'
+  }
   if (obj instanceof fabric.IText || (obj as any).type === 'i-text' || (obj as any).type === 'text') {
     return 'text'
   }

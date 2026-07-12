@@ -64,10 +64,20 @@ export interface BalloonObjectLayer extends BaseObjectLayer {
 }
 
 /**
+ * Group object layer — several objects merged into one unit.
+ * `children` are stored in GROUP-LOCAL coordinates (relative to the group centre); the
+ * group's own x/y/width/height/rotation describe its absolute placement on the canvas.
+ */
+export interface GroupObjectLayer extends BaseObjectLayer {
+  type: 'group'
+  children: ObjectLayer[]
+}
+
+/**
  * Union type for all object layers
  * Add new object types here as discriminated union members
  */
-export type ObjectLayer = ShapeObjectLayer | TextObjectLayer | PathObjectLayer | ImageObjectLayer | BalloonObjectLayer
+export type ObjectLayer = ShapeObjectLayer | TextObjectLayer | PathObjectLayer | ImageObjectLayer | BalloonObjectLayer | GroupObjectLayer
 
 /**
  * Type guards for object layers
@@ -92,6 +102,10 @@ export function isBalloonObjectLayer(layer: ObjectLayer): layer is BalloonObject
   return layer.type === 'balloon'
 }
 
+export function isGroupObjectLayer(layer: ObjectLayer): layer is GroupObjectLayer {
+  return layer.type === 'group'
+}
+
 /**
  * Legacy type aliases for backward compatibility during migration
  * @deprecated Use ObjectLayer with type guards instead
@@ -105,6 +119,15 @@ export type PathLayer = PathObjectLayer
  * This is useful when loading old files that don't have the type discriminator
  */
 export function migrateLayer(layer: Partial<ObjectLayer> & { id: string; x: number; y: number; width: number; height: number; rotation: number }): ObjectLayer {
+  // Group: recursively migrate children, then return.
+  if ('type' in layer && layer.type === 'group') {
+    return {
+      ...layer,
+      type: 'group',
+      children: migrateLayers((layer as any).children ?? []),
+    } as GroupObjectLayer
+  }
+
   // If type is already set, return as-is
   if ('type' in layer && (layer.type === 'shape' || layer.type === 'text' || layer.type === 'path' || layer.type === 'image')) {
     return layer as ObjectLayer

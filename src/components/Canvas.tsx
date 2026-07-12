@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import * as fabric from 'fabric'
 import { Tool, Shape, PenType } from '../types/common'
-import { ShapeLayer, TextLayer, PathObjectLayer, ObjectLayer, ImageObjectLayer, BalloonObjectLayer, isPathObjectLayer, isShapeObjectLayer, isImageObjectLayer, isBalloonObjectLayer } from '../types/layers'
+import { ShapeLayer, TextLayer, PathObjectLayer, ObjectLayer, ImageObjectLayer, BalloonObjectLayer, GroupObjectLayer, isPathObjectLayer, isShapeObjectLayer, isImageObjectLayer, isBalloonObjectLayer, isGroupObjectLayer } from '../types/layers'
 import { drawGrid as drawGridUtil, debugLog, debugError, debugWarn, simplifyPath, isPointNearPolyline, imageDataToBase64, makeWhiteTransparent } from '../utils/canvasUtils'
 import { renderPathLayer, renderShapeLayer, renderTextLayer, renderImageLayer, renderBalloonLayer } from '../utils/renderUtils'
 import { shapeLayerToFabricObject, fabricObjectToShapeLayer } from '../utils/fabricShapes'
 import { textLayerToFabricIText, fabricITextToTextLayer } from '../utils/fabricText'
 import { imageLayerToFabricImage, fabricImageToLayer, fabricObjectKind } from '../utils/fabricImage'
+import { layerToFabricGroup, fabricGroupToLayer } from '../utils/fabricGroup'
 import './Canvas.css'
 
 interface SelectionRect {
@@ -1361,6 +1362,17 @@ export default function Canvas({
             .catch(() => {
               /* skip images that fail to decode */
             })
+        } else if (isGroupObjectLayer(l)) {
+          layerToFabricGroup(l, scale)
+            .then((group) => {
+              if (disposed) return
+              applyObjectControls(group)
+              canvas.add(group)
+              canvas.requestRenderAll()
+            })
+            .catch(() => {
+              /* skip groups that fail to build */
+            })
         }
       })
       textLayersRef.current.forEach((l) => canvas.add(textLayerToFabricIText(l, scale)))
@@ -1385,6 +1397,7 @@ export default function Canvas({
           const kind = fabricObjectKind(o)
           if (kind === 'text') texts.push(fabricITextToTextLayer(o as fabric.IText, scale))
           else if (kind === 'image') images.push(fabricImageToLayer(o as fabric.FabricImage))
+          else if (kind === 'group') shapes.push(fabricGroupToLayer(o as fabric.Group, scale))
           else shapes.push(fabricObjectToShapeLayer(o))
         })
         // Preserve non-Fabric layers (paths, balloons) in their original order.
@@ -1402,6 +1415,27 @@ export default function Canvas({
     const duplicateObject = (obj?: fabric.FabricObject | null) => {
       if (!obj) return
       const kind = fabricObjectKind(obj)
+      if (kind === 'group') {
+        const gl = fabricGroupToLayer(obj as fabric.Group, scale)
+        const dup: GroupObjectLayer = {
+          ...gl,
+          id: generateLayerId(),
+          x: gl.x + OFFSET,
+          y: gl.y + OFFSET,
+          children: gl.children.map((c) => ({ ...c, id: generateLayerId() })),
+        }
+        layerToFabricGroup(dup, scale)
+          .then((g) => {
+            if (disposed) return
+            applyObjectControls(g)
+            canvas.add(g)
+            canvas.setActiveObject(g)
+            canvas.requestRenderAll()
+            syncToLayers(false)
+          })
+          .catch(() => {})
+        return
+      }
       if (kind === 'image') {
         const layer = fabricImageToLayer(obj as fabric.FabricImage)
         imageLayerToFabricImage({ ...layer, id: generateLayerId(), x: layer.x + OFFSET, y: layer.y + OFFSET })
@@ -1439,18 +1473,48 @@ export default function Canvas({
       syncToLayers(false)
     }
 
+    // Merge the current multi-selection into one group; un-merge a group back into pieces.
+    const mergeSelection = () => {
+      const sel = canvas.getActiveObject() as fabric.ActiveSelection | null
+      if (!sel || (sel as any).type !== 'activeselection') return
+      const objs = sel.removeAll()
+      if (objs.length < 2) return
+      canvas.remove(...objs)
+      const group = new fabric.Group(objs, { originX: 'center', originY: 'center' })
+      ;(group as any).groupId = generateLayerId()
+      applyObjectControls(group)
+      canvas.add(group)
+      canvas.setActiveObject(group)
+      canvas.requestRenderAll()
+      syncToLayers(false)
+    }
+    const ungroupObject = (obj?: fabric.FabricObject | null) => {
+      if (!obj || !(obj instanceof fabric.Group)) return
+      const objs = obj.removeAll() // Fabric bakes children back to absolute canvas coords
+      canvas.remove(obj)
+      objs.forEach((o) => {
+        applyObjectControls(o)
+        canvas.add(o)
+      })
+      canvas.discardActiveObject()
+      canvas.requestRenderAll()
+      syncToLayers(false)
+    }
+
     const iconControl = (
       glyph: string,
       bg: string,
       x: number,
       offsetX: number,
-      handler: (o?: fabric.FabricObject | null) => void
+      handler: (o?: fabric.FabricObject | null) => void,
+      y = -0.5,
+      offsetY = -16
     ) =>
       new fabric.Control({
         x,
-        y: -0.5,
+        y,
         offsetX,
-        offsetY: -16,
+        offsetY,
         cursorStyle: 'pointer',
         sizeX: 24,
         sizeY: 24,
@@ -1480,8 +1544,14 @@ export default function Canvas({
 
     const dupControl = iconControl('⧉', '#3b82f6', 0.5, 16, duplicateObject)
     const delControl = iconControl('✕', '#ef4444', -0.5, -16, deleteObject)
+    // Bottom-centre: ⊕ merge (shown on a multi-selection) and ⊖ un-merge (shown on a group).
+    const mergeControl = iconControl('⊕', '#10b981', 0, 0, mergeSelection, 0.5, 18)
+    const ungroupControl = iconControl('⊖', '#10b981', 0, 0, ungroupObject, 0.5, 18)
     const applyObjectControls = (obj: fabric.FabricObject) => {
       obj.controls = { ...obj.controls, dup: dupControl, del: delControl }
+      if (obj instanceof fabric.Group) {
+        obj.controls = { ...obj.controls, ung: ungroupControl }
+      }
     }
 
     // Give every already-loaded object the on-selection buttons.
@@ -1602,11 +1672,23 @@ export default function Canvas({
       syncToLayers(false)
     }
 
+    // Show the ⊕ merge button whenever 2+ objects are multi-selected.
+    const onSelection = () => {
+      const a = canvas.getActiveObject() as any
+      if (a && a.type === 'activeselection' && typeof a.getObjects === 'function' && a.getObjects().length >= 2) {
+        a.controls = { ...a.controls, merge: mergeControl }
+        a.setCoords() // recompute oCoords so the new control has render coords
+        canvas.requestRenderAll()
+      }
+    }
+
     canvas.on('mouse:down', onDown)
     canvas.on('mouse:move', onMove)
     canvas.on('mouse:up', onUp)
     canvas.on('object:modified', onModified)
     canvas.on('text:editing:exited', onEditingExited)
+    canvas.on('selection:created', onSelection)
+    canvas.on('selection:updated', onSelection)
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('resize', sizeOverlay)
 
@@ -1617,6 +1699,8 @@ export default function Canvas({
       canvas.off('mouse:up', onUp)
       canvas.off('object:modified', onModified)
       canvas.off('text:editing:exited', onEditingExited)
+      canvas.off('selection:created', onSelection)
+      canvas.off('selection:updated', onSelection)
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('resize', sizeOverlay)
       // Hand objects back to the legacy canvas. Skip history: real edits already recorded it.

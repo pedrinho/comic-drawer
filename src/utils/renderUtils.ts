@@ -1,4 +1,4 @@
-import { PathObjectLayer, ShapeLayer, TextLayer, ObjectLayer, ImageObjectLayer, BalloonObjectLayer, isPathObjectLayer, isShapeObjectLayer, isImageObjectLayer, isBalloonObjectLayer } from '../types/layers'
+import { PathObjectLayer, ShapeLayer, TextLayer, ObjectLayer, ImageObjectLayer, BalloonObjectLayer, GroupObjectLayer, isPathObjectLayer, isShapeObjectLayer, isImageObjectLayer, isBalloonObjectLayer, isGroupObjectLayer } from '../types/layers'
 import { traceShapePath } from './canvasUtils'
 
 // Simple image cache to avoid recreating HTMLImageElements every frame
@@ -262,6 +262,32 @@ export const renderBalloonLayer = (ctx: CanvasRenderingContext2D, layer: Balloon
     ctx.restore()
 }
 
+export const renderGroupLayer = (ctx: CanvasRenderingContext2D, layer: GroupObjectLayer) => {
+    const children = layer.children
+    if (children.length === 0) return
+
+    // Local bounding box of the children (they're stored relative to the group centre).
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const c of children) {
+        minX = Math.min(minX, c.x)
+        minY = Math.min(minY, c.y)
+        maxX = Math.max(maxX, c.x + c.width)
+        maxY = Math.max(maxY, c.y + c.height)
+    }
+    const localW = maxX - minX || 1
+    const localH = maxY - minY || 1
+    const centerX = layer.x + layer.width / 2
+    const centerY = layer.y + layer.height / 2
+
+    ctx.save()
+    ctx.translate(centerX, centerY)
+    ctx.rotate(layer.rotation)
+    ctx.scale(layer.width / localW, layer.height / localH)
+    ctx.translate(-(minX + localW / 2), -(minY + localH / 2))
+    children.forEach((child) => renderObjectLayer(ctx, child))
+    ctx.restore()
+}
+
 export const renderObjectLayer = (ctx: CanvasRenderingContext2D, layer: ObjectLayer) => {
     if (isPathObjectLayer(layer)) {
         renderPathLayer(ctx, layer)
@@ -271,5 +297,7 @@ export const renderObjectLayer = (ctx: CanvasRenderingContext2D, layer: ObjectLa
         renderImageLayer(ctx, layer)
     } else if (isBalloonObjectLayer(layer)) {
         renderBalloonLayer(ctx, layer)
+    } else if (isGroupObjectLayer(layer)) {
+        renderGroupLayer(ctx, layer)
     }
 }
