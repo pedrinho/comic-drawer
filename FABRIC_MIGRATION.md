@@ -39,17 +39,26 @@ the legacy canvas working alongside a Fabric overlay until every tool is ported.
   double-click. Legacy object rendering is skipped for the owned types via `fabricOwnedRef`.
   Export is unaffected — it renders from the layer arrays (`App.tsx` `renderObjectLayer`).
 
-### ⚠️ Known limitations to verify / decide on (Fabric select mode)
-- **Undo/redo** while the `select` tool is active does not refresh the Fabric objects until
-  you switch tools and back (the overlay only loads objects on tool-enter). Undo/redo works
-  fully with any raster tool active. *Not yet wired to re-load on external layer changes —
-  deferred to avoid a sync feedback loop; needs a decision.*
+### Browser verification (Playwright, headless Chromium) — PASSED
+Ran a scripted pass driving real mouse gestures + screenshots. All green, zero page errors:
+- Shapes render correctly and land **under the cursor** (overlay alignment confirmed — the
+  Fabric and legacy canvases share the same box).
+- `select`: loads all objects onto Fabric; click-select, **move, resize (corner handle),
+  rotate (rotation handle)** all work with native controls.
+- **Undo** while in `select` refreshes correctly (App restores the panel's `data` reference
+  on undo/redo, which re-triggers the overlay reload — so the earlier concern was unfounded).
+- Text: place + type + commit renders; emoji places on Fabric.
+- **PDF export** produces a valid multi-hundred-KB file (renders from the layer arrays).
+
+### Remaining minor limitations (non-blocking)
 - **Duplicate button** is gone in Fabric select (the old on-canvas 📋 button keyed off the
-  legacy selection). Delete works via the Delete/Backspace key. Consider Cmd/Ctrl+D later.
-- **Old balloons** (deprecated) render on the legacy canvas and are **not** selectable while
-  the Fabric overlay is on top in select mode.
+  legacy selection). Delete works via Delete/Backspace. Consider Cmd/Ctrl+D later.
+- **Old balloons** (deprecated) render on the legacy canvas and are not selectable while the
+  Fabric overlay is on top in select mode.
 - The hand-rolled `SelectionHandle` / `getHandleAtPoint` machinery is now **unused** in
-  select mode but left in place (safe to delete in a later cleanup once verified).
+  select mode but left in place (safe to delete in a later cleanup).
+- **Scissor → image** was not driven in the automated pass (needs a raster cut first);
+  the conversion is unit-tested and the object path is the same as other objects.
 
 ## TODO — raster phase (still deferred, high risk)
 - [ ] pen / eraser / fill remain on the legacy raster canvas (intentionally — low risk).
