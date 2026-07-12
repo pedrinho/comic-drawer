@@ -1,7 +1,7 @@
 import { render, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
 import Canvas from './Canvas'
-import { ObjectLayer } from '../types/layers'
+import { ObjectLayer, TextLayer } from '../types/layers'
 
 /**
  * Integration test for the Fabric.js shape mode (objectShapes tool).
@@ -81,5 +81,35 @@ describe('Canvas — Fabric shape mode', () => {
     const rect = layers.find((l) => l.type === 'shape' && l.id === 's1')
     expect(rect).toBeTruthy()
     expect(rect).toMatchObject({ shape: 'rectangle', width: 200, height: 120 })
+  })
+
+  it('loads text onto Fabric and syncs it back when leaving the text tool', async () => {
+    const textLayer: TextLayer = {
+      type: 'text',
+      id: 't1',
+      text: 'Bang!',
+      x: 50,
+      y: 40,
+      width: 80,
+      height: 24,
+      rotation: 0,
+      font: 'Arial',
+      fontSize: 24,
+      color: '#000000',
+    }
+    const onTextLayersChange = vi.fn()
+    const { rerender } = render(
+      <Canvas {...baseProps} tool="text" textLayers={[textLayer]} onTextLayersChange={onTextLayersChange} />
+    )
+    rerender(
+      <Canvas {...baseProps} tool="select" textLayers={[textLayer]} onTextLayersChange={onTextLayersChange} />
+    )
+
+    await waitFor(() => expect(onTextLayersChange).toHaveBeenCalled())
+    const lastCall = onTextLayersChange.mock.calls[onTextLayersChange.mock.calls.length - 1]
+    const layers = lastCall[0] as TextLayer[]
+    const text = layers.find((l) => l.id === 't1')
+    expect(text).toBeTruthy()
+    expect(text).toMatchObject({ type: 'text', text: 'Bang!', fontSize: 24 })
   })
 })
