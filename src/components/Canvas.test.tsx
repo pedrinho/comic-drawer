@@ -19,7 +19,7 @@ describe('Canvas', () => {
       />
     )
 
-    expect(document.querySelector('canvas')).toBeInTheDocument()
+    expect(screen.getByTestId('canvas')).toBeInTheDocument()
   })
 
   it('renders canvas with default grid layout', () => {
@@ -36,7 +36,7 @@ describe('Canvas', () => {
       />
     )
 
-    const canvas = document.querySelector('canvas')
+    const canvas = screen.getByTestId('canvas')
     expect(canvas).toBeInTheDocument()
   })
 
@@ -54,7 +54,7 @@ describe('Canvas', () => {
       />
     )
 
-    const canvas = document.querySelector('canvas')
+    const canvas = screen.getByTestId('canvas')
     expect(canvas).toBeInTheDocument()
   })
 
@@ -84,7 +84,7 @@ describe('Canvas', () => {
       />
     )
 
-    const canvas = document.querySelector('canvas')
+    const canvas = screen.getByTestId('canvas')
     expect(canvas).toBeInTheDocument()
   })
 
@@ -102,7 +102,7 @@ describe('Canvas', () => {
       />
     )
 
-    const canvas = document.querySelector('canvas')
+    const canvas = screen.getByTestId('canvas')
     expect(canvas).toBeInTheDocument()
   })
 
@@ -120,7 +120,7 @@ describe('Canvas', () => {
       />
     )
 
-    const canvas = document.querySelector('canvas')
+    const canvas = screen.getByTestId('canvas')
     expect(canvas).toBeInTheDocument()
   })
 
@@ -138,7 +138,7 @@ describe('Canvas', () => {
       />
     )
 
-    const canvas = document.querySelector('canvas')
+    const canvas = screen.getByTestId('canvas')
     expect(canvas).toBeInTheDocument()
   })
 
@@ -175,7 +175,7 @@ describe('Canvas', () => {
         />
       )
 
-      const canvas = document.querySelector('canvas')
+      const canvas = screen.getByTestId('canvas')
       expect(canvas).toBeInTheDocument()
 
       // Click on the shape to select it
@@ -192,7 +192,7 @@ describe('Canvas', () => {
 
       // Wait for delete button to appear
       await waitFor(() => {
-        const deleteButton = screen.queryByText('🗑️')
+        const deleteButton = screen.queryByTitle('Delete (Delete/Backspace)')
         expect(deleteButton).toBeInTheDocument()
       })
     })
@@ -229,7 +229,7 @@ describe('Canvas', () => {
         />
       )
 
-      const canvas = document.querySelector('canvas')
+      const canvas = screen.getByTestId('canvas')
       expect(canvas).toBeInTheDocument()
 
       // Click on the text to select it
@@ -246,7 +246,7 @@ describe('Canvas', () => {
 
       // Wait for delete button to appear
       await waitFor(() => {
-        const deleteButton = screen.queryByText('🗑️')
+        const deleteButton = screen.queryByTitle('Delete (Delete/Backspace)')
         expect(deleteButton).toBeInTheDocument()
       })
     })
@@ -283,7 +283,7 @@ describe('Canvas', () => {
         />
       )
 
-      const canvas = document.querySelector('canvas')
+      const canvas = screen.getByTestId('canvas')
       if (canvas) {
         const rect = canvas.getBoundingClientRect()
         const clickX = rect.left + (100 + 25) * (rect.width / 1200)
@@ -297,7 +297,7 @@ describe('Canvas', () => {
 
       // Wait for delete button and click it
       await waitFor(async () => {
-        const deleteButton = screen.queryByText('🗑️')
+        const deleteButton = screen.queryByTitle('Delete (Delete/Backspace)')
         expect(deleteButton).toBeInTheDocument()
         if (deleteButton) {
           await userEvent.click(deleteButton)
@@ -346,7 +346,7 @@ describe('Canvas', () => {
         />
       )
 
-      const canvas = document.querySelector('canvas')
+      const canvas = screen.getByTestId('canvas')
       if (canvas) {
         const rect = canvas.getBoundingClientRect()
         const clickX = rect.left + (100 + 25) * (rect.width / 1200)
@@ -360,7 +360,7 @@ describe('Canvas', () => {
 
       // Wait for delete button and click it
       await waitFor(async () => {
-        const deleteButton = screen.queryByText('🗑️')
+        const deleteButton = screen.queryByTitle('Delete (Delete/Backspace)')
         expect(deleteButton).toBeInTheDocument()
         if (deleteButton) {
           await userEvent.click(deleteButton)
@@ -408,7 +408,7 @@ describe('Canvas', () => {
         />
       )
 
-      const canvas = document.querySelector('canvas')
+      const canvas = screen.getByTestId('canvas')
       if (canvas) {
         const rect = canvas.getBoundingClientRect()
         const clickX = rect.left + (100 + 25) * (rect.width / 1200)
@@ -461,7 +461,7 @@ describe('Canvas', () => {
         />
       )
 
-      const canvas = document.querySelector('canvas')
+      const canvas = screen.getByTestId('canvas')
       if (canvas) {
         const rect = canvas.getBoundingClientRect()
         const clickX = rect.left + (100 + 25) * (rect.width / 1200)
@@ -551,7 +551,7 @@ describe('Canvas', () => {
         />
       )
 
-      const canvas = document.querySelector('canvas')
+      const canvas = screen.getByTestId('canvas')
       expect(canvas).toBeInTheDocument()
 
       // Click on the shape to select it
@@ -568,7 +568,7 @@ describe('Canvas', () => {
 
       // Wait for duplicate button to appear
       await waitFor(() => {
-        const duplicateButton = screen.queryByText('📋')
+        const duplicateButton = screen.queryByTitle('Duplicate')
         expect(duplicateButton).toBeInTheDocument()
       })
     })
@@ -605,7 +605,7 @@ describe('Canvas', () => {
         />
       )
 
-      const canvas = document.querySelector('canvas')
+      const canvas = screen.getByTestId('canvas')
       expect(canvas).toBeInTheDocument()
 
       // Click on the text to select it
@@ -622,7 +622,7 @@ describe('Canvas', () => {
 
       // Wait for duplicate button to appear
       await waitFor(() => {
-        const duplicateButton = screen.queryByText('📋')
+        const duplicateButton = screen.queryByTitle('Duplicate')
         expect(duplicateButton).toBeInTheDocument()
       })
     })
@@ -659,7 +659,7 @@ describe('Canvas', () => {
         />
       )
 
-      const canvas = document.querySelector('canvas')
+      const canvas = screen.getByTestId('canvas')
       if (canvas) {
         const rect = canvas.getBoundingClientRect()
         const clickX = rect.left + (100 + 25) * (rect.width / 1200)
@@ -673,7 +673,7 @@ describe('Canvas', () => {
 
       // Wait for duplicate button and click it
       await waitFor(async () => {
-        const duplicateButton = screen.queryByText('📋')
+        const duplicateButton = screen.queryByTitle('Duplicate')
         expect(duplicateButton).toBeInTheDocument()
         if (duplicateButton) {
           await userEvent.click(duplicateButton)
@@ -739,7 +739,7 @@ describe('Canvas', () => {
         />
       )
 
-      const canvas = document.querySelector('canvas')
+      const canvas = screen.getByTestId('canvas')
       if (canvas) {
         const rect = canvas.getBoundingClientRect()
         const clickX = rect.left + (100 + 25) * (rect.width / 1200)
@@ -753,7 +753,7 @@ describe('Canvas', () => {
 
       // Wait for duplicate button and click it
       await waitFor(async () => {
-        const duplicateButton = screen.queryByText('📋')
+        const duplicateButton = screen.queryByTitle('Duplicate')
         expect(duplicateButton).toBeInTheDocument()
         if (duplicateButton) {
           await userEvent.click(duplicateButton)
@@ -820,7 +820,7 @@ describe('Canvas', () => {
         />
       )
 
-      const canvas = document.querySelector('canvas')
+      const canvas = screen.getByTestId('canvas')
       if (canvas) {
         const rect = canvas.getBoundingClientRect()
         const clickX = rect.left + (1150 + 25) * (rect.width / 1200)
@@ -835,7 +835,7 @@ describe('Canvas', () => {
 
       // Wait for duplicate button and click it
       await waitFor(async () => {
-        const duplicateButton = screen.queryByText('📋')
+        const duplicateButton = screen.queryByTitle('Duplicate')
         expect(duplicateButton).toBeInTheDocument()
         if (duplicateButton) {
           await userEvent.click(duplicateButton)
@@ -888,7 +888,7 @@ describe('Canvas', () => {
         />
       )
 
-      const duplicateButton = screen.queryByText('📋')
+      const duplicateButton = screen.queryByTitle('Duplicate')
       expect(duplicateButton).not.toBeInTheDocument()
     })
   })

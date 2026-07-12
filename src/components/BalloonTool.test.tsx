@@ -36,7 +36,7 @@ describe('Balloon Tool', () => {
             />
         )
 
-        const canvas = document.querySelector('canvas')
+        const canvas = screen.getByTestId('canvas') as HTMLCanvasElement
         expect(canvas).toBeTruthy()
 
         if (canvas) {
@@ -98,7 +98,7 @@ describe('Balloon Tool', () => {
             />
         )
 
-        const canvas = document.querySelector('canvas')
+        const canvas = screen.getByTestId('canvas') as HTMLCanvasElement
         if (canvas) {
             // Set dimensions
             Object.defineProperty(canvas, 'width', { value: 1000 })

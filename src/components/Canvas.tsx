@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import * as fabric from 'fabric'
 import { Tool, Shape, PenType } from '../types/common'
 import { ShapeLayer, TextLayer, PathObjectLayer, ObjectLayer, ImageObjectLayer, BalloonObjectLayer, isPathObjectLayer, isShapeObjectLayer, isImageObjectLayer, isBalloonObjectLayer } from '../types/layers'
 import { drawGrid as drawGridUtil, debugLog, debugError, debugWarn, simplifyPath, isPointNearPolyline, imageDataToBase64, makeWhiteTransparent } from '../utils/canvasUtils'
 import { renderPathLayer, renderShapeLayer, renderTextLayer, renderImageLayer, renderBalloonLayer } from '../utils/renderUtils'
+import { shapeLayerToFabricObject, fabricObjectToShapeLayer } from '../utils/fabricShapes'
 import './Canvas.css'
 
 interface SelectionRect {
@@ -420,6 +422,39 @@ export default function Canvas({
   const [deleteButtonPos, setDeleteButtonPos] = useState<{ x: number; y: number } | null>(null)
   const [duplicateButtonPos, setDuplicateButtonPos] = useState<{ x: number; y: number } | null>(null)
 
+  // Fabric.js Refs
+  const fabricRef = useRef<HTMLCanvasElement>(null)
+  const fabricCanvasRef = useRef<fabric.Canvas | null>(null)
+  // When true, shape-type layers are rendered/edited on the Fabric canvas instead of the
+  // legacy canvas (active only while the objectShapes tool is selected).
+  const shapesOnFabricRef = useRef(false)
+
+  // Initialize Fabric Canvas
+  useEffect(() => {
+    if (!fabricRef.current) return
+
+    // Dispose if already exists
+    if (fabricCanvasRef.current) {
+      fabricCanvasRef.current.dispose()
+    }
+
+    const canvas = new fabric.Canvas(fabricRef.current, {
+      width: 1200,
+      height: 800,
+      selection: true, // Enable selection for Fabric objects
+      renderOnAddRemove: true,
+    })
+
+    fabricCanvasRef.current = canvas
+    debugLog('Canvas', 'Fabric.js initialized')
+
+    return () => {
+      canvas.dispose()
+      fabricCanvasRef.current = null
+    }
+  }, [])
+
+
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     drawGridUtil(ctx, layout)
   }, [layout])
@@ -431,6 +466,9 @@ export default function Canvas({
       if (isPathObjectLayer(layer)) {
         renderPathLayer(ctx, layer)
       } else if (isShapeObjectLayer(layer)) {
+        // While the objectShapes tool owns them, shapes are drawn by Fabric on the overlay
+        // canvas — skip them here to avoid double-rendering.
+        if (shapesOnFabricRef.current) return
         renderShapeLayer(ctx, layer)
       } else if (isImageObjectLayer(layer)) {
         renderImageLayer(ctx, layer)
@@ -1217,6 +1255,153 @@ export default function Canvas({
     }
     return `${Date.now()}-${Math.random().toString(36).slice(2)}`
   }
+
+  // Fabric.js shape mode: while the objectShapes tool is active, shapes are created,
+  // selected, moved, resized and rotated on the Fabric overlay canvas (which gives us all
+  // of that machinery for free), then synced back into shapeLayers so save/load and the
+  // rest of the app keep working. All other tools continue to use the legacy canvas.
+  useEffect(() => {
+    const canvas = fabricCanvasRef.current
+    const legacy = canvasRef.current
+    if (!canvas) return
+    const active = tool === 'objectShapes'
+
+    // Keep the Fabric overlay's CSS size aligned with the (scaled) legacy canvas so their
+    // coordinate spaces line up. Internal resolution stays 1200x800 for both.
+    const sizeOverlay = () => {
+      if (!legacy) return
+      const r = legacy.getBoundingClientRect()
+      if (r.width && r.height) {
+        canvas.setDimensions({ width: r.width, height: r.height }, { cssOnly: true })
+      }
+    }
+    sizeOverlay()
+
+    if (!active) {
+      if (shapesOnFabricRef.current) {
+        shapesOnFabricRef.current = false
+        canvas.getObjects().slice().forEach((o) => canvas.remove(o))
+        canvas.requestRenderAll()
+        repaintCanvas()
+      }
+      return
+    }
+
+    const currentShape = shape ?? 'rectangle'
+    const currentColor = color
+    const BASE = 100 // base geometry size; final size comes from scaleX/scaleY
+
+    canvas.selection = false // no rubber-band group select; empty-drag creates a shape
+    shapesOnFabricRef.current = true
+
+    // Load existing shape layers onto the Fabric canvas, and repaint the legacy canvas so
+    // it stops drawing them (avoids double-rendering).
+    canvas.getObjects().slice().forEach((o) => canvas.remove(o))
+    shapeLayersRef.current.forEach((l) => {
+      if (isShapeObjectLayer(l)) canvas.add(shapeLayerToFabricObject(l))
+    })
+    canvas.requestRenderAll()
+    repaintCanvas()
+
+    const syncToLayers = (skipHistory = false) => {
+      const fabricShapes = canvas.getObjects().map((o) => fabricObjectToShapeLayer(o))
+      const others = shapeLayersRef.current.filter((l) => !isShapeObjectLayer(l))
+      updateShapeLayers([...others, ...fabricShapes], skipHistory)
+    }
+
+    const getPoint = (opt: any) => {
+      if (opt.scenePoint) return opt.scenePoint
+      const c = canvas as any
+      return typeof c.getScenePoint === 'function' ? c.getScenePoint(opt.e) : c.getPointer(opt.e)
+    }
+
+    let creating: { obj: fabric.FabricObject; start: { x: number; y: number } } | null = null
+
+    const onDown = (opt: any) => {
+      if (opt.target) return // clicking an existing object → let Fabric select/move it
+      const p = getPoint(opt)
+      const obj = shapeLayerToFabricObject({
+        type: 'shape',
+        id: generateLayerId(),
+        shape: currentShape,
+        x: p.x,
+        y: p.y,
+        width: BASE,
+        height: BASE,
+        rotation: 0,
+        strokeColor: currentColor,
+        strokeWidth: 2,
+        fillColor: null,
+      })
+      obj.set({ scaleX: 0.001, scaleY: 0.001, left: p.x, top: p.y })
+      canvas.add(obj)
+      creating = { obj, start: { x: p.x, y: p.y } }
+    }
+
+    const onMove = (opt: any) => {
+      if (!creating) return
+      const p = getPoint(opt)
+      const w = Math.max(1, Math.abs(p.x - creating.start.x))
+      const h = Math.max(1, Math.abs(p.y - creating.start.y))
+      creating.obj.set({
+        scaleX: w / BASE,
+        scaleY: h / BASE,
+        left: (creating.start.x + p.x) / 2,
+        top: (creating.start.y + p.y) / 2,
+      })
+      canvas.requestRenderAll()
+    }
+
+    const onUp = () => {
+      if (!creating) return
+      const obj = creating.obj
+      const tooSmall = (obj.width ?? 0) * (obj.scaleX ?? 1) < 3 || (obj.height ?? 0) * (obj.scaleY ?? 1) < 3
+      creating = null
+      if (tooSmall) {
+        canvas.remove(obj)
+        canvas.requestRenderAll()
+        return
+      }
+      canvas.setActiveObject(obj)
+      canvas.requestRenderAll()
+      syncToLayers(false)
+    }
+
+    const onModified = () => syncToLayers(false)
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return
+      const obj = canvas.getActiveObject()
+      if (!obj) return
+      canvas.remove(obj)
+      canvas.discardActiveObject()
+      canvas.requestRenderAll()
+      syncToLayers(false)
+    }
+
+    canvas.on('mouse:down', onDown)
+    canvas.on('mouse:move', onMove)
+    canvas.on('mouse:up', onUp)
+    canvas.on('object:modified', onModified)
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('resize', sizeOverlay)
+
+    return () => {
+      canvas.off('mouse:down', onDown)
+      canvas.off('mouse:move', onMove)
+      canvas.off('mouse:up', onUp)
+      canvas.off('object:modified', onModified)
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('resize', sizeOverlay)
+      // Hand shapes back to the legacy canvas. Skip history: real edits already recorded it.
+      syncToLayers(true)
+      canvas.getObjects().slice().forEach((o) => canvas.remove(o))
+      canvas.discardActiveObject()
+      canvas.requestRenderAll()
+      shapesOnFabricRef.current = false
+      repaintCanvas()
+    }
+  }, [tool, shape, color, repaintCanvas, updateShapeLayers])
 
   const hitTestShapeLayers = useCallback((point: { x: number; y: number }): ObjectLayer | null => {
     const layers = shapeLayersRef.current
@@ -2850,7 +3035,21 @@ export default function Canvas({
   }
 
   return (
-    <div className="canvas-container">
+    <div className="canvas-container" style={{ position: 'relative', width: '100%', height: '100%' }}>
+      {/* Fabric.js Canvas — overlay. Interactive and on top only for the objectShapes tool. */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          zIndex: tool === 'objectShapes' ? 2 : 0,
+          pointerEvents: tool === 'objectShapes' ? 'auto' : 'none',
+        }}
+      >
+        <canvas ref={fabricRef} />
+      </div>
+
+      {/* Legacy Canvas (Top Layer) */}
       <canvas
         ref={canvasRef}
         className="drawing-canvas"
@@ -2858,6 +3057,15 @@ export default function Canvas({
         onMouseMove={draw}
         onMouseUp={stopDrawing}
         onMouseLeave={stopDrawing}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          touchAction: 'none',
+          pointerEvents: 'auto',
+          zIndex: 1, // Ensure legacy canvas is on top for now
+        }}
+        data-testid="canvas"
       />
       {textInputPos && textInputScreenPos && (() => {
         const editingLayer = editingTextLayerIdRef.current
@@ -2894,6 +3102,7 @@ export default function Canvas({
           />
         )
       })()}
+
       {duplicateButtonPos && tool === 'select' && (activeShapeLayerIdRef.current || activeTextLayerIdRef.current) && (
         <button
           onClick={handleDuplicate}
@@ -2926,9 +3135,12 @@ export default function Canvas({
           }}
           title="Duplicate"
         >
-          📋
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M16 1H4C2.9 1 2 1.9 2 3V17H4V3H16V1ZM19 5H8C6.9 5 6 5.9 6 7V21C6 22.1 6.9 23 8 23H19C20.1 23 21 22.1 21 21V7C21 5.9 20.1 5 19 5ZM19 21H8V7H19V21Z" fill="currentColor" />
+          </svg>
         </button>
       )}
+
       {deleteButtonPos && tool === 'select' && (activeShapeLayerIdRef.current || activeTextLayerIdRef.current) && (
         <button
           onClick={handleDelete}
@@ -2961,10 +3173,11 @@ export default function Canvas({
           }}
           title="Delete (Delete/Backspace)"
         >
-          🗑️
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor" />
+          </svg>
         </button>
       )}
     </div>
   )
 }
-
