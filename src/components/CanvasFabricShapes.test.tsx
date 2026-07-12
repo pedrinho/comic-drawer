@@ -112,4 +112,51 @@ describe('Canvas — Fabric shape mode', () => {
     expect(text).toBeTruthy()
     expect(text).toMatchObject({ type: 'text', text: 'Bang!', fontSize: 24 })
   })
+
+  it('select mode loads shapes + text onto Fabric and syncs both back on exit', async () => {
+    const textLayer: TextLayer = {
+      type: 'text',
+      id: 't1',
+      text: 'Pow',
+      x: 50,
+      y: 40,
+      width: 60,
+      height: 24,
+      rotation: 0,
+      font: 'Arial',
+      fontSize: 24,
+      color: '#000000',
+    }
+    const onShapeLayersChange = vi.fn()
+    const onTextLayersChange = vi.fn()
+    const { rerender } = render(
+      <Canvas
+        {...baseProps}
+        tool="select"
+        shapeLayers={[rectLayer]}
+        textLayers={[textLayer]}
+        onShapeLayersChange={onShapeLayersChange}
+        onTextLayersChange={onTextLayersChange}
+      />
+    )
+    // Leaving select (to a raster tool) runs the cleanup, syncing all object types back.
+    rerender(
+      <Canvas
+        {...baseProps}
+        tool="pen"
+        shapeLayers={[rectLayer]}
+        textLayers={[textLayer]}
+        onShapeLayersChange={onShapeLayersChange}
+        onTextLayersChange={onTextLayersChange}
+      />
+    )
+
+    await waitFor(() => expect(onShapeLayersChange).toHaveBeenCalled())
+    await waitFor(() => expect(onTextLayersChange).toHaveBeenCalled())
+
+    const shapes = onShapeLayersChange.mock.calls.at(-1)![0] as ObjectLayer[]
+    const texts = onTextLayersChange.mock.calls.at(-1)![0] as TextLayer[]
+    expect(shapes.find((l) => l.id === 's1')).toMatchObject({ type: 'shape', shape: 'rectangle' })
+    expect(texts.find((l) => l.id === 't1')).toMatchObject({ type: 'text', text: 'Pow' })
+  })
 })

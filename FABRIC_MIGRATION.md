@@ -28,17 +28,33 @@ the legacy canvas working alongside a Fabric overlay until every tool is ported.
   comics still load). Not migrated to Fabric.
 - Integration tests: `src/components/CanvasFabricShapes.test.tsx`.
 
-## TODO — image + select unification (needs browser verification)
+## Image + select unification (done on branch `feature/fabric-select-unification` — NEEDS BROWSER VERIFICATION)
 
-These are coupled: images are created by the scissor tool and manipulated by the `select`
-tool, so putting images on Fabric requires moving `select` onto Fabric too. That replaces
-the hand-rolled selection/handles/delete-duplicate-button UX with Fabric's native controls
-— a behavior change that must be verified in a browser before merging.
+- [x] **image** — `ImageObjectLayer` ↔ `fabric.FabricImage` (`src/utils/fabricImage.ts`,
+  async load from base64). The scissor cut still produces base64 on the legacy raster; the
+  resulting object is manipulated on Fabric. Tests: `fabricImage.test.ts` (pure read-back +
+  kind discrimination; async decode is browser-only).
+- [x] **unify `select`** — the `select` tool now loads all object types (shape/text/image)
+  onto Fabric and uses native selection/move/resize/rotate. Text edits in place on
+  double-click. Legacy object rendering is skipped for the owned types via `fabricOwnedRef`.
+  Export is unaffected — it renders from the layer arrays (`App.tsx` `renderObjectLayer`).
 
-- [ ] **scissor / image** — `ImageObjectLayer` → `fabric.Image` (async load from base64).
-  The cut still produces base64 on the legacy raster; only the resulting object moves to Fabric.
-- [ ] **unify `select`** — objects live persistently on Fabric; `select` uses Fabric's native
-  selection for shape/text/image; remove the hand-rolled `SelectionHandle` machinery.
+### ⚠️ Known limitations to verify / decide on (Fabric select mode)
+- **Undo/redo** while the `select` tool is active does not refresh the Fabric objects until
+  you switch tools and back (the overlay only loads objects on tool-enter). Undo/redo works
+  fully with any raster tool active. *Not yet wired to re-load on external layer changes —
+  deferred to avoid a sync feedback loop; needs a decision.*
+- **Duplicate button** is gone in Fabric select (the old on-canvas 📋 button keyed off the
+  legacy selection). Delete works via the Delete/Backspace key. Consider Cmd/Ctrl+D later.
+- **Old balloons** (deprecated) render on the legacy canvas and are **not** selectable while
+  the Fabric overlay is on top in select mode.
+- The hand-rolled `SelectionHandle` / `getHandleAtPoint` machinery is now **unused** in
+  select mode but left in place (safe to delete in a later cleanup once verified).
+
+## TODO — raster phase (still deferred, high risk)
+- [ ] pen / eraser / fill remain on the legacy raster canvas (intentionally — low risk).
+  Only migrate if there's a reason to; keeping a raster layer under the Fabric object layer
+  is a legitimate end state.
 
 ## TODO — raster phase (HIGH RISK, deferred — plan separately)
 

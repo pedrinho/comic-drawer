@@ -6,6 +6,7 @@ import { drawGrid as drawGridUtil, debugLog, debugError, debugWarn, simplifyPath
 import { renderPathLayer, renderShapeLayer, renderTextLayer, renderImageLayer, renderBalloonLayer } from '../utils/renderUtils'
 import { shapeLayerToFabricObject, fabricObjectToShapeLayer } from '../utils/fabricShapes'
 import { textLayerToFabricIText, fabricITextToTextLayer } from '../utils/fabricText'
+import { imageLayerToFabricImage, fabricImageToLayer, fabricObjectKind } from '../utils/fabricImage'
 import './Canvas.css'
 
 interface SelectionRect {
@@ -45,6 +46,10 @@ interface CanvasProps {
   onToolChange?: (tool: Tool) => void // Added to allow switching tools
   emoji?: string
 }
+
+// Tools whose objects live on (and take pointer input from) the Fabric overlay. Everything
+// else (pen/eraser/fill/scissor) draws on the legacy raster canvas underneath.
+const FABRIC_TOOLS = new Set<Tool>(['objectShapes', 'text', 'emoji', 'select'])
 
 const getPenWidth = (penType?: PenType): number => {
   if (!penType) return 2
@@ -426,10 +431,10 @@ export default function Canvas({
   // Fabric.js Refs
   const fabricRef = useRef<HTMLCanvasElement>(null)
   const fabricCanvasRef = useRef<fabric.Canvas | null>(null)
-  // When true, shape-type / text layers are rendered/edited on the Fabric canvas instead of
-  // the legacy canvas (active only while the owning tool — objectShapes / text — is selected).
-  const shapesOnFabricRef = useRef(false)
-  const textOnFabricRef = useRef(false)
+  // The set of layer types currently owned by the Fabric overlay (rendered/edited there
+  // instead of on the legacy canvas). Populated while a Fabric-owned tool is active:
+  // objectShapes → {shape}, text/emoji → {text}, select → {shape, text, image}.
+  const fabricOwnedRef = useRef<Set<ObjectLayer['type']>>(new Set())
 
   // Initialize Fabric Canvas
   useEffect(() => {
@@ -468,11 +473,11 @@ export default function Canvas({
       if (isPathObjectLayer(layer)) {
         renderPathLayer(ctx, layer)
       } else if (isShapeObjectLayer(layer)) {
-        // While the objectShapes tool owns them, shapes are drawn by Fabric on the overlay
-        // canvas — skip them here to avoid double-rendering.
-        if (shapesOnFabricRef.current) return
+        // When Fabric owns this type, it's drawn on the overlay — skip to avoid double-render.
+        if (fabricOwnedRef.current.has('shape')) return
         renderShapeLayer(ctx, layer)
       } else if (isImageObjectLayer(layer)) {
+        if (fabricOwnedRef.current.has('image')) return
         renderImageLayer(ctx, layer)
       } else if (isBalloonObjectLayer(layer)) {
         renderBalloonLayer(ctx, layer)
@@ -481,8 +486,8 @@ export default function Canvas({
   }, [])
 
   const drawTextLayers = useCallback((ctx: CanvasRenderingContext2D) => {
-    // While the text tool owns them, text layers are drawn by Fabric on the overlay canvas.
-    if (textOnFabricRef.current) return
+    // While Fabric owns text, it's drawn on the overlay canvas.
+    if (fabricOwnedRef.current.has('text')) return
     textLayersRef.current.forEach((layer) => {
       renderTextLayer(ctx, layer)
     })
@@ -1260,19 +1265,28 @@ export default function Canvas({
     return `${Date.now()}-${Math.random().toString(36).slice(2)}`
   }
 
-  // Fabric.js object mode: while an object tool is active (objectShapes → shapes, text →
-  // text), those objects are created, selected, moved, resized and rotated on the Fabric
-  // overlay canvas (which gives us all of that machinery for free), then synced back into
-  // the layer model so save/load and the rest of the app keep working. All other tools
-  // continue to use the legacy canvas.
+  // Fabric.js object mode: while a Fabric-owned tool is active — objectShapes → shapes,
+  // text/emoji → text, select → all object types — those objects are created, selected,
+  // moved, resized and rotated on the Fabric overlay canvas (which gives us all of that
+  // machinery for free), then synced back into the layer model so save/load and the rest of
+  // the app keep working. The raster tools (pen/eraser/fill/scissor) keep using the legacy
+  // canvas.
   useEffect(() => {
     const canvas = fabricCanvasRef.current
     const legacy = canvasRef.current
     if (!canvas) return
     // Emoji is handled as text mode: it places a fabric.IText holding the emoji character.
-    const mode: 'shape' | 'text' | null =
-      tool === 'objectShapes' ? 'shape' : tool === 'text' || tool === 'emoji' ? 'text' : null
+    const mode: 'shape' | 'text' | 'select' | null =
+      tool === 'objectShapes'
+        ? 'shape'
+        : tool === 'text' || tool === 'emoji'
+          ? 'text'
+          : tool === 'select'
+            ? 'select'
+            : null
     const placeEmoji = tool === 'emoji' ? emoji ?? '😀' : null
+    const isCreationMode = mode === 'shape' || mode === 'text'
+    let disposed = false // guards async image loads against a stale canvas after cleanup
 
     // Keep the Fabric overlay's CSS size aligned with the (scaled) legacy canvas so their
     // coordinate spaces line up. Internal resolution stays 1200x800 for both.
@@ -1299,9 +1313,8 @@ export default function Canvas({
     }
 
     if (!mode) {
-      if (shapesOnFabricRef.current || textOnFabricRef.current) {
-        shapesOnFabricRef.current = false
-        textOnFabricRef.current = false
+      if (fabricOwnedRef.current.size > 0) {
+        fabricOwnedRef.current = new Set()
         canvas.getObjects().slice().forEach((o) => canvas.remove(o))
         canvas.requestRenderAll()
         repaintCanvas()
@@ -1316,33 +1329,69 @@ export default function Canvas({
     const scale = computeScale()
     const BASE = 100 // base shape geometry; final size comes from scaleX/scaleY
 
-    canvas.selection = false // no rubber-band group select; empty-click/drag creates an object
+    // select allows picking/moving existing objects; creation modes disable rubber-band so
+    // an empty-canvas drag/click creates a new object instead of starting a selection box.
+    canvas.selection = mode === 'select'
 
-    // Load the active object type onto the Fabric canvas, and repaint the legacy canvas so
-    // it stops drawing that type (avoids double-rendering).
+    // Load the owned object type(s) onto Fabric, and repaint the legacy canvas so it stops
+    // drawing them (avoids double-rendering).
     canvas.getObjects().slice().forEach((o) => canvas.remove(o))
     if (mode === 'shape') {
-      shapesOnFabricRef.current = true
+      fabricOwnedRef.current = new Set(['shape'])
       shapeLayersRef.current.forEach((l) => {
         if (isShapeObjectLayer(l)) canvas.add(shapeLayerToFabricObject(l))
       })
+    } else if (mode === 'text') {
+      fabricOwnedRef.current = new Set(['text'])
+      textLayersRef.current.forEach((l) => canvas.add(textLayerToFabricIText(l, scale)))
     } else {
-      textOnFabricRef.current = true
+      // select: all object types live on Fabric. Balloons (deprecated) stay on the legacy
+      // canvas since there's no Fabric converter for them.
+      fabricOwnedRef.current = new Set(['shape', 'text', 'image'])
+      shapeLayersRef.current.forEach((l) => {
+        if (isShapeObjectLayer(l)) canvas.add(shapeLayerToFabricObject(l))
+        else if (isImageObjectLayer(l)) {
+          imageLayerToFabricImage(l)
+            .then((img) => {
+              if (disposed) return
+              canvas.add(img)
+              canvas.requestRenderAll()
+            })
+            .catch(() => {
+              /* skip images that fail to decode */
+            })
+        }
+      })
       textLayersRef.current.forEach((l) => canvas.add(textLayerToFabricIText(l, scale)))
     }
     canvas.requestRenderAll()
     repaintCanvas()
 
     const syncToLayers = (skipHistory = false) => {
+      const objs = canvas.getObjects()
       if (mode === 'shape') {
-        const fabricShapes = canvas.getObjects().map((o) => fabricObjectToShapeLayer(o))
+        const fabricShapes = objs.map((o) => fabricObjectToShapeLayer(o))
         const others = shapeLayersRef.current.filter((l) => !isShapeObjectLayer(l))
         updateShapeLayers([...others, ...fabricShapes], skipHistory)
+      } else if (mode === 'text') {
+        updateTextLayers(objs.map((o) => fabricITextToTextLayer(o as fabric.IText, scale)), skipHistory)
       } else {
-        const fabricTexts = canvas
-          .getObjects()
-          .map((o) => fabricITextToTextLayer(o as fabric.IText, scale))
-        updateTextLayers(fabricTexts, skipHistory)
+        // select: split objects back into shape / image / text layers.
+        const shapes: ObjectLayer[] = []
+        const images: ObjectLayer[] = []
+        const texts: TextLayer[] = []
+        objs.forEach((o) => {
+          const kind = fabricObjectKind(o)
+          if (kind === 'text') texts.push(fabricITextToTextLayer(o as fabric.IText, scale))
+          else if (kind === 'image') images.push(fabricImageToLayer(o as fabric.FabricImage))
+          else shapes.push(fabricObjectToShapeLayer(o))
+        })
+        // Preserve non-Fabric layers (paths, balloons) in their original order.
+        const preserved = shapeLayersRef.current.filter(
+          (l) => !isShapeObjectLayer(l) && !isImageObjectLayer(l)
+        )
+        updateShapeLayers([...preserved, ...shapes, ...images], skipHistory)
+        updateTextLayers(texts, skipHistory)
       }
     }
 
@@ -1355,6 +1404,7 @@ export default function Canvas({
     let creating: { obj: fabric.FabricObject; start: { x: number; y: number } } | null = null
 
     const onDown = (opt: any) => {
+      if (!isCreationMode) return // select mode: let Fabric handle picking/moving
       if (opt.target) return // clicking an existing object → let Fabric select/move it
       const p = getPoint(opt)
       if (mode === 'shape') {
@@ -1467,6 +1517,7 @@ export default function Canvas({
     window.addEventListener('resize', sizeOverlay)
 
     return () => {
+      disposed = true
       canvas.off('mouse:down', onDown)
       canvas.off('mouse:move', onMove)
       canvas.off('mouse:up', onUp)
@@ -1479,8 +1530,7 @@ export default function Canvas({
       canvas.getObjects().slice().forEach((o) => canvas.remove(o))
       canvas.discardActiveObject()
       canvas.requestRenderAll()
-      shapesOnFabricRef.current = false
-      textOnFabricRef.current = false
+      fabricOwnedRef.current = new Set()
       repaintCanvas()
     }
   }, [tool, shape, color, font, fontSize, emoji, repaintCanvas, updateShapeLayers, updateTextLayers])
@@ -3124,8 +3174,8 @@ export default function Canvas({
           position: 'absolute',
           top: 0,
           left: 0,
-          zIndex: tool === 'objectShapes' || tool === 'text' || tool === 'emoji' ? 2 : 0,
-          pointerEvents: tool === 'objectShapes' || tool === 'text' || tool === 'emoji' ? 'auto' : 'none',
+          zIndex: FABRIC_TOOLS.has(tool) ? 2 : 0,
+          pointerEvents: FABRIC_TOOLS.has(tool) ? 'auto' : 'none',
         }}
       >
         <canvas ref={fabricRef} />
