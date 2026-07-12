@@ -1354,6 +1354,7 @@ export default function Canvas({
           imageLayerToFabricImage(l)
             .then((img) => {
               if (disposed) return
+              applyObjectControls(img)
               canvas.add(img)
               canvas.requestRenderAll()
             })
@@ -1395,6 +1396,97 @@ export default function Canvas({
       }
     }
 
+    // On-selection buttons (Fabric custom controls): duplicate + delete, so objects can be
+    // managed without the keyboard — matches the old on-canvas buttons, kid-friendly.
+    const OFFSET = 30 // px offset for a duplicate (mirrors legacy handleDuplicate)
+    const duplicateObject = (obj?: fabric.FabricObject | null) => {
+      if (!obj) return
+      const kind = fabricObjectKind(obj)
+      if (kind === 'image') {
+        const layer = fabricImageToLayer(obj as fabric.FabricImage)
+        imageLayerToFabricImage({ ...layer, id: generateLayerId(), x: layer.x + OFFSET, y: layer.y + OFFSET })
+          .then((img) => {
+            if (disposed) return
+            applyObjectControls(img)
+            canvas.add(img)
+            canvas.setActiveObject(img)
+            canvas.requestRenderAll()
+            syncToLayers(false)
+          })
+          .catch(() => {})
+        return
+      }
+      let clone: fabric.FabricObject
+      if (kind === 'text') {
+        const l = fabricITextToTextLayer(obj as fabric.IText, scale)
+        clone = textLayerToFabricIText({ ...l, id: generateLayerId(), x: l.x + OFFSET, y: l.y + OFFSET }, scale)
+      } else {
+        const l = fabricObjectToShapeLayer(obj)
+        clone = shapeLayerToFabricObject({ ...l, id: generateLayerId(), x: l.x + OFFSET, y: l.y + OFFSET })
+      }
+      applyObjectControls(clone)
+      canvas.add(clone)
+      canvas.setActiveObject(clone)
+      canvas.requestRenderAll()
+      syncToLayers(false)
+    }
+
+    const deleteObject = (obj?: fabric.FabricObject | null) => {
+      if (!obj) return
+      canvas.remove(obj)
+      canvas.discardActiveObject()
+      canvas.requestRenderAll()
+      syncToLayers(false)
+    }
+
+    const iconControl = (
+      glyph: string,
+      bg: string,
+      x: number,
+      offsetX: number,
+      handler: (o?: fabric.FabricObject | null) => void
+    ) =>
+      new fabric.Control({
+        x,
+        y: -0.5,
+        offsetX,
+        offsetY: -16,
+        cursorStyle: 'pointer',
+        sizeX: 24,
+        sizeY: 24,
+        touchSizeX: 28,
+        touchSizeY: 28,
+        mouseUpHandler: (_e, transform) => {
+          handler(transform?.target)
+          return true
+        },
+        render: (ctx, left, top) => {
+          ctx.save()
+          ctx.beginPath()
+          ctx.arc(left, top, 11, 0, Math.PI * 2)
+          ctx.fillStyle = bg
+          ctx.fill()
+          ctx.lineWidth = 1.5
+          ctx.strokeStyle = '#ffffff'
+          ctx.stroke()
+          ctx.fillStyle = '#ffffff'
+          ctx.font = '600 13px sans-serif'
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          ctx.fillText(glyph, left, top + 0.5)
+          ctx.restore()
+        },
+      })
+
+    const dupControl = iconControl('⧉', '#3b82f6', 0.5, 16, duplicateObject)
+    const delControl = iconControl('✕', '#ef4444', -0.5, -16, deleteObject)
+    const applyObjectControls = (obj: fabric.FabricObject) => {
+      obj.controls = { ...obj.controls, dup: dupControl, del: delControl }
+    }
+
+    // Give every already-loaded object the on-selection buttons.
+    canvas.getObjects().forEach(applyObjectControls)
+
     const getPoint = (opt: any) => {
       if (opt.scenePoint) return opt.scenePoint
       const c = canvas as any
@@ -1422,6 +1514,7 @@ export default function Canvas({
           fillColor: null,
         })
         obj.set({ scaleX: 0.001, scaleY: 0.001, left: p.x, top: p.y })
+        applyObjectControls(obj)
         canvas.add(obj)
         creating = { obj, start: { x: p.x, y: p.y } }
       } else {
@@ -1444,6 +1537,7 @@ export default function Canvas({
           scale
         )
         obj.set({ left: p.x, top: p.y })
+        applyObjectControls(obj)
         canvas.add(obj)
         canvas.setActiveObject(obj)
         if (placeEmoji) {
