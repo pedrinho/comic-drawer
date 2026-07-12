@@ -37,7 +37,8 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     { name: 'objectShapes', icon: '⬚', label: 'Object Shapes' },
     { name: 'fill', icon: '🪣', label: 'Fill' },
     { name: 'text', icon: '💬', label: 'Text' },
-    { name: 'balloon', icon: '💭', label: 'Balloon' },
+    // 'balloon' tool deprecated — removed from the toolbar. The type and rendering are
+    // kept so existing saved comics that contain balloons still load and display.
     { name: 'emoji', icon: '😀', label: 'Emoji' },
   ]
 
@@ -48,8 +49,8 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     if (currentTool !== 'objectShapes') {
       setShowShapesSubmenu(false)
     }
-    // Show text submenu when editing text or when text/balloon tool is active
-    if (currentTool !== 'text' && currentTool !== 'balloon' && !isTextEditing) {
+    // Show text submenu when editing text or when the text tool is active
+    if (currentTool !== 'text' && !isTextEditing) {
       setShowTextSubmenu(false)
     } else if (isTextEditing) {
       setShowTextSubmenu(true)
@@ -83,27 +84,13 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
   }
 
   const handleTextButtonClick = () => {
-    if (currentTool === 'text' || currentTool === 'balloon') {
+    if (currentTool === 'text') {
       // Toggle submenu
       setShowTextSubmenu(!showTextSubmenu)
       setShowPenSubmenu(false)
       setShowShapesSubmenu(false)
     } else {
       onToolChange('text')
-      setShowTextSubmenu(true)
-      setShowPenSubmenu(false)
-      setShowShapesSubmenu(false)
-    }
-  }
-
-  const handleBalloonButtonClick = () => {
-    if (currentTool === 'balloon') {
-      // Toggle submenu
-      setShowTextSubmenu(!showTextSubmenu)
-      setShowPenSubmenu(false)
-      setShowShapesSubmenu(false)
-    } else {
-      onToolChange('balloon')
       setShowTextSubmenu(true)
       setShowPenSubmenu(false)
       setShowShapesSubmenu(false)
@@ -147,11 +134,9 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
                   ? () => handleShapeToolClick(tool.name)
                   : tool.name === 'text'
                     ? handleTextButtonClick
-                    : tool.name === 'balloon'
-                      ? handleBalloonButtonClick
-                      : tool.name === 'emoji'
-                        ? handleEmojiButtonClick
-                        : () => handleOtherToolClick(tool.name)
+                    : tool.name === 'emoji'
+                      ? handleEmojiButtonClick
+                      : () => handleOtherToolClick(tool.name)
             }
             title={tool.label}
           >
@@ -173,7 +158,7 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
               onSelectShape={onSelectShape}
             />
           )}
-          {tool.name === 'text' && ((currentTool === 'text' || currentTool === 'balloon' || isTextEditing) && showTextSubmenu) && (
+          {tool.name === 'text' && ((currentTool === 'text' || isTextEditing) && showTextSubmenu) && (
             <FontPicker
               isOpen={true}
               font={font}
