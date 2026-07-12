@@ -23,17 +23,22 @@ the legacy canvas working alongside a Fabric overlay until every tool is ported.
   serialization. (`src/utils/fabricShapes.ts`, tests `fabricShapes.test.ts`)
 - [x] **text** — `fabric.IText` in-place editing, scale-aware font size.
   (`src/utils/fabricText.ts`, tests `fabricText.test.ts`)
+- [x] **emoji** — places the selected emoji as a `fabric.IText` (text-mode variant).
+- [x] **balloon** — **deprecated** (removed from the toolbar; type + rendering kept so old
+  comics still load). Not migrated to Fabric.
 - Integration tests: `src/components/CanvasFabricShapes.test.tsx`.
 
-## TODO — remaining object tools (low risk, same pattern)
+## TODO — image + select unification (needs browser verification)
 
-- [ ] **balloon** — `BalloonObjectLayer` → a `fabric.Group` (merged ellipse+tail outline as
-  a `fabric.Path` mirroring `renderBalloonLayer`, plus an editable `fabric.IText`). Needs
-  create-by-drag then in-place text edit; sync to `shapeLayers`.
-- [ ] **scissor / image** — `ImageObjectLayer` → `fabric.Image` (base64 `data`). Cleanest of
-  the three; the cut itself still produces the base64 on the legacy raster.
-- [ ] **emoji** — route emoji creation through a `fabric.IText` instead of the legacy text
-  layer (largely reuses the text mode).
+These are coupled: images are created by the scissor tool and manipulated by the `select`
+tool, so putting images on Fabric requires moving `select` onto Fabric too. That replaces
+the hand-rolled selection/handles/delete-duplicate-button UX with Fabric's native controls
+— a behavior change that must be verified in a browser before merging.
+
+- [ ] **scissor / image** — `ImageObjectLayer` → `fabric.Image` (async load from base64).
+  The cut still produces base64 on the legacy raster; only the resulting object moves to Fabric.
+- [ ] **unify `select`** — objects live persistently on Fabric; `select` uses Fabric's native
+  selection for shape/text/image; remove the hand-rolled `SelectionHandle` machinery.
 
 ## TODO — raster phase (HIGH RISK, deferred — plan separately)
 
