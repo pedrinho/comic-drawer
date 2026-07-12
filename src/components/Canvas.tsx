@@ -3,7 +3,7 @@ import * as fabric from 'fabric'
 import { Tool, Shape, PenType } from '../types/common'
 import { ShapeLayer, TextLayer, PathObjectLayer, ObjectLayer, ImageObjectLayer, BalloonObjectLayer, GroupObjectLayer, isPathObjectLayer, isShapeObjectLayer, isImageObjectLayer, isBalloonObjectLayer, isGroupObjectLayer } from '../types/layers'
 import { drawGrid as drawGridUtil, debugLog, debugError, debugWarn, simplifyPath, isPointNearPolyline, imageDataToBase64, makeWhiteTransparent } from '../utils/canvasUtils'
-import { renderPathLayer, renderShapeLayer, renderTextLayer, renderImageLayer, renderBalloonLayer } from '../utils/renderUtils'
+import { renderPathLayer, renderShapeLayer, renderTextLayer, renderImageLayer, renderBalloonLayer, renderGroupLayer } from '../utils/renderUtils'
 import { shapeLayerToFabricObject, fabricObjectToShapeLayer } from '../utils/fabricShapes'
 import { textLayerToFabricIText, fabricITextToTextLayer } from '../utils/fabricText'
 import { imageLayerToFabricImage, fabricImageToLayer, fabricObjectKind } from '../utils/fabricImage'
@@ -482,6 +482,10 @@ export default function Canvas({
         renderImageLayer(ctx, layer)
       } else if (isBalloonObjectLayer(layer)) {
         renderBalloonLayer(ctx, layer)
+      } else if (isGroupObjectLayer(layer)) {
+        // Groups live in shapeLayers; skip when the select tool owns them on the overlay.
+        if (fabricOwnedRef.current.has('group')) return
+        renderGroupLayer(ctx, layer)
       }
     })
   }, [])
@@ -1348,7 +1352,7 @@ export default function Canvas({
     } else {
       // select: all object types live on Fabric. Balloons (deprecated) stay on the legacy
       // canvas since there's no Fabric converter for them.
-      fabricOwnedRef.current = new Set(['shape', 'text', 'image'])
+      fabricOwnedRef.current = new Set(['shape', 'text', 'image', 'group'])
       shapeLayersRef.current.forEach((l) => {
         if (isShapeObjectLayer(l)) canvas.add(shapeLayerToFabricObject(l))
         else if (isImageObjectLayer(l)) {
