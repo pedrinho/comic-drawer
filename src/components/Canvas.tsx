@@ -50,7 +50,7 @@ interface CanvasProps {
 
 // Tools whose objects live on (and take pointer input from) the Fabric overlay. Everything
 // else (pen/eraser/fill/scissor) draws on the legacy raster canvas underneath.
-const FABRIC_TOOLS = new Set<Tool>(['objectShapes', 'text', 'emoji', 'select'])
+const FABRIC_TOOLS = new Set<Tool>(['objectShapes', 'text', 'emoji', 'select', 'fill'])
 
 const getPenWidth = (penType?: PenType): number => {
   if (!penType) return 2
@@ -1281,16 +1281,20 @@ export default function Canvas({
     const legacy = canvasRef.current
     if (!canvas) return
     // Emoji is handled as text mode: it places a fabric.IText holding the emoji character.
-    const mode: 'shape' | 'text' | 'select' | null =
+    const mode: 'shape' | 'text' | 'select' | 'fill' | null =
       tool === 'objectShapes'
         ? 'shape'
         : tool === 'text' || tool === 'emoji'
           ? 'text'
           : tool === 'select'
             ? 'select'
-            : null
+            : tool === 'fill'
+              ? 'fill'
+              : null
     const placeEmoji = tool === 'emoji' ? emoji ?? '😀' : null
     const isCreationMode = mode === 'shape' || mode === 'text'
+    // select + fill both load every object type so they're clickable on the overlay.
+    const isObjectMode = mode === 'select' || mode === 'fill'
     let disposed = false // guards async image loads against a stale canvas after cleanup
 
     // Keep the Fabric overlay's CSS size aligned with the (scaled) legacy canvas so their
@@ -1349,9 +1353,9 @@ export default function Canvas({
     } else if (mode === 'text') {
       fabricOwnedRef.current = new Set(['text'])
       textLayersRef.current.forEach((l) => canvas.add(textLayerToFabricIText(l, scale)))
-    } else {
-      // select: all object types live on Fabric. Balloons (deprecated) stay on the legacy
-      // canvas since there's no Fabric converter for them.
+    } else if (isObjectMode) {
+      // select + fill: all object types live on Fabric. Balloons (deprecated) stay on the
+      // legacy canvas since there's no Fabric converter for them.
       fabricOwnedRef.current = new Set(['shape', 'text', 'image', 'group'])
       shapeLayersRef.current.forEach((l) => {
         if (isShapeObjectLayer(l)) canvas.add(shapeLayerToFabricObject(l))
@@ -1556,6 +1560,13 @@ export default function Canvas({
       if (obj instanceof fabric.Group) {
         obj.controls = { ...obj.controls, ung: ungroupControl }
       }
+      if (mode === 'fill') {
+        // Fill mode: objects are click-to-color, not movable/selectable. subTargetCheck lets
+        // a click report the child under the cursor inside a group.
+        obj.selectable = false
+        obj.hoverCursor = 'pointer'
+        if (obj instanceof fabric.Group) (obj as any).subTargetCheck = true
+      }
     }
 
     // Give every already-loaded object the on-selection buttons.
@@ -1570,6 +1581,25 @@ export default function Canvas({
     let creating: { obj: fabric.FabricObject; start: { x: number; y: number } } | null = null
 
     const onDown = (opt: any) => {
+      if (mode === 'fill') {
+        // Colour the clicked shape (or grouped child); otherwise flood-fill the raster.
+        const target = (opt.subTargets && opt.subTargets[0]) || opt.target
+        if (target && fabricObjectKind(target) === 'shape') {
+          target.set('fill', currentColor)
+          canvas.requestRenderAll()
+          syncToLayers(false)
+          return
+        }
+        const legacy2 = canvasRef.current
+        const ctx = legacy2?.getContext('2d')
+        if (legacy2 && ctx) {
+          const p2 = getPoint(opt)
+          floodFill(ctx, p2.x, p2.y, currentColor)
+          drawGrid(ctx)
+          onCanvasChange(ctx.getImageData(0, 0, legacy2.width, legacy2.height))
+        }
+        return
+      }
       if (!isCreationMode) return // select mode: let Fabric handle picking/moving
       if (opt.target) return // clicking an existing object → let Fabric select/move it
       const p = getPoint(opt)
