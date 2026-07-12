@@ -462,6 +462,31 @@ export default function Canvas({
     }
   }, [])
 
+  // Keep the Fabric overlay's CSS size matched to the (fluidly-scaled) legacy canvas at all
+  // times — in every tool, and on any window/layout resize. Without this the overlay only
+  // resized while a Fabric tool was active, so resizing in pen/eraser mode left it mismatched
+  // (its edge sticking out past the legacy canvas corner).
+  useEffect(() => {
+    const legacy = canvasRef.current
+    if (!legacy) return
+    const sync = () => {
+      const fc = fabricCanvasRef.current
+      const el = canvasRef.current
+      if (!fc || !el) return
+      const r = el.getBoundingClientRect()
+      if (r.width && r.height) fc.setDimensions({ width: r.width, height: r.height }, { cssOnly: true })
+    }
+    sync()
+    // ResizeObserver isn't available in jsdom (tests) — fall back to the window resize listener.
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(sync) : null
+    ro?.observe(legacy)
+    window.addEventListener('resize', sync)
+    return () => {
+      ro?.disconnect()
+      window.removeEventListener('resize', sync)
+    }
+  }, [])
+
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     drawGridUtil(ctx, layout)
