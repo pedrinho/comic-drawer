@@ -1269,8 +1269,10 @@ export default function Canvas({
     const canvas = fabricCanvasRef.current
     const legacy = canvasRef.current
     if (!canvas) return
+    // Emoji is handled as text mode: it places a fabric.IText holding the emoji character.
     const mode: 'shape' | 'text' | null =
-      tool === 'objectShapes' ? 'shape' : tool === 'text' ? 'text' : null
+      tool === 'objectShapes' ? 'shape' : tool === 'text' || tool === 'emoji' ? 'text' : null
+    const placeEmoji = tool === 'emoji' ? emoji ?? '😀' : null
 
     // Keep the Fabric overlay's CSS size aligned with the (scaled) legacy canvas so their
     // coordinate spaces line up. Internal resolution stays 1200x800 for both.
@@ -1373,12 +1375,13 @@ export default function Canvas({
         canvas.add(obj)
         creating = { obj, start: { x: p.x, y: p.y } }
       } else {
-        // Text: click to place, then edit in place (fabric.IText).
+        // Text: click to place, then edit in place (fabric.IText). Emoji: place the emoji
+        // character and don't enter editing.
         const obj = textLayerToFabricIText(
           {
             type: 'text',
             id: generateLayerId(),
-            text: '',
+            text: placeEmoji ?? '',
             x: p.x,
             y: p.y,
             width: 1,
@@ -1393,8 +1396,13 @@ export default function Canvas({
         obj.set({ left: p.x, top: p.y })
         canvas.add(obj)
         canvas.setActiveObject(obj)
-        ;(obj as fabric.IText).enterEditing()
-        canvas.requestRenderAll()
+        if (placeEmoji) {
+          canvas.requestRenderAll()
+          syncToLayers(false)
+        } else {
+          ;(obj as fabric.IText).enterEditing()
+          canvas.requestRenderAll()
+        }
       }
     }
 
@@ -1475,7 +1483,7 @@ export default function Canvas({
       textOnFabricRef.current = false
       repaintCanvas()
     }
-  }, [tool, shape, color, font, fontSize, repaintCanvas, updateShapeLayers, updateTextLayers])
+  }, [tool, shape, color, font, fontSize, emoji, repaintCanvas, updateShapeLayers, updateTextLayers])
 
   const hitTestShapeLayers = useCallback((point: { x: number; y: number }): ObjectLayer | null => {
     const layers = shapeLayersRef.current
@@ -3116,8 +3124,8 @@ export default function Canvas({
           position: 'absolute',
           top: 0,
           left: 0,
-          zIndex: tool === 'objectShapes' || tool === 'text' ? 2 : 0,
-          pointerEvents: tool === 'objectShapes' || tool === 'text' ? 'auto' : 'none',
+          zIndex: tool === 'objectShapes' || tool === 'text' || tool === 'emoji' ? 2 : 0,
+          pointerEvents: tool === 'objectShapes' || tool === 'text' || tool === 'emoji' ? 'auto' : 'none',
         }}
       >
         <canvas ref={fabricRef} />
