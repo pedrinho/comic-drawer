@@ -1,5 +1,7 @@
 import * as fabric from 'fabric'
 import { ImageObjectLayer } from '../types/layers'
+import { PATH_ID_KEY } from './fabricPath'
+import { SHAPE_KIND_KEY } from './fabricShapes'
 
 /**
  * Fabric.js migration — image conversion layer.
@@ -63,7 +65,9 @@ export const fabricImageToLayer = (obj: fabric.FabricImage): ImageObjectLayer =>
 }
 
 /** Discriminate a Fabric object's originating layer kind (for select-mode sync-back). */
-export const fabricObjectKind = (obj: fabric.FabricObject): 'text' | 'image' | 'shape' | 'group' => {
+export const fabricObjectKind = (
+  obj: fabric.FabricObject
+): 'text' | 'image' | 'shape' | 'group' | 'path' => {
   if (obj instanceof fabric.Group || (obj as any).type === 'group') {
     return 'group'
   }
@@ -72,6 +76,11 @@ export const fabricObjectKind = (obj: fabric.FabricObject): 'text' | 'image' | '
   }
   if (obj instanceof fabric.FabricImage || (obj as any).type === 'image' || (obj as any)[IMAGE_ID_KEY]) {
     return 'image'
+  }
+  // A pen path carries PATH_ID_KEY; a heart shape is also a fabric.Path but carries
+  // SHAPE_KIND_KEY, so require the path key AND the absence of the shape key.
+  if ((obj as any)[PATH_ID_KEY] && !(obj as any)[SHAPE_KIND_KEY]) {
+    return 'path'
   }
   return 'shape'
 }

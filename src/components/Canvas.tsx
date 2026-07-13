@@ -8,6 +8,7 @@ import { shapeLayerToFabricObject, fabricObjectToShapeLayer } from '../utils/fab
 import { textLayerToFabricIText, fabricITextToTextLayer } from '../utils/fabricText'
 import { imageLayerToFabricImage, fabricImageToLayer, fabricObjectKind } from '../utils/fabricImage'
 import { layerToFabricGroup, fabricGroupToLayer } from '../utils/fabricGroup'
+import { pathLayerToFabricPath, fabricPathToLayer, PATH_ID_KEY } from '../utils/fabricPath'
 import './Canvas.css'
 
 interface SelectionRect {
@@ -49,8 +50,8 @@ interface CanvasProps {
 }
 
 // Tools whose objects live on (and take pointer input from) the Fabric overlay. Everything
-// else (pen/eraser/fill/scissor) draws on the legacy raster canvas underneath.
-const FABRIC_TOOLS = new Set<Tool>(['objectShapes', 'text', 'emoji', 'select', 'fill'])
+// else (eraser/scissor) draws on the legacy raster canvas underneath.
+const FABRIC_TOOLS = new Set<Tool>(['objectShapes', 'text', 'emoji', 'select', 'fill', 'pen'])
 
 const getPenWidth = (penType?: PenType): number => {
   if (!penType) return 2
@@ -497,6 +498,8 @@ export default function Canvas({
   const drawShapeLayers = useCallback((ctx: CanvasRenderingContext2D) => {
     shapeLayersRef.current.forEach((layer) => {
       if (isPathObjectLayer(layer)) {
+        // When Fabric owns paths (pen/select/fill), they're drawn on the overlay — skip.
+        if (fabricOwnedRef.current.has('path')) return
         renderPathLayer(ctx, layer)
       } else if (isShapeObjectLayer(layer)) {
         // When Fabric owns this type, it's drawn on the overlay — skip to avoid double-render.
@@ -1306,7 +1309,7 @@ export default function Canvas({
     const legacy = canvasRef.current
     if (!canvas) return
     // Emoji is handled as text mode: it places a fabric.IText holding the emoji character.
-    const mode: 'shape' | 'text' | 'select' | 'fill' | null =
+    const mode: 'shape' | 'text' | 'select' | 'fill' | 'pen' | null =
       tool === 'objectShapes'
         ? 'shape'
         : tool === 'text' || tool === 'emoji'
@@ -1315,7 +1318,9 @@ export default function Canvas({
             ? 'select'
             : tool === 'fill'
               ? 'fill'
-              : null
+              : tool === 'pen'
+                ? 'pen'
+                : null
     const placeEmoji = tool === 'emoji' ? emoji ?? '😀' : null
     const isCreationMode = mode === 'shape' || mode === 'text'
     // select + fill both load every object type so they're clickable on the overlay.
@@ -1366,6 +1371,14 @@ export default function Canvas({
     // select allows picking/moving existing objects; creation modes disable rubber-band so
     // an empty-canvas drag/click creates a new object instead of starting a selection box.
     canvas.selection = mode === 'select'
+    // Pen draws with a native brush; every other mode has drawing off.
+    canvas.isDrawingMode = mode === 'pen'
+    if (mode === 'pen') {
+      const brush = new fabric.PencilBrush(canvas)
+      brush.color = currentColor
+      brush.width = getPenWidth(penType)
+      canvas.freeDrawingBrush = brush
+    }
 
     // Load the owned object type(s) onto Fabric, and repaint the legacy canvas so it stops
     // drawing them (avoids double-rendering).
@@ -1378,12 +1391,19 @@ export default function Canvas({
     } else if (mode === 'text') {
       fabricOwnedRef.current = new Set(['text'])
       textLayersRef.current.forEach((l) => canvas.add(textLayerToFabricIText(l, scale)))
+    } else if (mode === 'pen') {
+      // Pen owns paths: load existing ones so they stay visible while the brush draws new ones.
+      fabricOwnedRef.current = new Set(['path'])
+      shapeLayersRef.current.forEach((l) => {
+        if (isPathObjectLayer(l)) canvas.add(pathLayerToFabricPath(l))
+      })
     } else if (isObjectMode) {
       // select + fill: all object types live on Fabric. Balloons (deprecated) stay on the
       // legacy canvas since there's no Fabric converter for them.
-      fabricOwnedRef.current = new Set(['shape', 'text', 'image', 'group'])
+      fabricOwnedRef.current = new Set(['shape', 'text', 'image', 'group', 'path'])
       shapeLayersRef.current.forEach((l) => {
         if (isShapeObjectLayer(l)) canvas.add(shapeLayerToFabricObject(l))
+        else if (isPathObjectLayer(l)) canvas.add(pathLayerToFabricPath(l))
         else if (isImageObjectLayer(l)) {
           imageLayerToFabricImage(l)
             .then((img) => {
@@ -1421,9 +1441,17 @@ export default function Canvas({
         updateShapeLayers([...others, ...fabricShapes], skipHistory)
       } else if (mode === 'text') {
         updateTextLayers(objs.map((o) => fabricITextToTextLayer(o as fabric.IText, scale)), skipHistory)
+      } else if (mode === 'pen') {
+        // Pen owns paths only. Re-sync every fabric.Path back into path layers; keep the rest.
+        const fabricPaths = objs
+          .filter((o) => (o as any)[PATH_ID_KEY])
+          .map((o) => fabricPathToLayer(o as fabric.Path))
+        const others = shapeLayersRef.current.filter((l) => !isPathObjectLayer(l))
+        updateShapeLayers([...others, ...fabricPaths], skipHistory)
       } else {
-        // select: split objects back into shape / image / text layers.
+        // select: split objects back into shape / path / image / text layers.
         const shapes: ObjectLayer[] = []
+        const paths: ObjectLayer[] = []
         const images: ObjectLayer[] = []
         const texts: TextLayer[] = []
         objs.forEach((o) => {
@@ -1431,15 +1459,16 @@ export default function Canvas({
           if (kind === 'text') texts.push(fabricITextToTextLayer(o as fabric.IText, scale))
           else if (kind === 'image') images.push(fabricImageToLayer(o as fabric.FabricImage))
           else if (kind === 'group') shapes.push(fabricGroupToLayer(o as fabric.Group, scale))
+          else if (kind === 'path') paths.push(fabricPathToLayer(o as fabric.Path))
           else shapes.push(fabricObjectToShapeLayer(o))
         })
-        // Preserve only the non-Fabric layers (paths, balloons). Shapes, images AND groups
+        // Preserve only the non-Fabric layers (balloons). Shapes, paths, images AND groups
         // are all re-synced from the canvas below, so they must not be kept here or they
         // accumulate (duplicating on every sync).
         const preserved = shapeLayersRef.current.filter(
-          (l) => !isShapeObjectLayer(l) && !isImageObjectLayer(l) && !isGroupObjectLayer(l)
+          (l) => !isShapeObjectLayer(l) && !isImageObjectLayer(l) && !isGroupObjectLayer(l) && !isPathObjectLayer(l)
         )
-        updateShapeLayers([...preserved, ...shapes, ...images], skipHistory)
+        updateShapeLayers([...preserved, ...shapes, ...images, ...paths], skipHistory)
         updateTextLayers(texts, skipHistory)
       }
     }
@@ -1712,6 +1741,16 @@ export default function Canvas({
 
     const onModified = () => syncToLayers(false)
 
+    // Pen: a brush stroke just finished. Tag it so it round-trips as a path layer, then sync
+    // (which snapshots history and lifts the new path into shapeLayers).
+    const onPathCreated = (opt: any) => {
+      const p = opt.path as fabric.Path | undefined
+      if (!p) return
+      ;(p as any)[PATH_ID_KEY] = generateLayerId()
+      p.set({ strokeLineCap: 'round', strokeLineJoin: 'round', strokeUniform: true })
+      syncToLayers(false)
+    }
+
     // When a text edit finishes, drop empty text objects, otherwise sync the new content.
     const onEditingExited = (opt: any) => {
       const obj = opt.target as fabric.IText | undefined
@@ -1747,6 +1786,7 @@ export default function Canvas({
     canvas.on('mouse:move', onMove)
     canvas.on('mouse:up', onUp)
     canvas.on('object:modified', onModified)
+    canvas.on('path:created', onPathCreated)
     canvas.on('text:editing:exited', onEditingExited)
     canvas.on('selection:created', onSelection)
     canvas.on('selection:updated', onSelection)
@@ -1759,6 +1799,7 @@ export default function Canvas({
       canvas.off('mouse:move', onMove)
       canvas.off('mouse:up', onUp)
       canvas.off('object:modified', onModified)
+      canvas.off('path:created', onPathCreated)
       canvas.off('text:editing:exited', onEditingExited)
       canvas.off('selection:created', onSelection)
       canvas.off('selection:updated', onSelection)
@@ -1766,13 +1807,14 @@ export default function Canvas({
       window.removeEventListener('resize', sizeOverlay)
       // Hand objects back to the legacy canvas. Skip history: real edits already recorded it.
       syncToLayers(true)
+      canvas.isDrawingMode = false
       canvas.getObjects().slice().forEach((o) => canvas.remove(o))
       canvas.discardActiveObject()
       canvas.requestRenderAll()
       fabricOwnedRef.current = new Set()
       repaintCanvas()
     }
-  }, [tool, shape, color, font, fontSize, emoji, repaintCanvas, updateShapeLayers, updateTextLayers])
+  }, [tool, shape, color, penType, font, fontSize, emoji, repaintCanvas, updateShapeLayers, updateTextLayers])
 
   const hitTestShapeLayers = useCallback((point: { x: number; y: number }): ObjectLayer | null => {
     const layers = shapeLayersRef.current
