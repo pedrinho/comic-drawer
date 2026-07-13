@@ -386,6 +386,12 @@ export default function Canvas({
   const rotationCenterRef = useRef({ x: 0, y: 0 })
   const originalImageSizeRef = useRef<{ width: number; height: number } | null>(null)
   const shapeLayersRef = useRef<ObjectLayer[]>(shapeLayers)
+  // Always-current model references, so the overlay effect's cleanup can tell WHY it re-ran:
+  // if these still match what the effect captured at setup, only the tool/style changed (safe
+  // to hand the canvas back to the model); if they changed, the model was replaced externally
+  // (undo/redo/load) and the canvas is stale — syncing it would clobber the restored model.
+  const latestModelRef = useRef({ shape: shapeLayers, text: textLayers, data: panelData })
+  latestModelRef.current = { shape: shapeLayers, text: textLayers, data: panelData }
   const activeShapeLayerIdRef = useRef<string | null>(null)
   const isDraggingShapeLayerRef = useRef(false)
   const isResizingShapeLayerRef = useRef(false)
@@ -1306,6 +1312,8 @@ export default function Canvas({
     const canvas = fabricCanvasRef.current
     const legacy = canvasRef.current
     if (!canvas) return
+    // Snapshot the model references this run was built from, to compare in cleanup.
+    const modelAtSetup = { shape: shapeLayers, text: textLayers, data: panelData }
     // Emoji is handled as text mode: it places a fabric.IText holding the emoji character.
     const mode: 'shape' | 'text' | 'select' | 'fill' | 'pen' | 'eraser' | 'scissor' | null =
       tool === 'objectShapes'
@@ -1380,8 +1388,14 @@ export default function Canvas({
     canvas.add(rasterImage)
     buildGridObjects(layout).forEach((g) => canvas.add(g))
 
+    // Load from the PROPS (not the refs) so an external model change — undo/redo, load, panel
+    // switch — reloads the correct scene. The refs lag by an effect tick (a separate effect
+    // syncs them), which would otherwise reload stale layers after undo. The effect re-runs
+    // whenever panelData changes (undo/redo always restores a fresh ImageData reference), so
+    // reading the current-render props here is correct; shapeLayers/textLayers stay OUT of the
+    // deps so our own live edits don't trigger a rebuild that clobbers the active selection.
     fabricOwnedRef.current = new Set(['shape', 'text', 'image', 'group', 'path', 'balloon'])
-    shapeLayersRef.current.forEach((l) => {
+    ;(shapeLayers ?? []).forEach((l) => {
       if (isShapeObjectLayer(l)) canvas.add(shapeLayerToFabricObject(l))
       else if (isPathObjectLayer(l)) canvas.add(pathLayerToFabricPath(l))
       else if (isBalloonObjectLayer(l)) canvas.add(balloonLayerToFabricObject(l, scale))
@@ -1409,7 +1423,7 @@ export default function Canvas({
           })
       }
     })
-    textLayersRef.current.forEach((l) => canvas.add(textLayerToFabricIText(l, scale)))
+    ;(textLayers ?? []).forEach((l) => canvas.add(textLayerToFabricIText(l, scale)))
     canvas.requestRenderAll()
     repaintCanvas()
 
@@ -1432,8 +1446,12 @@ export default function Canvas({
         else if (kind === 'path') shapeResult.push(fabricPathToLayer(o as fabric.Path))
         else shapeResult.push(fabricObjectToShapeLayer(o))
       })
+      // One sync = ONE history entry. Each App handler snapshots the full panel state
+      // (shapes + texts), so only the shape update carries the history flag; the text update
+      // always skips it. Otherwise a single action (e.g. drawing one shape) would push two
+      // near-identical entries and undo would appear to do nothing (it pops a duplicate).
       updateShapeLayers(shapeResult, skipHistory)
-      updateTextLayers(texts, skipHistory)
+      updateTextLayers(texts, true)
     }
 
     // On-selection buttons (Fabric custom controls): duplicate + delete, so objects can be
@@ -1923,8 +1941,20 @@ export default function Canvas({
       canvas.off('selection:updated', onSelection)
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('resize', sizeOverlay)
-      // Hand objects back to the legacy canvas. Skip history: real edits already recorded it.
-      syncToLayers(true)
+      // Hand the canvas back to the model ONLY when this re-run was a tool/style change — that
+      // captures any in-progress edit (e.g. text being typed) and is otherwise a no-op. The
+      // effect only re-runs for a MODEL change when panelData changes (shapeLayers/textLayers
+      // aren't deps), and undo/redo/load/raster-commit all replace panelData; in that case the
+      // canvas is stale, so syncing it would clobber the just-restored model — skip it.
+      const dataReplaced = latestModelRef.current.data !== modelAtSetup.data
+      if (!dataReplaced) {
+        // If a text object is still being edited (the user switched tools mid-edit and no
+        // text:editing:exited fired), this cleanup is what commits it — so record a history
+        // entry for it. A plain tool switch has nothing uncommitted and re-syncs as a no-op.
+        const editing = canvas.getActiveObject()
+        const committingText = !!(editing && (editing as any).isEditing)
+        syncToLayers(!committingText)
+      }
       canvas.isDrawingMode = false
       canvas.getObjects().slice().forEach((o) => canvas.remove(o))
       canvas.discardActiveObject()

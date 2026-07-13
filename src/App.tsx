@@ -27,6 +27,10 @@ function App() {
   const [panels, setPanels] = useState<PanelData[]>([
     { id: 0, name: 'Panel 1', data: null, layout: { rows: 1, columns: [1] }, shapeLayers: [], textLayers: [] }
   ])
+  // Always-current mirror of `panels` so history can be snapshotted OUTSIDE setPanels updaters.
+  // Saving history inside an updater is impure and runs twice under React.StrictMode, which
+  // would double every undo entry.
+  const panelsRef = useRef<PanelData[]>(panels)
   const [showModal, setShowModal] = useState(false)
   const [isPresenting, setIsPresenting] = useState(false)
   const [presentationIndex, setPresentationIndex] = useState<number>(0)
@@ -34,10 +38,13 @@ function App() {
   // History for each panel: Map<panelIndex, {undo: ImageData[], redo: ImageData[]}>
   const historyRef = useRef<Map<number, PanelHistory>>(new Map())
 
-  // Keep ref in sync with state
+  // Keep refs in sync with state
   useEffect(() => {
     selectedPanelRef.current = selectedPanel
   }, [selectedPanel])
+  useEffect(() => {
+    panelsRef.current = panels
+  }, [panels])
 
   const addPanel = () => {
     debugLog('App', 'Adding new panel')
@@ -107,92 +114,59 @@ function App() {
   }
 
   const handleCanvasChange = (data: ImageData, skipHistory = false) => {
-    debugLog('App', 'Canvas changed', { selectedPanel, skipHistory })
-    const panel = panels[selectedPanel]
+    const idx = selectedPanelRef.current
+    debugLog('App', 'Canvas changed', { selectedPanel: idx, skipHistory })
+    const panel = panelsRef.current[idx]
     if (!panel) return
 
     if (!skipHistory) {
-      // Save current state to history before making changes
-      const currentData = panel.data
-      const currentShapeLayers = panel.shapeLayers
-      const currentTextLayers = panel.textLayers
-      saveToHistory(selectedPanel, currentData, currentShapeLayers, currentTextLayers)
+      saveToHistory(idx, panel.data, panel.shapeLayers, panel.textLayers)
     }
 
-    const updatedPanels = [...panels]
-    const updatedPanel = updatedPanels[selectedPanel]
-    if (updatedPanel) {
-      updatedPanel.data = data
-      setPanels(updatedPanels)
-    }
+    const updatedPanels = [...panelsRef.current]
+    updatedPanels[idx] = { ...panel, data }
+    panelsRef.current = updatedPanels
+    setPanels(updatedPanels)
   }
 
   const handleShapeLayersChange = useCallback((layers: ObjectLayer[], skipHistory = false) => {
-    debugLog('App', 'handleShapeLayersChange called', {
-      newLayerCount: layers.length,
-      skipHistory,
-      selectedPanel: selectedPanelRef.current
-    })
+    const currentPanelIndex = selectedPanelRef.current
+    debugLog('App', 'handleShapeLayersChange called', { newLayerCount: layers.length, skipHistory, selectedPanel: currentPanelIndex })
+    // Snapshot history OUTSIDE the updater (see panelsRef) so StrictMode's double-invoke of the
+    // updater can't double the entry.
+    if (!skipHistory) {
+      const panel = panelsRef.current[currentPanelIndex]
+      if (panel) saveToHistory(currentPanelIndex, panel.data, panel.shapeLayers, panel.textLayers)
+    }
     setPanels((prevPanels) => {
-      const currentPanelIndex = selectedPanelRef.current
       const nextPanels = [...prevPanels]
       const panel = nextPanels[currentPanelIndex]
       if (!panel) {
         debugWarn('App', 'Panel not found', { currentPanelIndex })
         return prevPanels
       }
-
-      if (!skipHistory) {
-        // Save current state to history before making changes
-        const currentData = panel.data
-        const currentShapeLayers = panel.shapeLayers
-        const currentTextLayers = panel.textLayers
-        debugLog('App', 'Saving to history before shape change', {
-          currentShapeLayerCount: currentShapeLayers.length,
-          newShapeLayerCount: layers.length,
-          panelIndex: currentPanelIndex
-        })
-        saveToHistory(currentPanelIndex, currentData, currentShapeLayers, currentTextLayers)
-      } else {
-        debugLog('App', 'Skipping history save')
-      }
-
       nextPanels[currentPanelIndex] = { ...panel, shapeLayers: layers }
+      panelsRef.current = nextPanels
       return nextPanels
     })
   }, [])
 
   const handleTextLayersChange = useCallback((layers: TextLayer[], skipHistory = false) => {
-    debugLog('App', 'handleTextLayersChange called', {
-      newLayerCount: layers.length,
-      skipHistory,
-      selectedPanel: selectedPanelRef.current
-    })
+    const currentPanelIndex = selectedPanelRef.current
+    debugLog('App', 'handleTextLayersChange called', { newLayerCount: layers.length, skipHistory, selectedPanel: currentPanelIndex })
+    if (!skipHistory) {
+      const panel = panelsRef.current[currentPanelIndex]
+      if (panel) saveToHistory(currentPanelIndex, panel.data, panel.shapeLayers, panel.textLayers)
+    }
     setPanels((prevPanels) => {
-      const currentPanelIndex = selectedPanelRef.current
       const nextPanels = [...prevPanels]
       const panel = nextPanels[currentPanelIndex]
       if (!panel) {
         debugWarn('App', 'Panel not found', { currentPanelIndex })
         return prevPanels
       }
-
-      if (!skipHistory) {
-        // Save current state to history before making changes
-        const currentData = panel.data
-        const currentShapeLayers = panel.shapeLayers
-        const currentTextLayers = panel.textLayers
-        debugLog('App', 'Saving to history before text change', {
-          currentTextLayerCount: currentTextLayers.length,
-          newTextLayerCount: layers.length,
-          panelIndex: currentPanelIndex
-        })
-        saveToHistory(currentPanelIndex, currentData, currentShapeLayers, currentTextLayers)
-      } else {
-        debugLog('App', 'Skipping history save')
-      }
-
       nextPanels[currentPanelIndex] = { ...panel, textLayers: layers }
+      panelsRef.current = nextPanels
       return nextPanels
     })
   }, [])
@@ -238,6 +212,7 @@ function App() {
       updatedPanel.data = previousState.data
       updatedPanel.shapeLayers = cloneShapeLayers(previousState.shapeLayers)
       updatedPanel.textLayers = cloneTextLayers(previousState.textLayers)
+      panelsRef.current = updatedPanels
       setPanels(updatedPanels)
     }
   }, [selectedPanel, panels])
@@ -276,6 +251,7 @@ function App() {
       updatedPanel.data = nextState.data
       updatedPanel.shapeLayers = cloneShapeLayers(nextState.shapeLayers)
       updatedPanel.textLayers = cloneTextLayers(nextState.textLayers)
+      panelsRef.current = updatedPanels
       setPanels(updatedPanels)
     }
   }, [selectedPanel, panels])
