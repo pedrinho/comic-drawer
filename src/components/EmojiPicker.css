@@ -19,6 +19,34 @@
   overflow-y: auto;
 }
 
+.emoji-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  border: 1px solid #e0e0e0;
+  border-radius: var(--radius-md);
+  background: white;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.emoji-search:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.emoji-empty {
+  padding: 1rem 0.5rem;
+  text-align: center;
+  color: #999;
+  font-size: 0.9rem;
+}
+
 .emoji-category {
   display: flex;
   flex-direction: column;
