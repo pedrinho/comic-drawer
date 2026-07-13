@@ -1433,9 +1433,11 @@ export default function Canvas({
           else if (kind === 'group') shapes.push(fabricGroupToLayer(o as fabric.Group, scale))
           else shapes.push(fabricObjectToShapeLayer(o))
         })
-        // Preserve non-Fabric layers (paths, balloons) in their original order.
+        // Preserve only the non-Fabric layers (paths, balloons). Shapes, images AND groups
+        // are all re-synced from the canvas below, so they must not be kept here or they
+        // accumulate (duplicating on every sync).
         const preserved = shapeLayersRef.current.filter(
-          (l) => !isShapeObjectLayer(l) && !isImageObjectLayer(l)
+          (l) => !isShapeObjectLayer(l) && !isImageObjectLayer(l) && !isGroupObjectLayer(l)
         )
         updateShapeLayers([...preserved, ...shapes, ...images], skipHistory)
         updateTextLayers(texts, skipHistory)
