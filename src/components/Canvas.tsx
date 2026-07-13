@@ -6,9 +6,11 @@ import { drawGrid as drawGridUtil, debugLog, debugError, debugWarn, simplifyPath
 import { renderPathLayer, renderShapeLayer, renderTextLayer, renderImageLayer, renderBalloonLayer, renderGroupLayer } from '../utils/renderUtils'
 import { shapeLayerToFabricObject, fabricObjectToShapeLayer } from '../utils/fabricShapes'
 import { textLayerToFabricIText, fabricITextToTextLayer } from '../utils/fabricText'
-import { imageLayerToFabricImage, fabricImageToLayer, fabricObjectKind } from '../utils/fabricImage'
+import { imageLayerToFabricImage, fabricImageToLayer, fabricObjectKind, IMAGE_ID_KEY, IMAGE_DATA_KEY } from '../utils/fabricImage'
 import { layerToFabricGroup, fabricGroupToLayer } from '../utils/fabricGroup'
 import { pathLayerToFabricPath, fabricPathToLayer, PATH_ID_KEY } from '../utils/fabricPath'
+import { buildRasterImage, buildGridObjects, backingToImageData, isChromeObject } from '../utils/fabricRaster'
+import { balloonLayerToFabricObject, fabricBalloonToLayer, isFabricBalloon } from '../utils/fabricBalloon'
 import './Canvas.css'
 
 interface SelectionRect {
@@ -48,10 +50,6 @@ interface CanvasProps {
   onToolChange?: (tool: Tool) => void // Added to allow switching tools
   emoji?: string
 }
-
-// Tools whose objects live on (and take pointer input from) the Fabric overlay. Everything
-// else (eraser/scissor) draws on the legacy raster canvas underneath.
-const FABRIC_TOOLS = new Set<Tool>(['objectShapes', 'text', 'emoji', 'select', 'fill', 'pen'])
 
 const getPenWidth = (penType?: PenType): number => {
   if (!penType) return 2
@@ -1309,7 +1307,7 @@ export default function Canvas({
     const legacy = canvasRef.current
     if (!canvas) return
     // Emoji is handled as text mode: it places a fabric.IText holding the emoji character.
-    const mode: 'shape' | 'text' | 'select' | 'fill' | 'pen' | null =
+    const mode: 'shape' | 'text' | 'select' | 'fill' | 'pen' | 'eraser' | 'scissor' | null =
       tool === 'objectShapes'
         ? 'shape'
         : tool === 'text' || tool === 'emoji'
@@ -1320,11 +1318,13 @@ export default function Canvas({
               ? 'fill'
               : tool === 'pen'
                 ? 'pen'
-                : null
+                : tool === 'eraser'
+                  ? 'eraser'
+                  : tool === 'scissor'
+                    ? 'scissor'
+                    : null
     const placeEmoji = tool === 'emoji' ? emoji ?? '😀' : null
     const isCreationMode = mode === 'shape' || mode === 'text'
-    // select + fill both load every object type so they're clickable on the overlay.
-    const isObjectMode = mode === 'select' || mode === 'fill'
     let disposed = false // guards async image loads against a stale canvas after cleanup
 
     // Keep the Fabric overlay's CSS size aligned with the (scaled) legacy canvas so their
@@ -1351,16 +1351,6 @@ export default function Canvas({
       return 1
     }
 
-    if (!mode) {
-      if (fabricOwnedRef.current.size > 0) {
-        fabricOwnedRef.current = new Set()
-        canvas.getObjects().slice().forEach((o) => canvas.remove(o))
-        canvas.requestRenderAll()
-        repaintCanvas()
-      }
-      return
-    }
-
     const currentShape = shape ?? 'rectangle'
     const currentColor = color
     const currentFont = font
@@ -1380,97 +1370,70 @@ export default function Canvas({
       canvas.freeDrawingBrush = brush
     }
 
-    // Load the owned object type(s) onto Fabric, and repaint the legacy canvas so it stops
-    // drawing them (avoids double-rendering).
+    // Single canvas: the overlay renders the WHOLE scene — white page + raster substrate + grid
+    // (chrome, at the back) + every vector object on top. The legacy canvas renders nothing.
+    // Interactivity is gated per-mode by applyObjectControls; the raster tools (eraser / fill
+    // fallback / scissor) paint on `rasterBacking` and re-render `rasterImage`.
+    canvas.backgroundColor = '#ffffff'
     canvas.getObjects().slice().forEach((o) => canvas.remove(o))
-    if (mode === 'shape') {
-      fabricOwnedRef.current = new Set(['shape'])
-      shapeLayersRef.current.forEach((l) => {
-        if (isShapeObjectLayer(l)) canvas.add(shapeLayerToFabricObject(l))
-      })
-    } else if (mode === 'text') {
-      fabricOwnedRef.current = new Set(['text'])
-      textLayersRef.current.forEach((l) => canvas.add(textLayerToFabricIText(l, scale)))
-    } else if (mode === 'pen') {
-      // Pen owns paths: load existing ones so they stay visible while the brush draws new ones.
-      fabricOwnedRef.current = new Set(['path'])
-      shapeLayersRef.current.forEach((l) => {
-        if (isPathObjectLayer(l)) canvas.add(pathLayerToFabricPath(l))
-      })
-    } else if (isObjectMode) {
-      // select + fill: all object types live on Fabric. Balloons (deprecated) stay on the
-      // legacy canvas since there's no Fabric converter for them.
-      fabricOwnedRef.current = new Set(['shape', 'text', 'image', 'group', 'path'])
-      shapeLayersRef.current.forEach((l) => {
-        if (isShapeObjectLayer(l)) canvas.add(shapeLayerToFabricObject(l))
-        else if (isPathObjectLayer(l)) canvas.add(pathLayerToFabricPath(l))
-        else if (isImageObjectLayer(l)) {
-          imageLayerToFabricImage(l)
-            .then((img) => {
-              if (disposed) return
-              applyObjectControls(img)
-              canvas.add(img)
-              canvas.requestRenderAll()
-            })
-            .catch(() => {
-              /* skip images that fail to decode */
-            })
-        } else if (isGroupObjectLayer(l)) {
-          layerToFabricGroup(l, scale)
-            .then((group) => {
-              if (disposed) return
-              applyObjectControls(group)
-              canvas.add(group)
-              canvas.requestRenderAll()
-            })
-            .catch(() => {
-              /* skip groups that fail to build */
-            })
-        }
-      })
-      textLayersRef.current.forEach((l) => canvas.add(textLayerToFabricIText(l, scale)))
-    }
+    const { image: rasterImage, backing: rasterBacking } = buildRasterImage(panelData)
+    canvas.add(rasterImage)
+    buildGridObjects(layout).forEach((g) => canvas.add(g))
+
+    fabricOwnedRef.current = new Set(['shape', 'text', 'image', 'group', 'path', 'balloon'])
+    shapeLayersRef.current.forEach((l) => {
+      if (isShapeObjectLayer(l)) canvas.add(shapeLayerToFabricObject(l))
+      else if (isPathObjectLayer(l)) canvas.add(pathLayerToFabricPath(l))
+      else if (isBalloonObjectLayer(l)) canvas.add(balloonLayerToFabricObject(l, scale))
+      else if (isImageObjectLayer(l)) {
+        imageLayerToFabricImage(l)
+          .then((img) => {
+            if (disposed) return
+            applyObjectControls(img)
+            canvas.add(img)
+            canvas.requestRenderAll()
+          })
+          .catch(() => {
+            /* skip images that fail to decode */
+          })
+      } else if (isGroupObjectLayer(l)) {
+        layerToFabricGroup(l, scale)
+          .then((group) => {
+            if (disposed) return
+            applyObjectControls(group)
+            canvas.add(group)
+            canvas.requestRenderAll()
+          })
+          .catch(() => {
+            /* skip groups that fail to build */
+          })
+      }
+    })
+    textLayersRef.current.forEach((l) => canvas.add(textLayerToFabricIText(l, scale)))
     canvas.requestRenderAll()
     repaintCanvas()
 
     const syncToLayers = (skipHistory = false) => {
-      const objs = canvas.getObjects()
-      if (mode === 'shape') {
-        const fabricShapes = objs.map((o) => fabricObjectToShapeLayer(o))
-        const others = shapeLayersRef.current.filter((l) => !isShapeObjectLayer(l))
-        updateShapeLayers([...others, ...fabricShapes], skipHistory)
-      } else if (mode === 'text') {
-        updateTextLayers(objs.map((o) => fabricITextToTextLayer(o as fabric.IText, scale)), skipHistory)
-      } else if (mode === 'pen') {
-        // Pen owns paths only. Re-sync every fabric.Path back into path layers; keep the rest.
-        const fabricPaths = objs
-          .filter((o) => (o as any)[PATH_ID_KEY])
-          .map((o) => fabricPathToLayer(o as fabric.Path))
-        const others = shapeLayersRef.current.filter((l) => !isPathObjectLayer(l))
-        updateShapeLayers([...others, ...fabricPaths], skipHistory)
-      } else {
-        // select: split objects back into shape / path / image / text layers.
-        const shapes: ObjectLayer[] = []
-        const paths: ObjectLayer[] = []
-        const images: ObjectLayer[] = []
-        const texts: TextLayer[] = []
-        objs.forEach((o) => {
-          const kind = fabricObjectKind(o)
-          if (kind === 'text') texts.push(fabricITextToTextLayer(o as fabric.IText, scale))
-          else if (kind === 'image') images.push(fabricImageToLayer(o as fabric.FabricImage))
-          else if (kind === 'group') shapes.push(fabricGroupToLayer(o as fabric.Group, scale))
-          else if (kind === 'path') paths.push(fabricPathToLayer(o as fabric.Path))
-          else shapes.push(fabricObjectToShapeLayer(o))
-        })
-        // Preserve only the non-Fabric layers (balloons). Shapes, paths, images AND groups
-        // are all re-synced from the canvas below, so they must not be kept here or they
-        // accumulate (duplicating on every sync).
-        const preserved = shapeLayersRef.current.filter(
-          (l) => !isShapeObjectLayer(l) && !isImageObjectLayer(l) && !isGroupObjectLayer(l) && !isPathObjectLayer(l)
-        )
-        updateShapeLayers([...preserved, ...shapes, ...images, ...paths], skipHistory)
-        updateTextLayers(texts, skipHistory)
-      }
+      // Single canvas: every object type lives on the overlay, so rebuild the whole layer
+      // model from it in one pass (chrome — raster + grid — excluded). Canvas z-order is
+      // preserved within shapeLayers; texts render on top, as in the model/export.
+      const objs = canvas.getObjects().filter((o) => !isChromeObject(o))
+      const shapeResult: ObjectLayer[] = []
+      const texts: TextLayer[] = []
+      objs.forEach((o) => {
+        if (isFabricBalloon(o)) {
+          shapeResult.push(fabricBalloonToLayer(o as fabric.Group))
+          return
+        }
+        const kind = fabricObjectKind(o)
+        if (kind === 'text') texts.push(fabricITextToTextLayer(o as fabric.IText, scale))
+        else if (kind === 'image') shapeResult.push(fabricImageToLayer(o as fabric.FabricImage))
+        else if (kind === 'group') shapeResult.push(fabricGroupToLayer(o as fabric.Group, scale))
+        else if (kind === 'path') shapeResult.push(fabricPathToLayer(o as fabric.Path))
+        else shapeResult.push(fabricObjectToShapeLayer(o))
+      })
+      updateShapeLayers(shapeResult, skipHistory)
+      updateTextLayers(texts, skipHistory)
     }
 
     // On-selection buttons (Fabric custom controls): duplicate + delete, so objects can be
@@ -1612,21 +1575,37 @@ export default function Canvas({
     const mergeControl = iconControl('⊕', '#10b981', 0, 0, mergeSelection, 0.5, 18)
     const ungroupControl = iconControl('⊖', '#10b981', 0, 0, ungroupObject, 0.5, 18)
     const applyObjectControls = (obj: fabric.FabricObject) => {
-      obj.controls = { ...obj.controls, dup: dupControl, del: delControl }
-      if (obj instanceof fabric.Group) {
-        obj.controls = { ...obj.controls, ung: ungroupControl }
+      if (isFabricBalloon(obj)) {
+        // Deprecated balloons: movable/deletable but not duplicable/ungroupable.
+        obj.controls = { ...obj.controls, del: delControl }
+      } else {
+        obj.controls = { ...obj.controls, dup: dupControl, del: delControl }
+        if (obj instanceof fabric.Group) {
+          obj.controls = { ...obj.controls, ung: ungroupControl }
+        }
       }
-      if (mode === 'fill') {
-        // Fill mode: objects are click-to-color, not movable/selectable. subTargetCheck lets
-        // a click report the child under the cursor inside a group.
+      // Interactivity is gated by mode: only `select` can pick/move/transform objects; `fill`
+      // keeps them evented for click-to-colour hit-testing; every other tool (creation, pen,
+      // eraser, scissor) treats existing objects as a non-interactive backdrop so the tool's
+      // own gesture (create / brush / erase / cut) always wins.
+      if (mode === 'select') {
+        obj.selectable = true
+        obj.evented = true
+      } else if (mode === 'fill') {
         obj.selectable = false
+        obj.evented = true
         obj.hoverCursor = 'pointer'
         if (obj instanceof fabric.Group) (obj as any).subTargetCheck = true
+      } else {
+        obj.selectable = false
+        obj.evented = false
       }
     }
 
-    // Give every already-loaded object the on-selection buttons.
-    canvas.getObjects().forEach(applyObjectControls)
+    // Give every already-loaded object (not chrome) the on-selection buttons + interactivity.
+    canvas.getObjects().forEach((o) => {
+      if (!isChromeObject(o)) applyObjectControls(o)
+    })
 
     const getPoint = (opt: any) => {
       if (opt.scenePoint) return opt.scenePoint
@@ -1635,6 +1614,60 @@ export default function Canvas({
     }
 
     let creating: { obj: fabric.FabricObject; start: { x: number; y: number } } | null = null
+    // Raster-tool gesture state (eraser drag / scissor marquee).
+    let erasing: { last: { x: number; y: number } } | null = null
+    let scissorSel: { start: { x: number; y: number }; rect: fabric.Rect } | null = null
+
+    // Push the current raster backing back into panelData (App snapshots history + re-renders).
+    const commitRaster = () => onCanvasChange(backingToImageData(rasterBacking))
+
+    // Eraser: wipe a round segment out of the raster backing (destination-out) and re-render.
+    const eraseSegment = (from: { x: number; y: number }, to: { x: number; y: number }) => {
+      const ctx = rasterBacking.getContext('2d')
+      if (!ctx) return
+      ctx.save()
+      ctx.globalCompositeOperation = 'destination-out'
+      ctx.lineWidth = 20
+      ctx.lineCap = 'round'
+      ctx.lineJoin = 'round'
+      ctx.beginPath()
+      ctx.moveTo(from.x, from.y)
+      ctx.lineTo(to.x, to.y)
+      ctx.stroke()
+      ctx.restore()
+      rasterImage.dirty = true
+      canvas.requestRenderAll()
+    }
+
+    // Fill fallback: flood the COMPOSITE scene (so the fill respects ink / grid / shape
+    // boundaries), then stamp only the newly-filled pixels onto the raster backing.
+    const floodRaster = (x: number, y: number, colorHex: string) => {
+      const before = canvas.toCanvasElement(1) as HTMLCanvasElement
+      const bctx = before.getContext('2d')
+      const backCtx = rasterBacking.getContext('2d')
+      if (!bctx || !backCtx) return
+      const beforeData = bctx.getImageData(0, 0, before.width, before.height)
+      floodFill(bctx, Math.round(x), Math.round(y), colorHex)
+      const after = bctx.getImageData(0, 0, before.width, before.height).data
+      const back = backCtx.getImageData(0, 0, rasterBacking.width, rasterBacking.height)
+      const b = beforeData.data
+      const d = back.data
+      let changed = false
+      for (let i = 0; i < after.length; i += 4) {
+        if (after[i] !== b[i] || after[i + 1] !== b[i + 1] || after[i + 2] !== b[i + 2] || after[i + 3] !== b[i + 3]) {
+          d[i] = after[i] ?? 0
+          d[i + 1] = after[i + 1] ?? 0
+          d[i + 2] = after[i + 2] ?? 0
+          d[i + 3] = 255
+          changed = true
+        }
+      }
+      if (!changed) return
+      backCtx.putImageData(back, 0, 0)
+      rasterImage.dirty = true
+      canvas.requestRenderAll()
+      commitRaster()
+    }
 
     const onDown = (opt: any) => {
       if (mode === 'fill') {
@@ -1646,14 +1679,33 @@ export default function Canvas({
           syncToLayers(false)
           return
         }
-        const legacy2 = canvasRef.current
-        const ctx = legacy2?.getContext('2d')
-        if (legacy2 && ctx) {
-          const p2 = getPoint(opt)
-          floodFill(ctx, p2.x, p2.y, currentColor)
-          drawGrid(ctx)
-          onCanvasChange(ctx.getImageData(0, 0, legacy2.width, legacy2.height))
-        }
+        const p2 = getPoint(opt)
+        floodRaster(p2.x, p2.y, currentColor)
+        return
+      }
+      if (mode === 'eraser') {
+        const p = getPoint(opt)
+        erasing = { last: { x: p.x, y: p.y } }
+        return
+      }
+      if (mode === 'scissor') {
+        const p = getPoint(opt)
+        const rect = new fabric.Rect({
+          left: p.x,
+          top: p.y,
+          width: 0,
+          height: 0,
+          originX: 'left',
+          originY: 'top',
+          fill: 'rgba(0,120,255,0.08)',
+          stroke: '#0078ff',
+          strokeWidth: 1,
+          strokeDashArray: [6, 4],
+          selectable: false,
+          evented: false,
+        })
+        canvas.add(rect)
+        scissorSel = { start: { x: p.x, y: p.y }, rect }
         return
       }
       if (!isCreationMode) return // select mode: let Fabric handle picking/moving
@@ -1711,6 +1763,19 @@ export default function Canvas({
     }
 
     const onMove = (opt: any) => {
+      if (erasing) {
+        const p = getPoint(opt)
+        eraseSegment(erasing.last, p)
+        erasing.last = { x: p.x, y: p.y }
+        return
+      }
+      if (scissorSel) {
+        const p = getPoint(opt)
+        const r = normalizeRect(scissorSel.start, p)
+        scissorSel.rect.set({ left: r.x, top: r.y, width: r.width, height: r.height })
+        canvas.requestRenderAll()
+        return
+      }
       if (!creating) return
       const p = getPoint(opt)
       const w = Math.max(1, Math.abs(p.x - creating.start.x))
@@ -1725,6 +1790,59 @@ export default function Canvas({
     }
 
     const onUp = () => {
+      if (erasing) {
+        erasing = null
+        commitRaster() // one history entry per stroke (App snapshots the pre-stroke state)
+        return
+      }
+      if (scissorSel) {
+        const rect = scissorSel.rect
+        const rx = Math.round(rect.left ?? 0)
+        const ry = Math.round(rect.top ?? 0)
+        const rw = Math.round(rect.width ?? 0)
+        const rh = Math.round(rect.height ?? 0)
+        canvas.remove(rect)
+        scissorSel = null
+        // Clamp the cut region to the canvas bounds.
+        const cx = Math.max(0, rx)
+        const cy = Math.max(0, ry)
+        const cw = Math.min(rw - (cx - rx), 1200 - cx)
+        const ch = Math.min(rh - (cy - ry), 800 - cy)
+        if (cw < 5 || ch < 5) {
+          canvas.requestRenderAll()
+          return
+        }
+        const backCtx = rasterBacking.getContext('2d')
+        if (!backCtx) return
+        const region = backCtx.getImageData(cx, cy, cw, ch)
+        makeWhiteTransparent(region)
+        const base64 = imageDataToBase64(region)
+        backCtx.clearRect(cx, cy, cw, ch) // leave a hole where the pixels were lifted
+        rasterImage.dirty = true
+        // Build the cut-out as a Fabric image SYNCHRONOUSLY (from a backing canvas) and add it to
+        // the overlay, so the tool-switch cleanup's syncToLayers preserves it (it rebuilds the
+        // layer model from the canvas — a layer only in shapeLayers but not on the canvas is lost).
+        const cutEl = document.createElement('canvas')
+        cutEl.width = cw
+        cutEl.height = ch
+        cutEl.getContext('2d')?.putImageData(region, 0, 0)
+        const img = new fabric.FabricImage(cutEl, {
+          originX: 'center',
+          originY: 'center',
+          left: cx + cw / 2,
+          top: cy + ch / 2,
+          [IMAGE_ID_KEY]: generateLayerId(),
+          [IMAGE_DATA_KEY]: base64,
+        } as any)
+        applyObjectControls(img)
+        canvas.add(img)
+        canvas.setActiveObject(img)
+        canvas.requestRenderAll()
+        commitRaster() // snapshots history (pre-cut data + layers) and updates panelData
+        syncToLayers(true) // lift the cut image into shapeLayers (commitRaster already snapshotted)
+        onToolChange?.('select')
+        return
+      }
       if (!creating) return
       const obj = creating.obj
       const tooSmall = (obj.width ?? 0) * (obj.scaleX ?? 1) < 3 || (obj.height ?? 0) * (obj.scaleY ?? 1) < 3
@@ -1814,7 +1932,7 @@ export default function Canvas({
       fabricOwnedRef.current = new Set()
       repaintCanvas()
     }
-  }, [tool, shape, color, penType, font, fontSize, emoji, repaintCanvas, updateShapeLayers, updateTextLayers])
+  }, [tool, shape, color, penType, font, fontSize, emoji, layout, panelData, repaintCanvas, updateShapeLayers, updateTextLayers])
 
   const hitTestShapeLayers = useCallback((point: { x: number; y: number }): ObjectLayer | null => {
     const layers = shapeLayersRef.current
@@ -3449,20 +3567,21 @@ export default function Canvas({
 
   return (
     <div className="canvas-container" style={{ position: 'relative', width: '100%', height: '100%' }}>
-      {/* Fabric.js Canvas — overlay. Interactive and on top for Fabric-owned object tools. */}
+      {/* Fabric.js Canvas — the single interactive canvas (always on top). */}
       <div
         style={{
           position: 'absolute',
           top: 0,
           left: 0,
-          zIndex: FABRIC_TOOLS.has(tool) ? 2 : 0,
-          pointerEvents: FABRIC_TOOLS.has(tool) ? 'auto' : 'none',
+          zIndex: 2,
+          pointerEvents: 'auto',
         }}
       >
         <canvas ref={fabricRef} />
       </div>
 
-      {/* Legacy Canvas (Top Layer) */}
+      {/* Legacy Canvas — retained only as a hidden sizing anchor; renders nothing and takes no
+          input now that the Fabric overlay owns the whole scene. Removed in a follow-up. */}
       <canvas
         ref={canvasRef}
         className="drawing-canvas"
@@ -3475,8 +3594,8 @@ export default function Canvas({
           top: 0,
           left: 0,
           touchAction: 'none',
-          pointerEvents: 'auto',
-          zIndex: 1, // Ensure legacy canvas is on top for now
+          pointerEvents: 'none',
+          zIndex: 1,
         }}
         data-testid="canvas"
       />

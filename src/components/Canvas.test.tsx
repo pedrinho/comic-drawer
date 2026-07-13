@@ -787,75 +787,9 @@ describe('Canvas', () => {
       })
     })
 
-    it('clamps duplicate position to canvas bounds', async () => {
-      const onShapeLayersChange = vi.fn()
-      // Place shape near the right edge of canvas (width 1200)
-      const shapeLayers: ShapeLayer[] = [
-        {
-          type: 'shape',
-          id: 'shape-1',
-          shape: 'rectangle',
-          x: 1150, // Near right edge
-          y: 100,
-          width: 50,
-          height: 50,
-          rotation: 0,
-          strokeColor: '#000000',
-          strokeWidth: 2,
-          fillColor: null,
-        },
-      ]
-
-      render(
-        <Canvas
-          font="Arial"
-          fontSize={20}
-          tool="select"
-          color="#000000"
-          panelData={null}
-          layout={{ rows: 1, columns: [1] }}
-          onCanvasChange={vi.fn()}
-          shapeLayers={shapeLayers}
-          onShapeLayersChange={onShapeLayersChange}
-        />
-      )
-
-      const canvas = screen.getByTestId('canvas')
-      if (canvas) {
-        const rect = canvas.getBoundingClientRect()
-        const clickX = rect.left + (1150 + 25) * (rect.width / 1200)
-        const clickY = rect.top + (100 + 25) * (rect.height / 800)
-
-        await userEvent.pointer({
-          keys: '[MouseLeft]',
-          target: canvas,
-          coords: { x: clickX, y: clickY },
-        })
-      }
-
-      // Wait for duplicate button and click it
-      await waitFor(async () => {
-        const duplicateButton = screen.queryByTitle('Duplicate')
-        expect(duplicateButton).toBeInTheDocument()
-        if (duplicateButton) {
-          await userEvent.click(duplicateButton)
-        }
-      })
-
-      // Verify duplicate position is clamped to canvas bounds
-      await waitFor(() => {
-        expect(onShapeLayersChange).toHaveBeenCalled()
-        const calls = onShapeLayersChange.mock.calls
-        const duplicateCall = calls.find((call) => call[0].length === 2)
-        if (duplicateCall) {
-          const duplicatedLayers = duplicateCall[0] as ShapeLayer[]
-          const duplicate = duplicatedLayers[1]
-          // Should be clamped: 1150 + 30 = 1180, but width is 50, so max x is 1200 - 50 = 1150
-          expect(duplicate.x).toBeLessThanOrEqual(1200 - duplicate.width)
-          expect(duplicate.y).toBeLessThanOrEqual(800 - duplicate.height)
-        }
-      })
-    })
+    // NOTE: the old "clamps duplicate position to canvas bounds" test was removed — duplication
+    // is now a native Fabric control (⧉) driven on the overlay, not the legacy DOM button, and
+    // it offsets rather than clamps. Duplicate behaviour is covered by the browser pass.
 
     it('does not show duplicate button when tool is not select', () => {
       const shapeLayers: ShapeLayer[] = [

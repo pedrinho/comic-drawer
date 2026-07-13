@@ -86,6 +86,8 @@ export const buildGridObjects = (layout: { rows: number; columns: number[] }): f
         top: c.y,
         width: c.w,
         height: c.h,
+        originX: 'left',
+        originY: 'top',
         fill: 'transparent',
         stroke: '#000000',
         strokeWidth: 3,
