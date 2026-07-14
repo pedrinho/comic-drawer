@@ -46,8 +46,8 @@ describe('Canvas — Fabric shape mode', () => {
         onShapeLayersChange={vi.fn()}
       />
     )
-    // Two canvases now exist: the Fabric overlay and the legacy canvas.
-    expect(container.querySelectorAll('canvas').length).toBeGreaterThanOrEqual(2)
+    // Single-canvas end state: only the Fabric canvas remains.
+    expect(container.querySelectorAll('canvas').length).toBeGreaterThanOrEqual(1)
   })
 
   it('syncs Fabric shapes back into shapeLayers when leaving the tool', async () => {

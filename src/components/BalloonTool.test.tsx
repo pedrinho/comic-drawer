@@ -20,50 +20,9 @@ beforeAll(() => {
 })
 
 describe('Balloon Tool', () => {
-    it('creates a balloon object when drawing', async () => {
-        const onShapeLayersChange = vi.fn()
-        render(
-            <Canvas
-                tool="balloon"
-                color="#000000"
-                font="Arial"
-                fontSize={20}
-                panelData={null}
-                layout={{ rows: 1, columns: [1] }}
-                onCanvasChange={vi.fn()}
-                onShapeLayersChange={onShapeLayersChange}
-                shapeLayers={[]}
-            />
-        )
-
-        const canvas = screen.getByTestId('canvas') as HTMLCanvasElement
-        expect(canvas).toBeTruthy()
-
-        if (canvas) {
-            // Set dimensions to match mock
-            Object.defineProperty(canvas, 'width', { value: 1000 })
-            Object.defineProperty(canvas, 'height', { value: 1000 })
-
-            // Simulate drawing a balloon
-            // 1. Mouse Down at (100, 100)
-            fireEvent.mouseDown(canvas, { clientX: 100, clientY: 100 })
-
-            // 2. Mouse Move to (200, 200)
-            fireEvent.mouseMove(canvas, { clientX: 200, clientY: 200 })
-
-            // 3. Mouse Up
-            fireEvent.mouseUp(canvas)
-        }
-
-        await waitFor(() => {
-            expect(onShapeLayersChange).toHaveBeenCalled()
-            const calls = onShapeLayersChange.mock.calls
-            const lastCall = calls[calls.length - 1]
-            const layers = lastCall[0] as BalloonObjectLayer[]
-            expect(layers.length).toBeGreaterThan(0)
-            expect(layers[0].type).toBe('balloon')
-        })
-    })
+    // NOTE: the "creates a balloon object when drawing" test was removed — the balloon TOOL is
+    // deprecated (no longer in the toolbar), so balloons can't be drawn. Deprecated balloons in
+    // old files still render/move via the read-only converter (see fabricBalloon.test.ts).
 
     it('allows text editing interactions', () => {
         // This is a simplified test just to ensure the double-click logic doesn't crash
