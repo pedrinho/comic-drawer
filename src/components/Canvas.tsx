@@ -89,14 +89,14 @@ export default function Canvas({
   emoji = '😀',
 }: CanvasProps) {
 
+  // These mirror the layer props but are updated DURING RENDER (below) so the overlay effect
+  // always reads the current model — including a value `syncToLayers` writes synchronously in
+  // the effect cleanup (committing an in-progress text edit), which the props wouldn't reflect
+  // until a later render that wouldn't re-run the effect.
   const shapeLayersRef = useRef<ObjectLayer[]>(shapeLayers)
-  // Always-current model references, so the overlay effect's cleanup can tell WHY it re-ran:
-  // if these still match what the effect captured at setup, only the tool/style changed (safe
-  // to hand the canvas back to the model); if they changed, the model was replaced externally
-  // (undo/redo/load) and the canvas is stale — syncing it would clobber the restored model.
-  const latestModelRef = useRef({ shape: shapeLayers, text: textLayers, data: panelData })
-  latestModelRef.current = { shape: shapeLayers, text: textLayers, data: panelData }
   const textLayersRef = useRef<TextLayer[]>(textLayers)
+  shapeLayersRef.current = shapeLayers
+  textLayersRef.current = textLayers
 
   // Fabric.js Refs
   const fabricRef = useRef<HTMLCanvasElement>(null)
@@ -306,8 +306,6 @@ export default function Canvas({
   useEffect(() => {
     const canvas = fabricCanvasRef.current
     if (!canvas) return
-    // Snapshot the model references this run was built from, to compare in cleanup.
-    const modelAtSetup = { shape: shapeLayers, text: textLayers, data: panelData }
     // Emoji is handled as text mode: it places a fabric.IText holding the emoji character.
     const mode: 'shape' | 'text' | 'select' | 'fill' | 'pen' | 'eraser' | 'scissor' | null =
       tool === 'objectShapes'
@@ -372,14 +370,12 @@ export default function Canvas({
     canvas.add(rasterImage)
     buildGridObjects(layout).forEach((g) => canvas.add(g))
 
-    // Load from the PROPS (not the refs) so an external model change — undo/redo, load, panel
-    // switch — reloads the correct scene. The refs lag by an effect tick (a separate effect
-    // syncs them), which would otherwise reload stale layers after undo. The effect re-runs
-    // whenever panelData changes (undo/redo always restores a fresh ImageData reference), so
-    // reading the current-render props here is correct; shapeLayers/textLayers stay OUT of the
-    // deps so our own live edits don't trigger a rebuild that clobbers the active selection.
+    // Load from the render-synced refs (== current props, plus any value the cleanup just
+    // wrote when committing an in-progress text edit). shapeLayers/textLayers stay OUT of the
+    // effect deps so our own live edits don't trigger a rebuild that clobbers the active
+    // selection; external model changes (undo/redo/load) re-run the effect via panelData/layout.
     fabricOwnedRef.current = new Set(['shape', 'text', 'image', 'group', 'path', 'balloon'])
-    ;(shapeLayers ?? []).forEach((l) => {
+    ;(shapeLayersRef.current ?? []).forEach((l) => {
       if (isShapeObjectLayer(l)) canvas.add(shapeLayerToFabricObject(l))
       else if (isPathObjectLayer(l)) canvas.add(pathLayerToFabricPath(l))
       else if (isBalloonObjectLayer(l)) canvas.add(balloonLayerToFabricObject(l, scale))
@@ -407,7 +403,7 @@ export default function Canvas({
           })
       }
     })
-    ;(textLayers ?? []).forEach((l) => canvas.add(textLayerToFabricIText(l, scale)))
+    ;(textLayersRef.current ?? []).forEach((l) => canvas.add(textLayerToFabricIText(l, scale)))
     canvas.requestRenderAll()
 
     const syncToLayers = (skipHistory = false) => {
@@ -930,19 +926,15 @@ export default function Canvas({
       canvas.off('selection:updated', onSelection)
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('resize', sizeOverlay)
-      // Hand the canvas back to the model ONLY when this re-run was a tool/style change — that
-      // captures any in-progress edit (e.g. text being typed) and is otherwise a no-op. The
-      // effect only re-runs for a MODEL change when panelData changes (shapeLayers/textLayers
-      // aren't deps), and undo/redo/load/raster-commit all replace panelData; in that case the
-      // canvas is stale, so syncing it would clobber the just-restored model — skip it.
-      const dataReplaced = latestModelRef.current.data !== modelAtSetup.data
-      if (!dataReplaced) {
-        // If a text object is still being edited (the user switched tools mid-edit and no
-        // text:editing:exited fired), this cleanup is what commits it — so record a history
-        // entry for it. A plain tool switch has nothing uncommitted and re-syncs as a no-op.
-        const editing = canvas.getActiveObject()
-        const committingText = !!(editing && (editing as any).isEditing)
-        syncToLayers(!committingText)
+      // Every gesture already syncs immediately (create / modify / delete / fill / erase / cut
+      // / text-commit), so the teardown must NOT do a blanket canvas→model sync: on a
+      // model-driven re-run (undo/redo/load/panel-switch) the canvas is stale and syncing it
+      // would clobber the just-restored model. The ONE thing not yet committed is an in-place
+      // text edit the user abandoned by switching tools (no text:editing:exited fired) — commit
+      // just that, with a history entry.
+      const editing = canvas.getActiveObject()
+      if (editing && (editing as any).isEditing) {
+        syncToLayers(false)
       }
       canvas.isDrawingMode = false
       canvas.getObjects().slice().forEach((o) => canvas.remove(o))
@@ -953,18 +945,6 @@ export default function Canvas({
   }, [tool, shape, color, penType, font, fontSize, emoji, layout, panelData, updateShapeLayers, updateTextLayers])
 
 
-
-
-
-  useEffect(() => {
-    shapeLayersRef.current = shapeLayers
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shapeLayers])
-
-  useEffect(() => {
-    textLayersRef.current = textLayers
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [textLayers])
 
 
 

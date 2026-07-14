@@ -50,52 +50,29 @@ describe('Canvas — Fabric shape mode', () => {
     expect(container.querySelectorAll('canvas').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('syncs Fabric shapes back into shapeLayers when leaving the tool', async () => {
+  // In the single-canvas model, edits sync to the layer model IMMEDIATELY (on each gesture),
+  // not on tool exit. So the important invariant on a plain tool switch (no edit) is that the
+  // model is NOT clobbered — an early bug had the effect cleanup write the stale canvas back
+  // over the model, wiping objects on load / undo / tool switch. These guard against that.
+  const wipedTo = (fn: ReturnType<typeof vi.fn>) =>
+    fn.mock.calls.some((c) => Array.isArray(c[0]) && c[0].length === 0)
+
+  it('does not clobber shapeLayers when switching tools (no edit)', async () => {
     const onShapeLayersChange = vi.fn()
     const { rerender } = render(
-      <Canvas
-        {...baseProps}
-        tool="objectShapes"
-        shape="rectangle"
-        shapeLayers={[rectLayer]}
-        onShapeLayersChange={onShapeLayersChange}
-      />
+      <Canvas {...baseProps} tool="objectShapes" shape="rectangle" shapeLayers={[rectLayer]} onShapeLayersChange={onShapeLayersChange} />
     )
-
-    // Switching away from objectShapes runs the effect cleanup, which hands the Fabric
-    // shapes back to the layer model.
     rerender(
-      <Canvas
-        {...baseProps}
-        tool="select"
-        shape="rectangle"
-        shapeLayers={[rectLayer]}
-        onShapeLayersChange={onShapeLayersChange}
-      />
+      <Canvas {...baseProps} tool="select" shape="rectangle" shapeLayers={[rectLayer]} onShapeLayersChange={onShapeLayersChange} />
     )
-
-    await waitFor(() => expect(onShapeLayersChange).toHaveBeenCalled())
-
-    const lastCall = onShapeLayersChange.mock.calls[onShapeLayersChange.mock.calls.length - 1]
-    const layers = lastCall[0] as ObjectLayer[]
-    const rect = layers.find((l) => l.type === 'shape' && l.id === 's1')
-    expect(rect).toBeTruthy()
-    expect(rect).toMatchObject({ shape: 'rectangle', width: 200, height: 120 })
+    await waitFor(() => {}) // flush effects
+    expect(wipedTo(onShapeLayersChange)).toBe(false)
   })
 
-  it('loads text onto Fabric and syncs it back when leaving the text tool', async () => {
+  it('does not clobber textLayers when switching tools (no edit)', async () => {
     const textLayer: TextLayer = {
-      type: 'text',
-      id: 't1',
-      text: 'Bang!',
-      x: 50,
-      y: 40,
-      width: 80,
-      height: 24,
-      rotation: 0,
-      font: 'Arial',
-      fontSize: 24,
-      color: '#000000',
+      type: 'text', id: 't1', text: 'Bang!', x: 50, y: 40, width: 80, height: 24,
+      rotation: 0, font: 'Arial', fontSize: 24, color: '#000000',
     }
     const onTextLayersChange = vi.fn()
     const { rerender } = render(
@@ -104,59 +81,25 @@ describe('Canvas — Fabric shape mode', () => {
     rerender(
       <Canvas {...baseProps} tool="select" textLayers={[textLayer]} onTextLayersChange={onTextLayersChange} />
     )
-
-    await waitFor(() => expect(onTextLayersChange).toHaveBeenCalled())
-    const lastCall = onTextLayersChange.mock.calls[onTextLayersChange.mock.calls.length - 1]
-    const layers = lastCall[0] as TextLayer[]
-    const text = layers.find((l) => l.id === 't1')
-    expect(text).toBeTruthy()
-    expect(text).toMatchObject({ type: 'text', text: 'Bang!', fontSize: 24 })
+    await waitFor(() => {})
+    expect(wipedTo(onTextLayersChange)).toBe(false)
   })
 
-  it('select mode loads shapes + text onto Fabric and syncs both back on exit', async () => {
+  it('does not clobber shapes + text when switching from select to a raster tool', async () => {
     const textLayer: TextLayer = {
-      type: 'text',
-      id: 't1',
-      text: 'Pow',
-      x: 50,
-      y: 40,
-      width: 60,
-      height: 24,
-      rotation: 0,
-      font: 'Arial',
-      fontSize: 24,
-      color: '#000000',
+      type: 'text', id: 't1', text: 'Pow', x: 50, y: 40, width: 60, height: 24,
+      rotation: 0, font: 'Arial', fontSize: 24, color: '#000000',
     }
     const onShapeLayersChange = vi.fn()
     const onTextLayersChange = vi.fn()
     const { rerender } = render(
-      <Canvas
-        {...baseProps}
-        tool="select"
-        shapeLayers={[rectLayer]}
-        textLayers={[textLayer]}
-        onShapeLayersChange={onShapeLayersChange}
-        onTextLayersChange={onTextLayersChange}
-      />
+      <Canvas {...baseProps} tool="select" shapeLayers={[rectLayer]} textLayers={[textLayer]} onShapeLayersChange={onShapeLayersChange} onTextLayersChange={onTextLayersChange} />
     )
-    // Leaving select (to a raster tool) runs the cleanup, syncing all object types back.
     rerender(
-      <Canvas
-        {...baseProps}
-        tool="pen"
-        shapeLayers={[rectLayer]}
-        textLayers={[textLayer]}
-        onShapeLayersChange={onShapeLayersChange}
-        onTextLayersChange={onTextLayersChange}
-      />
+      <Canvas {...baseProps} tool="pen" shapeLayers={[rectLayer]} textLayers={[textLayer]} onShapeLayersChange={onShapeLayersChange} onTextLayersChange={onTextLayersChange} />
     )
-
-    await waitFor(() => expect(onShapeLayersChange).toHaveBeenCalled())
-    await waitFor(() => expect(onTextLayersChange).toHaveBeenCalled())
-
-    const shapes = onShapeLayersChange.mock.calls.at(-1)![0] as ObjectLayer[]
-    const texts = onTextLayersChange.mock.calls.at(-1)![0] as TextLayer[]
-    expect(shapes.find((l) => l.id === 's1')).toMatchObject({ type: 'shape', shape: 'rectangle' })
-    expect(texts.find((l) => l.id === 't1')).toMatchObject({ type: 'text', text: 'Pow' })
+    await waitFor(() => {})
+    expect(wipedTo(onShapeLayersChange)).toBe(false)
+    expect(wipedTo(onTextLayersChange)).toBe(false)
   })
 })
