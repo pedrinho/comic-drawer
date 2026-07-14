@@ -24,7 +24,7 @@ const CANVAS_H = 800
  * text, deprecated balloons, and the raster substrate all go through one code path).
  *
  * `scale = 1` matches the previous offscreen renderer: an offscreen canvas has no layout, so
- * `renderTextLayer` used the CSS font size directly, and `textLayerToFabricIText(l, 1)` does
+ * the legacy renderer used the CSS font size directly, and `textLayerToFabricIText(l, 1)` does
  * the same.
  */
 export const renderPanelToStaticCanvas = async (panel: PanelData): Promise<HTMLCanvasElement> => {

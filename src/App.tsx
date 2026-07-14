@@ -6,10 +6,11 @@ import Toolbar from './components/Toolbar'
 import PanelLayout from './components/PanelLayout'
 import PanelLayoutModal from './components/PanelLayoutModal'
 import Presentation from './components/Presentation'
-import { ShapeLayer, TextLayer, ObjectLayer, isPathObjectLayer, migrateLayers } from './types/layers'
-import { debugLog, debugError, debugWarn, cloneImageData, createBlankImageData, imageDataToBase64, base64ToImageData } from './utils/canvasUtils'
-import { Tool, Shape, PenType, BalloonKind, PanelData, SavedPanel, ComicFile, PanelState, PanelHistory } from './types/common'
+import { TextLayer, ObjectLayer, isPathObjectLayer } from './types/layers'
+import { debugLog, debugError, debugWarn, cloneImageData, createBlankImageData } from './utils/canvasUtils'
+import { Tool, Shape, PenType, BalloonKind, PanelData, ComicFile, PanelState, PanelHistory } from './types/common'
 import { renderPanelToStaticCanvas } from './utils/exportPanel'
+import { serializeComic, deserializeComic } from './utils/comicFile'
 
 const MAX_HISTORY = 10
 
@@ -334,61 +335,35 @@ function App() {
   }
 
   const handleDeletePanel = (index: number) => {
-    console.log('[App] handleDeletePanel CALLED', {
-      indexToDelete: index,
-      totalPanels: panels.length,
-      panelIds: panels.map(p => p.id),
-      panelNames: panels.map(p => p.name)
-    })
+    debugLog('App', 'Delete panel requested', { index, totalPanels: panels.length })
 
     // Don't allow deleting the last panel
     if (panels.length <= 1) {
-      console.warn('[App] Delete ABORTED: Cannot delete last panel')
+      debugWarn('App', 'Delete aborted: cannot delete the last panel')
       return
     }
 
     // Ask for confirmation before deleting
     const panelName = panels[index]?.name || `Panel ${index + 1}`
-    console.log('[App] Requesting confirmation for:', panelName)
+    if (!window.confirm(`Are you sure you want to delete ${panelName}? This action cannot be undone.`)) {
+      return
+    }
 
-    // Use a simpler confirm in development/debug
-    // const confirmed = window.confirm(`Are you sure you want to delete ${panelName}?`)
+    const updatedPanels = panels.filter((_, i) => i !== index)
+    debugLog('App', 'Panel deleted', { index, remaining: updatedPanels.length })
+    setPanels(updatedPanels)
 
-    if (window.confirm(`Are you sure you want to delete ${panelName}? This action cannot be undone.`)) {
-      console.log('[App] User CONFIRMED deletion')
-
-      const updatedPanels = panels.filter((_, i) => i !== index)
-      console.log('[App] Setting panels to new list:', updatedPanels.length, updatedPanels.map(p => p.id))
-
-      setPanels(updatedPanels)
-
-      // Adjust selected panel if necessary
-      if (selectedPanel >= updatedPanels.length) {
-        setSelectedPanel(updatedPanels.length - 1)
-      } else if (selectedPanel > index) {
-        setSelectedPanel(selectedPanel - 1)
-      }
-    } else {
-      console.log('[App] User CANCELLED deletion')
+    // Adjust selected panel if necessary
+    if (selectedPanel >= updatedPanels.length) {
+      setSelectedPanel(updatedPanels.length - 1)
+    } else if (selectedPanel > index) {
+      setSelectedPanel(selectedPanel - 1)
     }
   }
 
   const handleSave = () => {
     debugLog('App', 'Saving comic file', { panelCount: panels.length })
-    // Convert ImageData to base64 for each panel
-    const savedPanels: SavedPanel[] = panels.map(panel => ({
-      id: panel.id,
-      name: panel.name,
-      data: panel.data ? imageDataToBase64(panel.data) : null,
-      layout: panel.layout,
-      shapeLayers: panel.shapeLayers,
-      textLayers: panel.textLayers
-    }))
-
-    const comicFile: ComicFile = {
-      version: '0.1.0',
-      panels: savedPanels
-    }
+    const comicFile = serializeComic(panels)
 
     const jsonStr = JSON.stringify(comicFile, null, 2)
     const blob = new Blob([jsonStr], { type: 'application/json' })
@@ -423,19 +398,7 @@ function App() {
           const comicFile: ComicFile = JSON.parse(jsonStr)
           debugLog('App', 'Comic file parsed', { version: comicFile.version, panelCount: comicFile.panels.length })
 
-          // Convert base64 back to ImageData (async)
-          const loadedPanels: PanelData[] = await Promise.all(
-            comicFile.panels.map(async (panel, index) => ({
-              // Reassign unique timestamp-based IDs
-              id: Date.now() + index,
-              name: panel.name || `Panel ${index + 1}`,  // Fallback for backward compatibility
-              data: panel.data ? await base64ToImageData(panel.data) : null,
-              layout: panel.layout,
-              // Migrate layers to ensure they have the 'type' field
-              shapeLayers: migrateLayers(panel.shapeLayers ?? []) as ShapeLayer[],
-              textLayers: migrateLayers(panel.textLayers ?? []) as TextLayer[]
-            }))
-          )
+          const loadedPanels = await deserializeComic(comicFile)
 
           setPanels(loadedPanels)
           setSelectedPanel(0)
@@ -477,13 +440,13 @@ function App() {
       for (let i = 0; i < panels.length; i++) {
         const panel = panels[i]
         if (!panel) {
-          console.error(`Panel ${i + 1} is undefined`)
+          debugError('App', `Panel ${i + 1} is undefined`)
           continue
         }
         const canvas = await renderPanelToStaticCanvas(panel)
 
         if (!canvas) {
-          console.error(`Failed to render panel ${i + 1}`)
+          debugError('App', `Failed to render panel ${i + 1}`)
           continue
         }
 

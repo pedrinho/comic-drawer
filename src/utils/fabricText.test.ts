@@ -44,6 +44,15 @@ describe('fabricText conversion', () => {
     expect(back.fontSize).toBeCloseTo(24, 4)
   })
 
+  it('falls back to scale 1 when the display scale is 0 (no Infinity font)', () => {
+    // Regression: during PDF export / off-screen render the container measures 0, so scale
+    // arrives as 0. `fontSize / 0` would be Infinity; the `scale || 1` guard must keep it finite.
+    const layer = makeLayer({ fontSize: 24 })
+    const obj = textLayerToFabricIText(layer, 0)
+    expect(obj.fontSize).toBe(24)
+    expect(Number.isFinite(obj.fontSize)).toBe(true)
+  })
+
   it('folds a Fabric resize (scaleY) back into fontSize', () => {
     const layer = makeLayer({ fontSize: 20 })
     const obj = textLayerToFabricIText(layer, 1)
