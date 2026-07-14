@@ -585,11 +585,12 @@ export default function Canvas({
           obj.controls = { ...obj.controls, ung: ungroupControl }
         }
       }
-      // Interactivity is gated by mode: only `select` can pick/move/transform objects; `fill`
-      // keeps them evented for click-to-colour hit-testing; every other tool (creation, pen,
-      // eraser, scissor) treats existing objects as a non-interactive backdrop so the tool's
-      // own gesture (create / brush / erase / cut) always wins.
-      if (mode === 'select') {
+      // Interactivity is gated by mode. `select` AND the creation modes (shape/text) let objects
+      // be picked/moved/transformed and expose their delete/duplicate controls — creation still
+      // wins because onDown only creates when the pointer is NOT over an existing object. `fill`
+      // keeps them evented for click-to-colour hit-testing. The raster tools (pen/eraser/scissor)
+      // treat objects as a non-interactive backdrop so the gesture (brush/erase/cut) always wins.
+      if (mode === 'select' || isCreationMode) {
         obj.selectable = true
         obj.evented = true
       } else if (mode === 'fill') {
