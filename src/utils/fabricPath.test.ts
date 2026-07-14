@@ -51,6 +51,19 @@ describe('fabricPath conversion', () => {
     })
   })
 
+  it('round-trips a fill colour (set by the fill tool) so it moves with the stroke', () => {
+    const layer = makeLayer({ fillColor: '#ff0000' })
+    const obj = pathLayerToFabricPath(layer)
+    expect(obj.fill).toBe('#ff0000')
+    expect(fabricPathToLayer(obj).fillColor).toBe('#ff0000')
+  })
+
+  it('defaults an unfilled stroke to a null fill', () => {
+    const obj = pathLayerToFabricPath(makeLayer())
+    expect(obj.fill).toBeNull()
+    expect(fabricPathToLayer(obj).fillColor).toBeNull()
+  })
+
   it('round-trips rotation (about the bbox centre)', () => {
     const layer = makeLayer({ rotation: Math.PI / 5 })
     const back = fabricPathToLayer(pathLayerToFabricPath(layer))

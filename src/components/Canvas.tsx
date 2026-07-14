@@ -498,6 +498,11 @@ export default function Canvas({
       if (kind === 'text') {
         const l = fabricITextToTextLayer(obj as fabric.IText, scale)
         clone = textLayerToFabricIText({ ...l, id: generateLayerId(), x: l.x + OFFSET, y: l.y + OFFSET }, scale)
+      } else if (kind === 'path') {
+        // A pen path is a fabric.Path with no SHAPE_KIND_KEY; without this branch it would fall
+        // through to fabricObjectToShapeLayer and come back as a rectangle (the "squared" bug).
+        const l = fabricPathToLayer(obj as fabric.Path)
+        clone = pathLayerToFabricPath({ ...l, id: generateLayerId(), x: l.x + OFFSET, y: l.y + OFFSET })
       } else {
         const l = fabricObjectToShapeLayer(obj)
         clone = shapeLayerToFabricObject({ ...l, id: generateLayerId(), x: l.x + OFFSET, y: l.y + OFFSET })
@@ -702,9 +707,11 @@ export default function Canvas({
 
     const onDown = (opt: any) => {
       if (mode === 'fill') {
-        // Colour the clicked shape (or grouped child); otherwise flood-fill the raster.
+        // Colour the clicked shape or pen path (or grouped child) by setting the object's own
+        // fill, so the colour moves with it; otherwise flood-fill the raster backing.
         const target = (opt.subTargets && opt.subTargets[0]) || opt.target
-        if (target && fabricObjectKind(target) === 'shape') {
+        const targetKind = target && fabricObjectKind(target)
+        if (target && (targetKind === 'shape' || targetKind === 'path')) {
           target.set('fill', currentColor)
           canvas.requestRenderAll()
           syncToLayers(false)
