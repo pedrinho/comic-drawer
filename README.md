@@ -12,6 +12,9 @@ A web-based application for creating comics! Draw panels, add dialogue, and let 
   recolor, duplicate, and delete
 - 💬 **Text**: Place and edit text in place; the toolbar keeps font/size controls open while
   you type
+- 🗨️ **Balloon**: Draw a comic speech bubble (rounded rectangle with a tail) by dragging to
+  size; move, resize, recolor, duplicate, and delete it like any object. Built on a type
+  registry so more bubble styles (thought, shout, …) can be added
 - 😀 **Emoji Tool**: Drop emojis onto your comic with a searchable emoji picker
 - 🪣 **Fill Tool**: Recolor a shape by clicking it, or flood-fill an empty area (bounded by the
   ink, grid, and shapes around it)
@@ -27,9 +30,6 @@ A web-based application for creating comics! Draw panels, add dialogue, and let 
 - ↶ **Undo/Redo**: Undo/redo the last 10 actions per panel (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z)
 - 🎨 **Beautiful UI**: Modern, kid-friendly interface
 
-> 💬 **Note on speech balloons:** the dedicated balloon tool has been retired in favor of the
-> Text tool. Balloons in older `.cd` files still render, move, and export, but new ones aren't
-> created.
 
 ## Canvas Architecture — Fabric.js Migration
 

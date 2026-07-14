@@ -1,136 +1,135 @@
 import * as fabric from 'fabric'
+import { BalloonKind } from '../types/common'
 import { BalloonObjectLayer } from '../types/layers'
 
 /**
- * Fabric.js migration — balloon conversion layer (read-only / deprecated).
+ * Fabric.js balloon (speech-bubble) conversion layer.
  *
- * Speech balloons were removed from the toolbar but old comics still contain
- * `BalloonObjectLayer`s, so once the legacy canvas is gone they still need to render (on the
- * overlay and in export) and stay movable/deletable. This builds a `fabric.Group` of the
- * balloon outline (a single continuous path: ellipse + tail, mirroring `renderBalloonLayer`)
- * plus the caption `fabric.IText`. Balloons are not creatable — there is only a builder and a
- * transform-aware read-back; the caption is not editable in place.
+ * A balloon is a single `fabric.Path` — the bubble outline — positioned with a centred origin,
+ * exactly like the shape converter (`fabricShapes.ts`). The path for each balloon *kind* is
+ * produced by a parametric generator that draws the full outline (body + tail) inside a `w × h`
+ * box centred at (0,0); Fabric then provides move/scale/rotate/serialisation for free. Resize is
+ * captured as `scaleX/scaleY` against the stored box size, mirroring shapes.
+ *
+ * Adding a new kind (thought, shout, angry, …) is one entry in `BALLOON_KINDS` + one path fn.
+ * The tool is shape-only for now: the caption fields on the layer are carried through (for a
+ * future editable caption) but not rendered.
  */
 
 export const BALLOON_ID_KEY = 'balloonId'
-const BALLOON_LAYER_KEY = 'balloonLayer' // original layer (text/font/size), stashed for read-back
-const BALLOON_BC_KEY = 'balloonBboxCenter' // children-bbox centre in local coords (tail offset)
+export const BALLOON_KIND_KEY = 'balloonKind'
+const BALLOON_BOX_W_KEY = 'balloonBoxW' // intended drag-box width (path bbox == box here, but keep parallel to shapes)
+const BALLOON_BOX_H_KEY = 'balloonBoxH'
+const BALLOON_META_KEY = 'balloonMeta' // caption fields (text/font/fontSize), stashed so they survive a round-trip
 
 const RAD_TO_DEG = 180 / Math.PI
 const DEG_TO_RAD = Math.PI / 180
 
 /**
- * SVG path data for the balloon outline in local coordinates centred on the ellipse centre
- * (0,0) — mirrors the ellipse-arc + quadratic-tail path in `renderBalloonLayer`. The ellipse
- * is sampled the same direction the canvas draws it (the long way, over the top) so the tail
- * gap sits at the bottom.
+ * SVG path for a classic comic speech bubble: a rounded rectangle body with a curved triangular
+ * tail hanging from the bottom (slightly left of centre). The whole outline fits a `w × h` box
+ * centred at (0,0), so a centred-origin `fabric.Path` sits neatly at the layer centre.
  */
-const balloonPathData = (width: number, height: number): string => {
-  const rx = width / 2
-  const ry = height / 2
-  const angleRight = Math.PI / 2 - 0.3
-  const angleLeft = Math.PI / 2 + 0.3
-  const brX = rx * Math.cos(angleRight)
-  const brY = ry * Math.sin(angleRight)
-  const blX = rx * Math.cos(angleLeft)
-  const tailTipX = -rx * 0.3
-  const tailTipY = ry * 1.3
+const speechPathData = (w: number, h: number): string => {
+  const left = -w / 2
+  const right = w / 2
+  const top = -h / 2
+  const tailH = h * 0.22
+  const bottom = h / 2 - tailH // body's bottom edge; the tail hangs from here to the box bottom
+  const bodyH = bottom - top
+  const r = Math.max(2, Math.min(Math.min(w, bodyH) * 0.18, w / 2 - 1, bodyH / 2 - 1))
+  // Tail base sits on the bottom edge; tip reaches the box bottom, a touch left of centre.
+  const tailBaseRightX = -w * 0.03
+  const tailBaseLeftX = -w * 0.2
+  const tipX = -w * 0.11
+  const tipY = h / 2
 
-  const STEPS = 64
-  const sweep = 2 * Math.PI - 0.6 // from angleRight around the top to angleLeft
-  const cmds: string[] = [`M ${brX} ${brY}`]
-  for (let i = 1; i <= STEPS; i++) {
-    const a = angleRight - (sweep * i) / STEPS // decreasing angle = the long way (canvas ccw)
-    cmds.push(`L ${rx * Math.cos(a)} ${ry * Math.sin(a)}`)
-  }
-  // Tail: baseLeft → tip → baseRight, matching the two quadraticCurveTo calls.
-  cmds.push(`Q ${blX - 10} ${ry + 20} ${tailTipX} ${tailTipY}`)
-  cmds.push(`Q ${brX - 5} ${ry + 10} ${brX} ${brY}`)
-  cmds.push('Z')
-  return cmds.join(' ')
+  return [
+    `M ${left + r} ${top}`,
+    `L ${right - r} ${top}`,
+    `Q ${right} ${top} ${right} ${top + r}`,
+    `L ${right} ${bottom - r}`,
+    `Q ${right} ${bottom} ${right - r} ${bottom}`,
+    `L ${tailBaseRightX} ${bottom}`,
+    `Q ${tipX + w * 0.04} ${bottom + tailH * 0.55} ${tipX} ${tipY}`,
+    `Q ${tipX - w * 0.04} ${bottom + tailH * 0.55} ${tailBaseLeftX} ${bottom}`,
+    `L ${left + r} ${bottom}`,
+    `Q ${left} ${bottom} ${left} ${bottom - r}`,
+    `L ${left} ${top + r}`,
+    `Q ${left} ${top} ${left + r} ${top}`,
+    'Z',
+  ].join(' ')
 }
 
+/** Registry of balloon kinds. Add a kind here (+ a path generator) to expand the tool. */
+export const BALLOON_KINDS: Record<BalloonKind, { label: string; icon: string; pathData: (w: number, h: number) => string }> = {
+  speech: { label: 'Speech', icon: '🗨️', pathData: speechPathData },
+}
+
+const pathDataFor = (kind: BalloonKind, w: number, h: number): string =>
+  (BALLOON_KINDS[kind] ?? BALLOON_KINDS.speech).pathData(w, h)
+
 /**
- * Build a `fabric.Group` from a BalloonObjectLayer, placed so the ELLIPSE centre sits at the
- * balloon centre (tail hanging below), matching the renderer. `scale` converts the CSS font
- * size to canvas-internal units, like the text converter.
+ * Build a `fabric.Path` bubble from a BalloonObjectLayer. Centred origin at the layer centre;
+ * white fill, coloured outline. Mirrors `shapeLayerToFabricObject` (no `scale` arg — shape only).
  */
-export const balloonLayerToFabricObject = (layer: BalloonObjectLayer, scale: number): fabric.Group => {
-  const outline = new fabric.Path(balloonPathData(layer.width, layer.height), {
+export const balloonLayerToFabricObject = (layer: BalloonObjectLayer): fabric.Path => {
+  const kind = layer.kind ?? 'speech'
+  const path = new fabric.Path(pathDataFor(kind, layer.width, layer.height), {
+    originX: 'center',
+    originY: 'center',
+    left: layer.x + layer.width / 2,
+    top: layer.y + layer.height / 2,
+    angle: layer.rotation * RAD_TO_DEG,
     fill: 'white',
     stroke: layer.color,
     strokeWidth: 3,
+    strokeUniform: true, // keep the outline constant while the bubble is scaled
     strokeLineCap: 'round',
     strokeLineJoin: 'round',
   })
-  const caption = new fabric.IText(layer.text ?? '', {
-    originX: 'center',
-    originY: 'center',
-    left: 0,
-    top: 0,
-    fontSize: layer.fontSize / scale,
-    fontFamily: layer.font,
-    fill: layer.color,
-    textAlign: 'center',
-    editable: false,
-  })
-
-  const group = new fabric.Group([outline, caption], { originX: 'center', originY: 'center' })
-  // Children-bbox centre in local coords (below the ellipse centre because of the tail).
-  const bc = group.getCenterPoint()
-
-  const cx = layer.x + layer.width / 2
-  const cy = layer.y + layer.height / 2
-  const theta = layer.rotation
-  // Position so local (0,0) — the ellipse centre — lands on (cx, cy): P = C + R(theta)·bc.
-  group.set({
-    angle: layer.rotation * RAD_TO_DEG,
-    left: cx + (bc.x * Math.cos(theta) - bc.y * Math.sin(theta)),
-    top: cy + (bc.x * Math.sin(theta) + bc.y * Math.cos(theta)),
+  path.set({
     [BALLOON_ID_KEY]: layer.id,
-    [BALLOON_LAYER_KEY]: layer,
-    [BALLOON_BC_KEY]: { x: bc.x, y: bc.y },
+    [BALLOON_KIND_KEY]: kind,
+    [BALLOON_BOX_W_KEY]: layer.width,
+    [BALLOON_BOX_H_KEY]: layer.height,
+    [BALLOON_META_KEY]: { text: layer.text ?? '', font: layer.font, fontSize: layer.fontSize },
   } as any)
-  group.setCoords()
-  return group
+  path.setCoords()
+  return path
 }
 
-/** True if a Fabric object is a converted balloon group. */
+/** True if a Fabric object is a balloon bubble. */
 export const isFabricBalloon = (obj: fabric.Object): boolean => Boolean((obj as any)[BALLOON_ID_KEY])
 
 /**
- * Read a balloon group back into a BalloonObjectLayer after a move/rotate/resize. Recovers the
- * ellipse-centre position from the group centre minus the (scaled, rotated) tail offset, and
- * keeps the caption text/font from the stashed original layer.
+ * Read a balloon back into a BalloonObjectLayer after a move/rotate/resize. Width/height come
+ * from the stored box × scale (like shapes); position from the centred origin. Caption fields are
+ * recovered from the stashed meta (unused by the shape-only renderer, but preserved).
  */
-export const fabricBalloonToLayer = (group: fabric.Group): BalloonObjectLayer => {
-  const orig = (group as any)[BALLOON_LAYER_KEY] as BalloonObjectLayer | undefined
-  const bc = ((group as any)[BALLOON_BC_KEY] as { x: number; y: number } | undefined) ?? { x: 0, y: 0 }
-  const sx = group.scaleX ?? 1
-  const sy = group.scaleY ?? 1
-  const theta = (group.angle ?? 0) * DEG_TO_RAD
-  const P = typeof group.getCenterPoint === 'function' ? group.getCenterPoint() : { x: group.left ?? 0, y: group.top ?? 0 }
-
-  // C = P − R(theta)·(scaled bbox-centre offset).
-  const ox = bc.x * sx
-  const oy = bc.y * sy
-  const cx = P.x - (ox * Math.cos(theta) - oy * Math.sin(theta))
-  const cy = P.y - (ox * Math.sin(theta) + oy * Math.cos(theta))
-
-  const width = (orig?.width ?? group.width ?? 1) * sx
-  const height = (orig?.height ?? group.height ?? 1) * sy
+export const fabricBalloonToLayer = (obj: fabric.Path): BalloonObjectLayer => {
+  const anyObj = obj as any
+  const kind = (anyObj[BALLOON_KIND_KEY] as BalloonKind | undefined) ?? 'speech'
+  const meta = (anyObj[BALLOON_META_KEY] as { text?: string; font?: string; fontSize?: number } | undefined) ?? {}
+  const boxW = (anyObj[BALLOON_BOX_W_KEY] as number | undefined) ?? obj.width ?? 1
+  const boxH = (anyObj[BALLOON_BOX_H_KEY] as number | undefined) ?? obj.height ?? 1
+  const width = boxW * (obj.scaleX ?? 1)
+  const height = boxH * (obj.scaleY ?? 1)
+  const left = obj.left ?? 0
+  const top = obj.top ?? 0
 
   return {
     type: 'balloon',
-    id: ((group as any)[BALLOON_ID_KEY] as string | undefined) ?? orig?.id ?? `balloon-${Math.round(cx)}-${Math.round(cy)}`,
-    x: cx - width / 2,
-    y: cy - height / 2,
+    id: (anyObj[BALLOON_ID_KEY] as string | undefined) ?? `balloon-${Math.round(left)}-${Math.round(top)}`,
+    kind,
+    x: left - width / 2,
+    y: top - height / 2,
     width,
     height,
-    rotation: theta,
-    text: orig?.text ?? '',
-    font: orig?.font ?? 'Arial',
-    fontSize: orig?.fontSize ?? 24,
-    color: orig?.color ?? '#000000',
+    rotation: (obj.angle ?? 0) * DEG_TO_RAD,
+    text: meta.text ?? '',
+    font: meta.font ?? 'Arial',
+    fontSize: meta.fontSize ?? 24,
+    color: typeof obj.stroke === 'string' ? obj.stroke : '#000000',
   }
 }

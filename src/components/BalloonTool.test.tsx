@@ -19,59 +19,82 @@ beforeAll(() => {
     }))
 })
 
+const balloonLayer: BalloonObjectLayer = {
+    type: 'balloon',
+    id: 'balloon-1',
+    kind: 'speech',
+    x: 100,
+    y: 100,
+    width: 100,
+    height: 100,
+    rotation: 0,
+    text: 'Test',
+    font: 'Arial',
+    fontSize: 20,
+    color: '#000000',
+}
+
+const baseProps = {
+    color: '#000000',
+    font: 'Arial',
+    fontSize: 20,
+    panelData: null,
+    layout: { rows: 1, columns: [1] },
+    onCanvasChange: vi.fn(),
+}
+
 describe('Balloon Tool', () => {
-    // NOTE: the "creates a balloon object when drawing" test was removed — the balloon TOOL is
-    // deprecated (no longer in the toolbar), so balloons can't be drawn. Deprecated balloons in
-    // old files still render/move via the read-only converter (see fabricBalloon.test.ts).
+    // Fabric's pointer pipeline can't be driven faithfully in jsdom, so (like the shape tests)
+    // we exercise the deterministic wiring rather than a real drag-to-draw gesture.
 
-    it('allows text editing interactions', () => {
-        // This is a simplified test just to ensure the double-click logic doesn't crash
-        // and attempts to set state.
+    it('mounts with the balloon tool and an existing balloon without crashing', () => {
+        const { container } = render(
+            <Canvas
+                {...baseProps}
+                tool="balloon"
+                balloonKind="speech"
+                shapeLayers={[balloonLayer]}
+                onShapeLayersChange={vi.fn()}
+            />
+        )
+        expect(container.querySelectorAll('canvas').length).toBeGreaterThanOrEqual(1)
+    })
 
+    // Guard the same non-clobber invariant the shape tests cover: switching tools with no edit
+    // must not wipe the balloon out of shapeLayers.
+    const wipedTo = (fn: ReturnType<typeof vi.fn>) =>
+        fn.mock.calls.some((c) => Array.isArray(c[0]) && c[0].length === 0)
+
+    it('does not clobber balloons when switching tools (no edit)', async () => {
         const onShapeLayersChange = vi.fn()
-        const balloonLayer: BalloonObjectLayer = {
-            type: 'balloon',
-            id: 'balloon-1',
-            x: 100,
-            y: 100,
-            width: 100,
-            height: 100,
-            rotation: 0,
-            text: 'Test',
-            font: 'Arial',
-            fontSize: 20,
-            color: '#000000'
-        }
+        const { rerender } = render(
+            <Canvas {...baseProps} tool="balloon" balloonKind="speech" shapeLayers={[balloonLayer]} onShapeLayersChange={onShapeLayersChange} />
+        )
+        rerender(
+            <Canvas {...baseProps} tool="select" shapeLayers={[balloonLayer]} onShapeLayersChange={onShapeLayersChange} />
+        )
+        await waitFor(() => {})
+        expect(wipedTo(onShapeLayersChange)).toBe(false)
+    })
 
+    it('survives pointer interaction on a selected balloon without crashing', () => {
         render(
             <Canvas
+                {...baseProps}
                 tool="select"
-                color="#000000"
-                font="Arial"
-                fontSize={20}
-                panelData={null}
-                layout={{ rows: 1, columns: [1] }}
-                onCanvasChange={vi.fn()}
-                onShapeLayersChange={onShapeLayersChange}
+                onShapeLayersChange={vi.fn()}
                 shapeLayers={[balloonLayer]}
             />
         )
 
         const canvas = screen.getByTestId('canvas') as HTMLCanvasElement
         if (canvas) {
-            // Set dimensions
             Object.defineProperty(canvas, 'width', { value: 1000 })
             Object.defineProperty(canvas, 'height', { value: 1000 })
-
-            // Double click on the balloon center (150, 150)
-            // We simulate it simply
             fireEvent.mouseDown(canvas, { clientX: 150, clientY: 150 })
             fireEvent.mouseUp(canvas)
             fireEvent.mouseDown(canvas, { clientX: 150, clientY: 150 })
         }
-
-        // If no error is thrown, the basic interaction path works.
-        // We aren't strictly checking the input presence to avoid flakes,
-        // as that relies on complex timing and React state updates that JSDOM might lag on.
+        // No assertion beyond "does not throw" — jsdom can't faithfully resolve Fabric hit-testing.
     })
 })

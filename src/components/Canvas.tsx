@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
 import * as fabric from 'fabric'
-import { Tool, Shape, PenType } from '../types/common'
+import { Tool, Shape, PenType, BalloonKind } from '../types/common'
 import { TextLayer, ObjectLayer, GroupObjectLayer, isPathObjectLayer, isShapeObjectLayer, isImageObjectLayer, isBalloonObjectLayer, isGroupObjectLayer } from '../types/layers'
 import { debugLog, imageDataToBase64, makeWhiteTransparent } from '../utils/canvasUtils'
 import { shapeLayerToFabricObject, fabricObjectToShapeLayer } from '../utils/fabricShapes'
@@ -37,6 +37,7 @@ interface CanvasProps {
   onTextEditingChange?: (isEditing: boolean) => void
   onToolChange?: (tool: Tool) => void // Added to allow switching tools
   emoji?: string
+  balloonKind?: BalloonKind
 }
 
 const getPenWidth = (penType?: PenType): number => {
@@ -87,6 +88,7 @@ export default function Canvas({
   onTextEditingChange,
   onToolChange, // Destructure new prop
   emoji = '😀',
+  balloonKind = 'speech',
 }: CanvasProps) {
 
   // These mirror the layer props but are updated DURING RENDER (below) so the overlay effect
@@ -310,24 +312,26 @@ export default function Canvas({
     const canvas = fabricCanvasRef.current
     if (!canvas) return
     // Emoji is handled as text mode: it places a fabric.IText holding the emoji character.
-    const mode: 'shape' | 'text' | 'select' | 'fill' | 'pen' | 'eraser' | 'scissor' | null =
+    const mode: 'shape' | 'balloon' | 'text' | 'select' | 'fill' | 'pen' | 'eraser' | 'scissor' | null =
       tool === 'objectShapes'
         ? 'shape'
-        : tool === 'text' || tool === 'emoji'
-          ? 'text'
-          : tool === 'select'
-            ? 'select'
-            : tool === 'fill'
-              ? 'fill'
-              : tool === 'pen'
-                ? 'pen'
-                : tool === 'eraser'
-                  ? 'eraser'
-                  : tool === 'scissor'
-                    ? 'scissor'
-                    : null
+        : tool === 'balloon'
+          ? 'balloon'
+          : tool === 'text' || tool === 'emoji'
+            ? 'text'
+            : tool === 'select'
+              ? 'select'
+              : tool === 'fill'
+                ? 'fill'
+                : tool === 'pen'
+                  ? 'pen'
+                  : tool === 'eraser'
+                    ? 'eraser'
+                    : tool === 'scissor'
+                      ? 'scissor'
+                      : null
     const placeEmoji = tool === 'emoji' ? emoji ?? '😀' : null
-    const isCreationMode = mode === 'shape' || mode === 'text'
+    const isCreationMode = mode === 'shape' || mode === 'balloon' || mode === 'text'
     let disposed = false // guards async image loads against a stale canvas after cleanup
 
     // Keep the Fabric overlay's CSS size aligned with the (scaled) legacy canvas so their
@@ -345,6 +349,7 @@ export default function Canvas({
     const computeScale = () => fitCanvasToContainer().scale
 
     const currentShape = shape ?? 'rectangle'
+    const currentBalloonKind = balloonKind ?? 'speech'
     const currentColor = color
     const currentFont = font
     const currentFontSize = fontSize
@@ -381,7 +386,7 @@ export default function Canvas({
     ;(shapeLayersRef.current ?? []).forEach((l) => {
       if (isShapeObjectLayer(l)) canvas.add(shapeLayerToFabricObject(l))
       else if (isPathObjectLayer(l)) canvas.add(pathLayerToFabricPath(l))
-      else if (isBalloonObjectLayer(l)) canvas.add(balloonLayerToFabricObject(l, scale))
+      else if (isBalloonObjectLayer(l)) canvas.add(balloonLayerToFabricObject(l))
       else if (isImageObjectLayer(l)) {
         imageLayerToFabricImage(l)
           .then((img) => {
@@ -418,7 +423,7 @@ export default function Canvas({
       const texts: TextLayer[] = []
       objs.forEach((o) => {
         if (isFabricBalloon(o)) {
-          shapeResult.push(fabricBalloonToLayer(o as fabric.Group))
+          shapeResult.push(fabricBalloonToLayer(o as fabric.Path))
           return
         }
         const kind = fabricObjectKind(o)
@@ -441,6 +446,18 @@ export default function Canvas({
     const OFFSET = 30 // px offset for a duplicate (mirrors legacy handleDuplicate)
     const duplicateObject = (obj?: fabric.FabricObject | null) => {
       if (!obj) return
+      // Balloons are a fabric.Path; fabricObjectKind would mis-read them as a plain shape, so
+      // clone them through the balloon converter first.
+      if (isFabricBalloon(obj)) {
+        const l = fabricBalloonToLayer(obj as fabric.Path)
+        const clone = balloonLayerToFabricObject({ ...l, id: generateLayerId(), x: l.x + OFFSET, y: l.y + OFFSET })
+        applyObjectControls(clone)
+        canvas.add(clone)
+        canvas.setActiveObject(clone)
+        canvas.requestRenderAll()
+        syncToLayers(false)
+        return
+      }
       const kind = fabricObjectKind(obj)
       if (kind === 'group') {
         const gl = fabricGroupToLayer(obj as fabric.Group, scale)
@@ -575,14 +592,11 @@ export default function Canvas({
     const mergeControl = iconControl('⊕', '#10b981', 0, 0, mergeSelection, 0.5, 18)
     const ungroupControl = iconControl('⊖', '#10b981', 0, 0, ungroupObject, 0.5, 18)
     const applyObjectControls = (obj: fabric.FabricObject) => {
-      if (isFabricBalloon(obj)) {
-        // Deprecated balloons: movable/deletable but not duplicable/ungroupable.
-        obj.controls = { ...obj.controls, del: delControl }
-      } else {
-        obj.controls = { ...obj.controls, dup: dupControl, del: delControl }
-        if (obj instanceof fabric.Group) {
-          obj.controls = { ...obj.controls, ung: ungroupControl }
-        }
+      // Balloons are a fabric.Path, so they fall through here and get the normal duplicate +
+      // delete controls (no ungroup — that's group-only).
+      obj.controls = { ...obj.controls, dup: dupControl, del: delControl }
+      if (obj instanceof fabric.Group) {
+        obj.controls = { ...obj.controls, ung: ungroupControl }
       }
       // Interactivity is gated by mode. `select` AND the creation modes (shape/text) let objects
       // be picked/moved/transformed and expose their delete/duplicate controls — creation still
@@ -741,6 +755,27 @@ export default function Canvas({
           strokeColor: currentColor,
           strokeWidth: 2,
           fillColor: null,
+        })
+        obj.set({ scaleX: 0.001, scaleY: 0.001, left: p.x, top: p.y })
+        applyObjectControls(obj)
+        canvas.add(obj)
+        creating = { obj, start: { x: p.x, y: p.y } }
+      } else if (mode === 'balloon') {
+        // Balloon: same drag-to-size gesture as a shape. Built at BASE size, then grown via
+        // scaleX/scaleY by onMove — so it shares the resize + live size-readout path.
+        const obj = balloonLayerToFabricObject({
+          type: 'balloon',
+          id: generateLayerId(),
+          kind: currentBalloonKind,
+          x: p.x,
+          y: p.y,
+          width: BASE,
+          height: BASE,
+          rotation: 0,
+          text: '',
+          font: currentFont,
+          fontSize: currentFontSize,
+          color: currentColor,
         })
         obj.set({ scaleX: 0.001, scaleY: 0.001, left: p.x, top: p.y })
         applyObjectControls(obj)
@@ -974,7 +1009,7 @@ export default function Canvas({
       canvas.requestRenderAll()
       fabricOwnedRef.current = new Set()
     }
-  }, [tool, shape, color, penType, font, fontSize, emoji, layout, panelData, updateShapeLayers, updateTextLayers])
+  }, [tool, shape, balloonKind, color, penType, font, fontSize, emoji, layout, panelData, updateShapeLayers, updateTextLayers])
 
 
 

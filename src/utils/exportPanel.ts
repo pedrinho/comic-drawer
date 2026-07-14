@@ -43,7 +43,7 @@ export const renderPanelToStaticCanvas = async (panel: PanelData): Promise<HTMLC
   for (const l of panel.shapeLayers ?? []) {
     if (isShapeObjectLayer(l)) canvas.add(shapeLayerToFabricObject(l))
     else if (isPathObjectLayer(l)) canvas.add(pathLayerToFabricPath(l))
-    else if (isBalloonObjectLayer(l)) canvas.add(balloonLayerToFabricObject(l, 1))
+    else if (isBalloonObjectLayer(l)) canvas.add(balloonLayerToFabricObject(l))
     else if (isImageObjectLayer(l)) canvas.add(await imageLayerToFabricImage(l))
     else if (isGroupObjectLayer(l)) canvas.add(await layerToFabricGroup(l, 1))
   }

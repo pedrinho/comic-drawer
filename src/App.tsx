@@ -8,7 +8,7 @@ import PanelLayoutModal from './components/PanelLayoutModal'
 import Presentation from './components/Presentation'
 import { ShapeLayer, TextLayer, ObjectLayer, isPathObjectLayer, migrateLayers } from './types/layers'
 import { debugLog, debugError, debugWarn, cloneImageData, createBlankImageData, imageDataToBase64, base64ToImageData } from './utils/canvasUtils'
-import { Tool, Shape, PenType, PanelData, SavedPanel, ComicFile, PanelState, PanelHistory } from './types/common'
+import { Tool, Shape, PenType, BalloonKind, PanelData, SavedPanel, ComicFile, PanelState, PanelHistory } from './types/common'
 import { renderPanelToStaticCanvas } from './utils/exportPanel'
 
 const MAX_HISTORY = 10
@@ -16,6 +16,9 @@ const MAX_HISTORY = 10
 function App() {
   const [currentTool, setCurrentTool] = useState<Tool>('pen')
   const [selectedShape, setSelectedShape] = useState<Shape>('rectangle')
+  // Balloon variant for the balloon tool. Only 'speech' today; state exists so a future picker
+  // (mirroring the shape picker) can switch kinds without new plumbing.
+  const [selectedBalloonKind] = useState<BalloonKind>('speech')
   const [selectedPenType, setSelectedPenType] = useState<PenType>('medium')
   const [selectedColor, setSelectedColor] = useState<string>('#000000')
   const [selectedFont, setSelectedFont] = useState<string>('Arial')
@@ -622,6 +625,7 @@ function App() {
             tool={currentTool}
             onToolChange={setCurrentTool}
             shape={selectedShape}
+            balloonKind={selectedBalloonKind}
             penType={selectedPenType}
             color={selectedColor}
             font={selectedFont}

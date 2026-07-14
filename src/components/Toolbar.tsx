@@ -37,8 +37,9 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     { name: 'objectShapes', icon: '⬚', label: 'Object Shapes' },
     { name: 'fill', icon: '🪣', label: 'Fill' },
     { name: 'text', icon: '💬', label: 'Text' },
-    // 'balloon' tool deprecated — removed from the toolbar. The type and rendering are
-    // kept so existing saved comics that contain balloons still load and display.
+    // Balloon: draw a speech bubble (drag to size). Single 'speech' kind today; when more kinds
+    // are added, give it a submenu picker mirroring ShapePicker (see BALLOON_KINDS registry).
+    { name: 'balloon', icon: '🗨️', label: 'Balloon' },
     { name: 'emoji', icon: '😀', label: 'Emoji' },
   ]
 

@@ -24,8 +24,10 @@ the legacy canvas working alongside a Fabric overlay until every tool is ported.
 - [x] **text** — `fabric.IText` in-place editing, scale-aware font size.
   (`src/utils/fabricText.ts`, tests `fabricText.test.ts`)
 - [x] **emoji** — places the selected emoji as a `fabric.IText` (text-mode variant).
-- [x] **balloon** — **deprecated** (removed from the toolbar; type + rendering kept so old
-  comics still load). Not migrated to Fabric.
+- [x] **balloon** — a creatable Fabric tool again: drag to draw a speech bubble (a `fabric.Path`
+  built from a per-kind path generator; see the `BALLOON_KINDS` registry in
+  `src/utils/fabricBalloon.ts`). Move/resize/duplicate/delete like a shape. Shape-only for now
+  (no caption); the registry is structured for more kinds (thought, shout, …).
 - Integration tests: `src/components/CanvasFabricShapes.test.tsx`.
 
 ## Image + select unification (done on branch `feature/fabric-select-unification` — NEEDS BROWSER VERIFICATION)
@@ -53,8 +55,6 @@ Ran a scripted pass driving real mouse gestures + screenshots. All green, zero p
 ### Remaining minor limitations (non-blocking)
 - **Duplicate button** is gone in Fabric select (the old on-canvas 📋 button keyed off the
   legacy selection). Delete works via Delete/Backspace. Consider Cmd/Ctrl+D later.
-- **Old balloons** (deprecated) render on the legacy canvas and are not selectable while the
-  Fabric overlay is on top in select mode.
 - The hand-rolled `SelectionHandle` / `getHandleAtPoint` machinery is now **unused** in
   select mode but left in place (safe to delete in a later cleanup).
 - **Scissor → image** was not driven in the automated pass (needs a raster cut first);
@@ -75,8 +75,9 @@ from ~3745 to ~994 lines.
   (respects ink/grid/shape bounds).
 - [x] **scissor** — marquee cuts the backing region into a `fabric.Image` (built synchronously
   so the sync preserves it), leaves a hole, switches to select.
-- [x] **balloon** (deprecated) — read-only converter so old files still render/move/export
-  (`src/utils/fabricBalloon.ts`).
+- [x] **balloon** — creatable speech-bubble tool: a `fabric.Path` from a per-kind path
+  generator (`BALLOON_KINDS` registry), drawn/resized like a shape (`src/utils/fabricBalloon.ts`,
+  tests `fabricBalloon.test.ts` / `BalloonTool.test.tsx`).
 - [x] **single canvas** — the overlay renders raster + grid + ALL object types in every mode;
   interactivity is gated per tool. Legacy `<canvas>`, the HTML text `<input>`, the DOM
   duplicate/delete buttons, and ~2750 lines of dead machinery

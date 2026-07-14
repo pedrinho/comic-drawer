@@ -3,6 +3,9 @@ import { ObjectLayer, TextLayer } from './layers'
 export type Tool = 'select' | 'scissor' | 'pen' | 'eraser' | 'objectShapes' | 'text' | 'fill' | 'balloon' | 'emoji'
 export type Shape = 'rectangle' | 'circle' | 'triangle' | 'star' | 'heart' | 'diamond' | 'hexagon' | 'pentagon' | 'arrow' | 'cross' | 'heptagon' | 'octagon'
 export type PenType = 'fine' | 'small' | 'medium' | 'large' | 'thick' | 'verythick'
+// Balloon (speech-bubble) variants. Only 'speech' exists today; the tool and converter are
+// structured so adding 'thought' | 'shout' | 'angry' | … is one registry entry + one path fn.
+export type BalloonKind = 'speech'
 
 export interface PanelData {
     id: number

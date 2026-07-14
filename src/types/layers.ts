@@ -1,4 +1,4 @@
-import { Shape } from './common'
+import { Shape, BalloonKind } from './common'
 
 /**
  * Base properties shared by all object layers
@@ -57,6 +57,9 @@ export interface ImageObjectLayer extends BaseObjectLayer {
  */
 export interface BalloonObjectLayer extends BaseObjectLayer {
   type: 'balloon'
+  kind: BalloonKind
+  // Caption fields — carried for forward-compat with a future editable caption; the current
+  // tool is shape-only and does not render text.
   text: string
   font: string
   fontSize: number
@@ -129,7 +132,7 @@ export function migrateLayer(layer: Partial<ObjectLayer> & { id: string; x: numb
   }
 
   // If type is already set, return as-is
-  if ('type' in layer && (layer.type === 'shape' || layer.type === 'text' || layer.type === 'path' || layer.type === 'image')) {
+  if ('type' in layer && (layer.type === 'shape' || layer.type === 'text' || layer.type === 'path' || layer.type === 'image' || layer.type === 'balloon')) {
     return layer as ObjectLayer
   }
 
