@@ -42,6 +42,7 @@ export interface PathObjectLayer extends BaseObjectLayer {
   points: { x: number; y: number }[]
   strokeColor: string
   strokeWidth: number
+  fillColor?: string | null
 }
 
 /**

@@ -50,7 +50,9 @@ export const pathLayerToFabricPath = (layer: PathObjectLayer): fabric.Path => {
     strokeLineCap: 'round',
     strokeLineJoin: 'round',
     strokeUniform: true, // keep stroke width constant while scaling
-    fill: null,
+    // Filling a pen loop (via the fill tool) sets the path's own fill so the colour moves
+    // with the stroke; unfilled strokes keep `null` and just draw the outline.
+    fill: layer.fillColor ?? null,
     [PATH_ID_KEY]: layer.id,
   } as any)
 }
@@ -104,6 +106,7 @@ export const fabricPathToLayer = (obj: fabric.Path): PathObjectLayer => {
     rotation: (obj.angle ?? 0) * DEG_TO_RAD,
     strokeColor: typeof obj.stroke === 'string' ? obj.stroke : '#000000',
     strokeWidth: obj.strokeWidth ?? 2,
+    fillColor: typeof obj.fill === 'string' ? obj.fill : null,
     points,
   }
 }

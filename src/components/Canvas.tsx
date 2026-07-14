@@ -702,9 +702,11 @@ export default function Canvas({
 
     const onDown = (opt: any) => {
       if (mode === 'fill') {
-        // Colour the clicked shape (or grouped child); otherwise flood-fill the raster.
+        // Colour the clicked shape or pen path (or grouped child) by setting the object's own
+        // fill, so the colour moves with it; otherwise flood-fill the raster backing.
         const target = (opt.subTargets && opt.subTargets[0]) || opt.target
-        if (target && fabricObjectKind(target) === 'shape') {
+        const targetKind = target && fabricObjectKind(target)
+        if (target && (targetKind === 'shape' || targetKind === 'path')) {
           target.set('fill', currentColor)
           canvas.requestRenderAll()
           syncToLayers(false)
