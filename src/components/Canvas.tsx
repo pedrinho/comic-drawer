@@ -104,6 +104,9 @@ export default function Canvas({
   // Wraps the Fabric canvas; the overlay's CSS size is fitted into this box (the old sizing
   // anchor was the now-removed legacy canvas).
   const containerRef = useRef<HTMLDivElement>(null)
+  // Live "W × H" pill shown while drawing or resizing an object. Mutated imperatively
+  // (not React state) so per-mousemove updates never re-render or re-run this effect.
+  const sizeLabelRef = useRef<HTMLDivElement>(null)
 
   // Fit the 1200x800 canvas into the container at a 3:2 aspect ratio; returns the display size
   // and the scale (display px per internal px), used both to size the overlay and to convert
@@ -611,6 +614,22 @@ export default function Canvas({
       return typeof c.getScenePoint === 'function' ? c.getScenePoint(opt.e) : c.getPointer(opt.e)
     }
 
+    // Show/hide the live "W × H" pill. Scene coords are converted to display px via the
+    // current fit scale; the pill is centered horizontally just below (sceneCenterX, sceneBottomY).
+    const showSizeLabel = (w: number, h: number, sceneCenterX: number, sceneBottomY: number) => {
+      const el = sizeLabelRef.current
+      if (!el) return
+      const { scale } = fitCanvasToContainer()
+      el.textContent = `${Math.round(w)} × ${Math.round(h)}`
+      el.style.left = `${sceneCenterX * scale}px`
+      el.style.top = `${sceneBottomY * scale}px`
+      el.style.display = 'block'
+    }
+    const hideSizeLabel = () => {
+      const el = sizeLabelRef.current
+      if (el) el.style.display = 'none'
+    }
+
     let creating: { obj: fabric.FabricObject; start: { x: number; y: number } } | null = null
     // Raster-tool gesture state (eraser drag / scissor marquee).
     let erasing: { last: { x: number; y: number } } | null = null
@@ -784,10 +803,12 @@ export default function Canvas({
         left: (creating.start.x + p.x) / 2,
         top: (creating.start.y + p.y) / 2,
       })
+      showSizeLabel(w, h, (creating.start.x + p.x) / 2, Math.max(creating.start.y, p.y))
       canvas.requestRenderAll()
     }
 
     const onUp = () => {
+      hideSizeLabel()
       if (erasing) {
         erasing = null
         commitRaster() // one history entry per stroke (App snapshots the pre-stroke state)
@@ -857,6 +878,15 @@ export default function Canvas({
 
     const onModified = () => syncToLayers(false)
 
+    // Resizing an existing object via its corner handles: show the live "W × H" pill.
+    // getScaledWidth/Height give the object's own size; getBoundingRect gives placement.
+    const onScaling = (opt: any) => {
+      const t = opt.target as fabric.FabricObject | undefined
+      if (!t) return
+      const br = t.getBoundingRect()
+      showSizeLabel(t.getScaledWidth(), t.getScaledHeight(), br.left + br.width / 2, br.top + br.height)
+    }
+
     // Pen: a brush stroke just finished. Tag it so it round-trips as a path layer, then sync
     // (which snapshots history and lifts the new path into shapeLayers).
     const onPathCreated = (opt: any) => {
@@ -905,6 +935,7 @@ export default function Canvas({
     canvas.on('mouse:move', onMove)
     canvas.on('mouse:up', onUp)
     canvas.on('object:modified', onModified)
+    canvas.on('object:scaling', onScaling)
     canvas.on('path:created', onPathCreated)
     canvas.on('text:editing:entered', onEditingEntered)
     canvas.on('text:editing:exited', onEditingExited)
@@ -919,6 +950,7 @@ export default function Canvas({
       canvas.off('mouse:move', onMove)
       canvas.off('mouse:up', onUp)
       canvas.off('object:modified', onModified)
+      canvas.off('object:scaling', onScaling)
       canvas.off('path:created', onPathCreated)
       canvas.off('text:editing:entered', onEditingEntered)
       canvas.off('text:editing:exited', onEditingExited)
@@ -959,6 +991,8 @@ export default function Canvas({
       <div style={{ position: 'absolute', top: 0, left: 0, zIndex: 2, pointerEvents: 'auto' }}>
         <canvas ref={fabricRef} />
       </div>
+      {/* Live size readout, positioned imperatively while drawing/resizing. */}
+      <div ref={sizeLabelRef} className="size-label" style={{ display: 'none' }} />
     </div>
   )
 }

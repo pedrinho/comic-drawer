@@ -22,3 +22,18 @@
   border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
+/* Live "W × H" readout shown while drawing or resizing an object.
+   Positioned imperatively (left/top in display px) by Canvas.tsx. */
+.size-label {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  font: 12px sans-serif;
+  padding: 1px 6px;
+  border-radius: 8px;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.9);
+  color: #4c6ef5;
+}
+

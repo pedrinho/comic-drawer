@@ -16,7 +16,7 @@ A web-based application for creating comics! Draw panels, add dialogue, and let 
 - 🪣 **Fill Tool**: Recolor a shape by clicking it, or flood-fill an empty area (bounded by the
   ink, grid, and shapes around it)
 - ✂️ **Scissor Tool**: Cut a rectangular region into a movable image object
-- 🖱️ **Object Selection**: Native select/move/resize (with rotation) plus on-canvas
+- 🖱️ **Object Selection**: Native select/move/resize (with rotation and a live size readout) plus on-canvas
   **⧉ duplicate**, **✕ delete**, and **⊕ merge / ⊖ un-merge** controls right on the object
 - 📐 **Panel Layout**: Customizable comic panel grids
 - 🗂️ **Panel Management**: Rename panels by double-clicking; add and reorder panels
