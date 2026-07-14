@@ -498,6 +498,11 @@ export default function Canvas({
       if (kind === 'text') {
         const l = fabricITextToTextLayer(obj as fabric.IText, scale)
         clone = textLayerToFabricIText({ ...l, id: generateLayerId(), x: l.x + OFFSET, y: l.y + OFFSET }, scale)
+      } else if (kind === 'path') {
+        // A pen path is a fabric.Path with no SHAPE_KIND_KEY; without this branch it would fall
+        // through to fabricObjectToShapeLayer and come back as a rectangle (the "squared" bug).
+        const l = fabricPathToLayer(obj as fabric.Path)
+        clone = pathLayerToFabricPath({ ...l, id: generateLayerId(), x: l.x + OFFSET, y: l.y + OFFSET })
       } else {
         const l = fabricObjectToShapeLayer(obj)
         clone = shapeLayerToFabricObject({ ...l, id: generateLayerId(), x: l.x + OFFSET, y: l.y + OFFSET })
