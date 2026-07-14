@@ -60,30 +60,38 @@ Ran a scripted pass driving real mouse gestures + screenshots. All green, zero p
 - **Scissor → image** was not driven in the automated pass (needs a raster cut first);
   the conversion is unit-tested and the object path is the same as other objects.
 
-## TODO — raster phase (still deferred, high risk)
-- [ ] pen / eraser / fill remain on the legacy raster canvas (intentionally — low risk).
-  Only migrate if there's a reason to; keeping a raster layer under the Fabric object layer
-  is a legitimate end state.
+## Raster phase + teardown — DONE (single-canvas end state)
 
-## TODO — raster phase (HIGH RISK, deferred — plan separately)
+The migration is **complete**: the Fabric overlay is now the ONLY canvas. `Canvas.tsx` went
+from ~3745 to ~994 lines.
 
-This is not an isolated tool; it reworks the bitmap/undo core and the shared selection
-system, so it carries real stall risk and must be verified in a browser.
-
-- [ ] **pen / eraser / fill** — currently rasterize into a per-panel `ImageData` with
-  frame-based undo (`App.tsx`). Decide: model strokes as `fabric.Path` objects, or keep a
-  raster layer under the Fabric object layer. Rework undo/redo accordingly.
-- [ ] **unify `select`** — move the select tool onto Fabric for all object types and delete
-  the hand-rolled `SelectionHandle` / `getHandleAtPoint` / rotation machinery.
-- [ ] **export** — rewire the `jspdf` export to render from the Fabric canvas.
-- [ ] **remove legacy canvas** — once all tools are migrated.
+- [x] **pen** — native `fabric.PencilBrush` → `fabric.Path` ↔ `PathObjectLayer`
+  (`src/utils/fabricPath.ts`). Paths are selectable/movable in select/fill.
+- [x] **raster substrate + grid** — the per-panel `panelData` bitmap is a bottom
+  `fabric.Image` over an offscreen backing canvas, and the grid is non-interactive
+  `fabric.Rect`s (`src/utils/fabricRaster.ts`, tagged chrome, excluded from sync).
+- [x] **eraser** — `destination-out` on the raster backing; one history entry per stroke.
+- [x] **fill** — vector-shape recolor OR a composite-snapshot flood stamped onto the backing
+  (respects ink/grid/shape bounds).
+- [x] **scissor** — marquee cuts the backing region into a `fabric.Image` (built synchronously
+  so the sync preserves it), leaves a hole, switches to select.
+- [x] **balloon** (deprecated) — read-only converter so old files still render/move/export
+  (`src/utils/fabricBalloon.ts`).
+- [x] **single canvas** — the overlay renders raster + grid + ALL object types in every mode;
+  interactivity is gated per tool. Legacy `<canvas>`, the HTML text `<input>`, the DOM
+  duplicate/delete buttons, and ~2750 lines of dead machinery
+  (startDrawing/draw/stopDrawing, SelectionHandle/getHandleAtPoint, repaintCanvas + draw
+  helpers, legacy effects/refs) are DELETED. Overlay sizing re-anchored to the container.
+- [x] **export** — rendered through a Fabric `StaticCanvas` reusing the same converters
+  (`src/utils/exportPanel.ts`), so PDF matches the editor. Layer model stays the persistence
+  source of truth; `Presentation.tsx` still renders from it.
+- [x] **undo/redo** — fixed for the single-canvas model: one history entry per action, saves
+  moved OUT of the `setPanels` updaters (StrictMode-safe, `panelsRef`), model-aware cleanup
+  that never clobbers a restored model.
 
 ## Verification note
 
-⚠️ Fabric's correctness here is largely **visual** and must be confirmed in a real browser
-(`npm run dev`): shape/cursor alignment, balloon outline fidelity, in-place text editing,
-and (later) fill/eraser/scissor behavior. The automated environment has no headless browser,
-so unit tests cover only data conversion + enter/exit sync — not rendering or interaction.
-
-Manual pass per tool: draw → select → move → resize → rotate → delete → save → reload →
-confirm it persists, and check it renders under the cursor at different window sizes.
+Fabric's correctness is largely **visual** — confirmed via a Playwright + headless Chromium
+pass (see `[[fabric-migration-verification-gap]]`): all tools draw under the cursor, eraser
+wipes raster, fill/scissor work, undo/redo `[2,1,0]`/`[1,2,3]`, valid multi-panel PDF,
+presentation renders, correct 3:2 sizing, zero page errors. 132 unit tests pass; prod build OK.
