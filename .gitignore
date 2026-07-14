@@ -14,6 +14,10 @@ dist-ssr
 coverage
 .memory-*.md
 
+# Scratch / debug artifacts
+_shot*.cjs
+*.cd
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

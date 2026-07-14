@@ -8,10 +8,10 @@ import { PathObjectLayer } from '../types/layers'
  * the pen can draw with a native `PencilBrush` and paths become selectable/movable on the
  * Fabric overlay, while save/load, history and export keep working against `PathObjectLayer`.
  *
- * Coordinate model mirrors `renderPathLayer` in `renderUtils.ts`: the layer stores `points`
+ * Coordinate model (inherited from the pre-Fabric 2D renderer): the layer stores `points`
  * in an UNROTATED local bbox frame (0..width, 0..height), a top-left `x/y`, and a `rotation`
  * applied about the bbox centre. Objects use a centered origin so Fabric's native rotation
- * matches the renderer.
+ * matches that model.
  */
 
 // Custom property stashed on the Fabric object so a pen path round-trips (and so it can be

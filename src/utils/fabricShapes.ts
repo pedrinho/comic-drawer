@@ -10,7 +10,7 @@ import { ShapeObjectLayer } from '../types/layers'
  * rest of the app (save/load `.cd` files, history) keeps working against `ShapeObjectLayer`.
  *
  * Geometry mirrors `traceShapePath` in `canvasUtils.ts`. All objects use a centered origin
- * so Fabric's native rotation matches `renderShapeLayer` (which rotates around the center).
+ * so Fabric's native rotation matches the legacy 2D renderer (which rotated around the center).
  */
 
 // Custom properties we stash on Fabric objects to round-trip back to a ShapeObjectLayer.

@@ -7,8 +7,8 @@ import { TextObjectLayer } from '../types/layers'
  * Maps between the app's `TextObjectLayer` and `fabric.IText` (which gives in-place editing
  * for free, replacing the old HTML `<input>` overlay).
  *
- * Font-size note: `TextObjectLayer.fontSize` is stored in CSS pixels, and the legacy
- * `renderTextLayer` divides it by the canvas display scale to get the on-canvas size. We
+ * Font-size note: `TextObjectLayer.fontSize` is stored in CSS pixels, and the legacy 2D
+ * renderer divided it by the canvas display scale to get the on-canvas size. We
  * mirror that here — the Fabric object's `fontSize` is in canvas-internal units
  * (`cssFontSize / scale`) — so text keeps a constant on-screen size, matching the old
  * behaviour. `scale` is `(rect.width/1200 + rect.height/800) / 2`; pass 1 when unavailable.

@@ -77,24 +77,27 @@ describe('Balloon Tool', () => {
         expect(wipedTo(onShapeLayersChange)).toBe(false)
     })
 
-    it('survives pointer interaction on a selected balloon without crashing', () => {
+    it('keeps the canvas mounted and the balloon intact through pointer interaction', () => {
+        const onShapeLayersChange = vi.fn()
         render(
             <Canvas
                 {...baseProps}
                 tool="select"
-                onShapeLayersChange={vi.fn()}
+                onShapeLayersChange={onShapeLayersChange}
                 shapeLayers={[balloonLayer]}
             />
         )
 
         const canvas = screen.getByTestId('canvas') as HTMLCanvasElement
-        if (canvas) {
-            Object.defineProperty(canvas, 'width', { value: 1000 })
-            Object.defineProperty(canvas, 'height', { value: 1000 })
-            fireEvent.mouseDown(canvas, { clientX: 150, clientY: 150 })
-            fireEvent.mouseUp(canvas)
-            fireEvent.mouseDown(canvas, { clientX: 150, clientY: 150 })
-        }
-        // No assertion beyond "does not throw" — jsdom can't faithfully resolve Fabric hit-testing.
+        Object.defineProperty(canvas, 'width', { value: 1000 })
+        Object.defineProperty(canvas, 'height', { value: 1000 })
+        fireEvent.mouseDown(canvas, { clientX: 150, clientY: 150 })
+        fireEvent.mouseUp(canvas)
+        fireEvent.mouseDown(canvas, { clientX: 150, clientY: 150 })
+
+        // jsdom can't resolve Fabric hit-testing, but the interaction must not crash the
+        // component or wipe the balloon out of the model.
+        expect(screen.getByTestId('canvas')).toBeInTheDocument()
+        expect(wipedTo(onShapeLayersChange)).toBe(false)
     })
 })

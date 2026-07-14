@@ -113,15 +113,9 @@ function SortablePanelItem({
         title="Delete Panel"
         onClick={(e) => {
           e.stopPropagation()
-          e.preventDefault() // Try to prevent default just in case
-          console.log('%c[PanelLayout] DELETE BUTTON CLICKED', 'background: red; color: white', {
-            panelId: panel.id,
-            // index: index, // Index not available in this scope, removing
-            button: 'Delete'
-          })
+          e.preventDefault()
           onDelete(e)
         }}
-      // onPointerDown removed to ensure click works freely (listeners are on handle anyway)
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"></line>
