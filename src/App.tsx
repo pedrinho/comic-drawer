@@ -7,9 +7,9 @@ import PanelLayout from './components/PanelLayout'
 import PanelLayoutModal from './components/PanelLayoutModal'
 import Presentation from './components/Presentation'
 import { ShapeLayer, TextLayer, ObjectLayer, isPathObjectLayer, migrateLayers } from './types/layers'
-import { drawGrid as drawGridUtil, debugLog, debugError, debugWarn, cloneImageData, createBlankImageData, imageDataToBase64, base64ToImageData } from './utils/canvasUtils'
+import { debugLog, debugError, debugWarn, cloneImageData, createBlankImageData, imageDataToBase64, base64ToImageData } from './utils/canvasUtils'
 import { Tool, Shape, PenType, PanelData, SavedPanel, ComicFile, PanelState, PanelHistory } from './types/common'
-import { renderObjectLayer, renderTextLayer } from './utils/renderUtils'
+import { renderPanelToStaticCanvas } from './utils/exportPanel'
 
 const MAX_HISTORY = 10
 
@@ -448,42 +448,6 @@ function App() {
   }
 
 
-  // Helper function to render panel to canvas with grid
-  const renderPanelToCanvas = (panel: PanelData): HTMLCanvasElement | null => {
-    const canvas = document.createElement('canvas')
-    canvas.width = 1200
-    canvas.height = 800
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return null
-
-    // Fill with white background
-    ctx.fillStyle = 'white'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-    // Draw panel data if available
-    if (panel.data) {
-      ctx.putImageData(panel.data, 0, 0)
-    }
-
-    // Draw grid on top
-    drawGridUtil(ctx, panel.layout)
-
-    // Draw shape layers if any
-    if (panel.shapeLayers && panel.shapeLayers.length > 0) {
-      panel.shapeLayers.forEach((layer) => {
-        renderObjectLayer(ctx, layer)
-      })
-    }
-
-    // Draw text layers if any
-    if (panel.textLayers && panel.textLayers.length > 0) {
-      panel.textLayers.forEach((layer) => {
-        renderTextLayer(ctx, layer)
-      })
-    }
-
-    return canvas
-  }
 
   const handleExportPDF = async () => {
     debugLog('App', 'Exporting PDF', { panelCount: panels.length })
@@ -513,7 +477,7 @@ function App() {
           console.error(`Panel ${i + 1} is undefined`)
           continue
         }
-        const canvas = renderPanelToCanvas(panel)
+        const canvas = await renderPanelToStaticCanvas(panel)
 
         if (!canvas) {
           console.error(`Failed to render panel ${i + 1}`)
