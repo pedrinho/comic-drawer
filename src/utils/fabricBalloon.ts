@@ -94,13 +94,13 @@ export const balloonLayerToFabricObject = (layer: BalloonObjectLayer): fabric.Pa
     [BALLOON_BOX_W_KEY]: layer.width,
     [BALLOON_BOX_H_KEY]: layer.height,
     [BALLOON_META_KEY]: { text: layer.text ?? '', font: layer.font, fontSize: layer.fontSize },
-  } as any)
+  })
   path.setCoords()
   return path
 }
 
 /** True if a Fabric object is a balloon bubble. */
-export const isFabricBalloon = (obj: fabric.Object): boolean => Boolean((obj as any)[BALLOON_ID_KEY])
+export const isFabricBalloon = (obj: fabric.Object): boolean => Boolean(obj[BALLOON_ID_KEY])
 
 /**
  * Read a balloon back into a BalloonObjectLayer after a move/rotate/resize. Width/height come
@@ -108,11 +108,10 @@ export const isFabricBalloon = (obj: fabric.Object): boolean => Boolean((obj as 
  * recovered from the stashed meta (unused by the shape-only renderer, but preserved).
  */
 export const fabricBalloonToLayer = (obj: fabric.Path): BalloonObjectLayer => {
-  const anyObj = obj as any
-  const kind = (anyObj[BALLOON_KIND_KEY] as BalloonKind | undefined) ?? 'speech'
-  const meta = (anyObj[BALLOON_META_KEY] as { text?: string; font?: string; fontSize?: number } | undefined) ?? {}
-  const boxW = (anyObj[BALLOON_BOX_W_KEY] as number | undefined) ?? obj.width ?? 1
-  const boxH = (anyObj[BALLOON_BOX_H_KEY] as number | undefined) ?? obj.height ?? 1
+  const kind = obj[BALLOON_KIND_KEY] ?? 'speech'
+  const meta = obj[BALLOON_META_KEY] ?? {}
+  const boxW = obj[BALLOON_BOX_W_KEY] ?? obj.width ?? 1
+  const boxH = obj[BALLOON_BOX_H_KEY] ?? obj.height ?? 1
   const width = boxW * (obj.scaleX ?? 1)
   const height = boxH * (obj.scaleY ?? 1)
   const left = obj.left ?? 0
@@ -120,7 +119,7 @@ export const fabricBalloonToLayer = (obj: fabric.Path): BalloonObjectLayer => {
 
   return {
     type: 'balloon',
-    id: (anyObj[BALLOON_ID_KEY] as string | undefined) ?? `balloon-${Math.round(left)}-${Math.round(top)}`,
+    id: obj[BALLOON_ID_KEY] ?? `balloon-${Math.round(left)}-${Math.round(top)}`,
     kind,
     x: left - width / 2,
     y: top - height / 2,

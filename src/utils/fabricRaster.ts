@@ -73,7 +73,7 @@ export const buildRasterImage = (
     hasControls: false,
     hoverCursor: 'default',
     [RASTER_KEY]: true,
-  } as any)
+  })
   return { image, backing }
 }
 
@@ -95,7 +95,7 @@ export const buildGridObjects = (layout: { rows: number; columns: number[] }): f
         evented: false,
         hoverCursor: 'default',
         [GRID_KEY]: true,
-      } as any)
+      })
   )
 
 /** Read the current pixels of a backing canvas back into an ImageData (for onCanvasChange). */
@@ -107,4 +107,4 @@ export const backingToImageData = (backing: HTMLCanvasElement): ImageData => {
 
 /** True for the raster substrate or grid rects — the non-layer "chrome" on the overlay. */
 export const isChromeObject = (obj: fabric.Object): boolean =>
-  Boolean((obj as any)[RASTER_KEY]) || Boolean((obj as any)[GRID_KEY])
+  Boolean(obj[RASTER_KEY]) || Boolean(obj[GRID_KEY])

@@ -32,13 +32,13 @@ export const textLayerToFabricIText = (layer: TextObjectLayer, scale: number): f
     fontSize: layer.fontSize / s,
     fill: layer.color,
     [TEXT_ID_KEY]: layer.id,
-  } as any)
+  })
 }
 
 /** Read a fabric.IText back into a TextObjectLayer. */
 export const fabricITextToTextLayer = (obj: fabric.IText, scale: number): TextObjectLayer => {
   const s = scale || 1
-  const id = (obj as any)[TEXT_ID_KEY] as string | undefined
+  const id = obj[TEXT_ID_KEY]
   const width = (obj.width ?? 0) * (obj.scaleX ?? 1)
   const height = (obj.height ?? 0) * (obj.scaleY ?? 1)
   const x = (obj.left ?? 0) - width / 2

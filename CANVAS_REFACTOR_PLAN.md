@@ -1,6 +1,7 @@
 # Canvas.tsx refactor plan
 
-**Status:** planned, not started. Deferred from the non-functional review (2026-07-14).
+**Status:** Phases 1 & 2 complete (2026-07-15, branch `refactor/canvas-phase-1-2-extractions`);
+Phases 3–6 not started. Originally deferred from the non-functional review (2026-07-14).
 
 ## Why
 
@@ -39,7 +40,12 @@ notes/tests around them before moving code.
 
 ## Phases (incremental, each independently shippable)
 
-### Phase 1 — Extract pure helpers (no behavior change, high test value)
+### Phase 1 — Extract pure helpers (no behavior change, high test value) — ✅ DONE
+Landed as `utils/floodFill.ts` (`floodFillImageData`, pure over `ImageData`), `utils/toolMode.ts`
+(`toolToMode` + a `Mode` type in `types/common.ts`), `utils/id.ts` (`generateLayerId`), and
+`utils/fabricScene.ts` (`canvasObjectsToLayers` + `buildScene`, with `isDisposed`/`applyObjectControls`
+passed in as callbacks). Each has a co-located unit test.
+
 Move logic that doesn't need React/effect scope out to `src/utils/`, and unit-test it:
 - `floodFill` (`Canvas.tsx:190-275`) → `utils/floodFill.ts`. Pure pixel algorithm; test with real
   `ImageData` arrays (matches boundaries, respects tolerance, handles transparent target).
@@ -53,11 +59,12 @@ Move logic that doesn't need React/effect scope out to `src/utils/`, and unit-te
 - **`buildScene(canvas, { shapeLayers, textLayers, panelData, layout, scale })`** — extract the
   scene builder (`Canvas.tsx:376-414`), returning the raster handles it creates.
 
-### Phase 2 — Type the Fabric custom-prop boundary
-Kill the ~46 `as any` casts at the model↔Fabric seam. Introduce typed accessors (or a `WeakMap`
-metadata store) for the stashed keys (`SHAPE_ID_KEY`, `PATH_ID_KEY`, `IMAGE_ID_KEY`,
-`IMAGE_DATA_KEY`, `groupId`, …). Do this before the tool-strategy split so controllers consume a
-typed API, not raw casts.
+### Phase 2 — Type the Fabric custom-prop boundary — ✅ DONE
+Killed the seam casts (Canvas.tsx 9→0, utils 41→1) via module augmentation in
+`types/fabric-augment.d.ts` (types both reads and constructor-embedded keys — no `WeakMap`/accessor
+churn needed) plus `utils/fabricMeta.ts` (`isActiveSelection`/`isEditingText`/`getScenePoint`) for
+the Fabric-API gaps; also fixed `groupId` to use the `GROUP_ID_KEY` constant. The two surviving
+casts (`obj.path as any[]`, `document.fonts`) are unrelated Fabric/DOM-shape gaps, left as-is.
 
 ### Phase 3 — Tool-strategy abstraction (the core change)
 Define a `ToolController` interface — e.g.
