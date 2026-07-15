@@ -3,8 +3,9 @@
 **Status:** Phases 1 & 2 complete (2026-07-15, branch `refactor/canvas-phase-1-2-extractions`);
 Phase 3 complete (2026-07-15, branch `refactor/canvas-phase-3-tool-controllers`); Phase 4 complete
 (2026-07-15, branch `refactor/canvas-phase-4-object-ops`); Phase 5 complete (2026-07-15, branch
-`refactor/canvas-phase-5-hooks`); Phase 6 not started. Originally deferred from the non-functional
-review (2026-07-14).
+`refactor/canvas-phase-5-hooks`); Phase 6 complete (2026-07-15, branch
+`refactor/canvas-phase-6-testing`). **All phases done.** Originally deferred from the
+non-functional review (2026-07-14).
 
 ## Why
 
@@ -109,14 +110,20 @@ hook calls + JSX). Hook-call order preserves the original effect run/cleanup ord
 by the existing component tests + a Playwright/Chromium lifecycle pass (draw, tool-switch non-clobber,
 teardown-commit of an abandoned text edit, undo/redo, responsive resize) with zero page errors.
 
-### Phase 6 — Testing & verification
-- Unit tests for every Phase-1/2/4 extraction (`floodFill`, `toolToMode`, `canvasObjectsToLayers`,
-  `buildScene`, `objectOps`, prop accessors).
-- Browser-level (Playwright/Chromium) smoke for the interactive gestures jsdom can't drive:
-  draw shape, drag-resize, place+edit text, pen stroke, eraser, fill, scissor cut, group/ungroup,
-  undo/redo. See `memory/fabric-migration-verification-gap.md` for how to run a browser pass.
-- After each phase: `npm run type-check`, `npm run test:run`, and a manual `npm run dev` smoke.
-  Un-exclude nothing was re-added to `vitest.config.ts`; watch Canvas.tsx coverage climb.
+### Phase 6 — Testing & verification — ✅ DONE
+- Unit tests for every extraction landed with their phase (`floodFill`/`toolToMode`/
+  `canvasObjectsToLayers`/`buildScene` in Phase 1; `toolControllers` in Phase 3; `objectOps`/
+  `fabricControls` in Phase 4; `overlayFit` in Phase 5). Phase 6 filled the remaining jsdom-drivable
+  gaps: the eraser/scissor raster controllers and the async group-duplicate + `isDisposed` guard in
+  `objectOps` (222 unit/component tests total).
+- **Committed Playwright/Chromium e2e suite** (`e2e/canvas.spec.ts`, `playwright.config.ts`,
+  `npm run e2e`, docs in `docs/e2e.md`): drives the gestures jsdom can't — draw + undo/redo (asserted
+  via the canvas's own `toDataURL` pixels), teardown-commit of an abandoned text edit, every tool
+  activating cleanly, and the duplicate control — all gated on zero runtime errors. `@playwright/test`
+  added as a devDependency (reversing the earlier "keep it out" choice, per the Phase-6 decision);
+  artifacts gitignored; `e2e/**` excluded from vitest.
+- `vitest.config.ts` thresholds raised 70/65/60/70 → 82/70/70/82 to lock in the gains (real numbers
+  ~84/72/74). Nothing was re-excluded — `Canvas.tsx` went ~44% → **100%**.
 
 ## Sequencing rationale
 Pure extractions first (safe, immediately add coverage to the untested core), then type the

@@ -21,6 +21,8 @@ const makeDeps = (over: Partial<ObjectOpsDeps> = {}): ObjectOpsDeps => ({
   ...over,
 })
 
+const flush = () => new Promise<void>((r) => setTimeout(r, 0))
+
 const rect = () =>
   shapeLayerToFabricObject({
     type: 'shape', id: 's1', shape: 'rectangle', x: 100, y: 100, width: 60, height: 40,
@@ -81,6 +83,35 @@ describe('duplicateObject', () => {
     const clone = canvas.getObjects()[1]
     expect(clone[PATH_ID_KEY]).toBeTruthy()
     expect(fabricObjectKind(clone)).toBe('path')
+  })
+
+  it('clones a group asynchronously, applying controls and syncing when not disposed', async () => {
+    const canvas = makeCanvas()
+    const deps = makeDeps()
+    const ops = createObjectOps(canvas, deps)
+    const group = new fabric.Group([rect(), rect()], { originX: 'center', originY: 'center' })
+    canvas.add(group)
+
+    ops.duplicateObject(group)
+    await flush()
+    expect(canvas.getObjects().length).toBe(2) // original + async clone
+    expect(canvas.getObjects()[1]).toBeInstanceOf(fabric.Group)
+    expect(deps.applyControls).toHaveBeenCalled()
+    expect(deps.syncToLayers).toHaveBeenCalledWith(false)
+  })
+
+  it('async group clone bails when disposed (stale canvas after teardown)', async () => {
+    const canvas = makeCanvas()
+    const deps = makeDeps({ isDisposed: () => true })
+    const ops = createObjectOps(canvas, deps)
+    const group = new fabric.Group([rect(), rect()], { originX: 'center', originY: 'center' })
+    canvas.add(group)
+
+    ops.duplicateObject(group)
+    await flush()
+    expect(canvas.getObjects().length).toBe(1) // no clone added
+    expect(deps.applyControls).not.toHaveBeenCalled()
+    expect(deps.syncToLayers).not.toHaveBeenCalled()
   })
 })
 
