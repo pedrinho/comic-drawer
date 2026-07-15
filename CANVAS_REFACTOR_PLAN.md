@@ -1,7 +1,8 @@
 # Canvas.tsx refactor plan
 
 **Status:** Phases 1 & 2 complete (2026-07-15, branch `refactor/canvas-phase-1-2-extractions`);
-Phases 3–6 not started. Originally deferred from the non-functional review (2026-07-14).
+Phase 3 complete (2026-07-15, branch `refactor/canvas-phase-3-tool-controllers`); Phases 4–6 not
+started. Originally deferred from the non-functional review (2026-07-14).
 
 ## Why
 
@@ -66,15 +67,20 @@ churn needed) plus `utils/fabricMeta.ts` (`isActiveSelection`/`isEditingText`/`g
 the Fabric-API gaps; also fixed `groupId` to use the `GROUP_ID_KEY` constant. The two surviving
 casts (`obj.path as any[]`, `document.fonts`) are unrelated Fabric/DOM-shape gaps, left as-is.
 
-### Phase 3 — Tool-strategy abstraction (the core change)
-Define a `ToolController` interface — e.g.
-`{ mode; onActivate(ctx); onDown(pt, opt); onMove(pt, opt); onUp(opt); teardown() }` — and split
-the mega pointer handlers (`onDown`/`onMove`/`onUp`, `Canvas.tsx:703-912`) into one controller per
-tool: `ShapeCreate`, `Balloon`, `Text`/`Emoji`, `Select`, `Fill`, `Eraser`, `Scissor`, `Pen`.
-Shared services are passed in a context object: `{ canvas, syncToLayers, applyObjectControls,
-showSizeLabel/hideSizeLabel, generateLayerId, commitRaster, rasterImage, rasterBacking, scale,
-onToolChange }`. The effect shrinks to: resolve controller from `tool`, wire canvas events to its
-methods, delegate teardown.
+### Phase 3 — Tool-strategy abstraction (the core change) — ✅ DONE
+Landed as `utils/toolControllers.ts`: a `ToolController` interface (`{ onDown?, onMove?, onUp? }`),
+a `ToolContext` for the shared services + tool params, per-tool factories holding their own gesture
+state in closures (`dragCreateController` shared by shape+balloon, `textController`, `fillController`
+owning `floodRaster`, `eraserController` owning `eraseSegment`, `scissorController` owning the cut
+path), and `createToolController(mode, ctx)` — `select`/`pen`/`null` resolve to `null` (Fabric
+handles picking; pen uses the native brush). `normalizeRect`/`BASE` moved here too. The effect now
+builds the controller once and wires thin `mouse:down/move/up` wrappers to it; `hideSizeLabel()`
+stays an effect-level `mouse:up` prefix (it also backs the select-mode scaling pill). Object-
+management + `applyObjectControls` stay in the effect (Phase 4 moves them). Canvas.tsx shrank ~256
+net lines. Co-located `toolControllers.test.ts` covers factory dispatch + shape/fill/text behaviors;
+a Playwright/Chromium pass drove real gestures for every tool (create/move/text-edit/balloon/pen/
+fill/eraser/emoji/scissor-cut→auto-select/undo) with objects preserved across all tool switches and
+zero Canvas/Fabric errors.
 
 ### Phase 4 — Extract object-management (controls) concern
 Move `duplicateObject`/`deleteObject`/`mergeSelection`/`ungroupObject` (`Canvas.tsx:447-546`) into

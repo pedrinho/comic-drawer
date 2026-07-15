@@ -3,27 +3,19 @@ import * as fabric from 'fabric'
 import { Tool, Shape, PenType, BalloonKind } from '../types/common'
 import { toolToMode } from '../utils/toolMode'
 import { TextLayer, ObjectLayer, GroupObjectLayer } from '../types/layers'
-import { debugLog, imageDataToBase64, makeWhiteTransparent } from '../utils/canvasUtils'
+import { debugLog } from '../utils/canvasUtils'
 import { shapeLayerToFabricObject, fabricObjectToShapeLayer } from '../utils/fabricShapes'
 import { textLayerToFabricIText, fabricITextToTextLayer } from '../utils/fabricText'
-import { imageLayerToFabricImage, fabricImageToLayer, fabricObjectKind, IMAGE_ID_KEY, IMAGE_DATA_KEY } from '../utils/fabricImage'
+import { imageLayerToFabricImage, fabricImageToLayer, fabricObjectKind } from '../utils/fabricImage'
 import { layerToFabricGroup, fabricGroupToLayer, GROUP_ID_KEY } from '../utils/fabricGroup'
 import { pathLayerToFabricPath, fabricPathToLayer, PATH_ID_KEY } from '../utils/fabricPath'
 import { isActiveSelection, isEditingText, getScenePoint } from '../utils/fabricMeta'
 import { backingToImageData, isChromeObject } from '../utils/fabricRaster'
 import { balloonLayerToFabricObject, fabricBalloonToLayer, isFabricBalloon } from '../utils/fabricBalloon'
 import { canvasObjectsToLayers, buildScene } from '../utils/fabricScene'
-import { floodFillImageData } from '../utils/floodFill'
+import { createToolController } from '../utils/toolControllers'
 import { generateLayerId } from '../utils/id'
 import './Canvas.css'
-
-interface SelectionRect {
-  x: number
-  y: number
-  width: number
-  height: number
-}
-
 
 interface CanvasProps {
   tool: Tool
@@ -57,17 +49,6 @@ const getPenWidth = (penType?: PenType): number => {
     default: return 2
   }
 }
-
-const normalizeRect = (start: { x: number; y: number }, end: { x: number; y: number }): SelectionRect => {
-  const x = Math.min(start.x, end.x)
-  const y = Math.min(start.y, end.y)
-  const width = Math.abs(start.x - end.x)
-  const height = Math.abs(start.y - end.y)
-  return { x, y, width, height }
-}
-
-
-
 
 
 
@@ -246,7 +227,6 @@ export default function Canvas({
     const currentFont = font
     const currentFontSize = fontSize
     const scale = computeScale()
-    const BASE = 100 // base shape geometry; final size comes from scaleX/scaleY
 
     // select allows picking/moving existing objects; creation modes disable rubber-band so
     // an empty-canvas drag/click creates a new object instead of starting a selection box.
@@ -501,277 +481,41 @@ export default function Canvas({
       if (el) el.style.display = 'none'
     }
 
-    let creating: { obj: fabric.FabricObject; start: { x: number; y: number } } | null = null
-    // Raster-tool gesture state (eraser drag / scissor marquee).
-    let erasing: { last: { x: number; y: number } } | null = null
-    let scissorSel: { start: { x: number; y: number }; rect: fabric.Rect } | null = null
-
     // Push the current raster backing back into panelData (App snapshots history + re-renders).
     const commitRaster = () => onCanvasChange(backingToImageData(rasterBacking))
 
-    // Eraser: wipe a round segment out of the raster backing (destination-out) and re-render.
-    const eraseSegment = (from: { x: number; y: number }, to: { x: number; y: number }) => {
-      const ctx = rasterBacking.getContext('2d')
-      if (!ctx) return
-      ctx.save()
-      ctx.globalCompositeOperation = 'destination-out'
-      ctx.lineWidth = 20
-      ctx.lineCap = 'round'
-      ctx.lineJoin = 'round'
-      ctx.beginPath()
-      ctx.moveTo(from.x, from.y)
-      ctx.lineTo(to.x, to.y)
-      ctx.stroke()
-      ctx.restore()
-      rasterImage.dirty = true
-      canvas.requestRenderAll()
-    }
+    // Resolve the per-tool pointer strategy and wire the raw Fabric pointer events to it. Modes
+    // with no bespoke pointer behaviour — `select` (Fabric handles picking/moving) and `pen`
+    // (native brush) — resolve to null, so the wrappers below no-op. The controller owns its own
+    // transient gesture state (in-flight shape / eraser stroke / scissor marquee); object-management
+    // (`applyObjectControls` et al.) stays owned by this effect and is passed in as a callback.
+    const controller = createToolController(mode, {
+      canvas,
+      scale,
+      shape: currentShape,
+      balloonKind: currentBalloonKind,
+      color: currentColor,
+      font: currentFont,
+      fontSize: currentFontSize,
+      placeEmoji,
+      rasterImage,
+      rasterBacking,
+      syncToLayers,
+      applyObjectControls,
+      showSizeLabel,
+      hideSizeLabel,
+      commitRaster,
+      getPoint,
+      onToolChange,
+    })
 
-    // Fill fallback: flood the COMPOSITE scene (so the fill respects ink / grid / shape
-    // boundaries), then stamp only the newly-filled pixels onto the raster backing.
-    const floodRaster = (x: number, y: number, colorHex: string) => {
-      const before = canvas.toCanvasElement(1) as HTMLCanvasElement
-      const bctx = before.getContext('2d')
-      const backCtx = rasterBacking.getContext('2d')
-      if (!bctx || !backCtx) return
-      const beforeData = bctx.getImageData(0, 0, before.width, before.height)
-      // Flood the composite (respects ink/grid/shape boundaries); mutate a copy so `beforeData`
-      // stays the pre-fill reference for the diff below.
-      bctx.globalCompositeOperation = 'source-over'
-      const fillData = bctx.getImageData(0, 0, before.width, before.height)
-      floodFillImageData(fillData, Math.round(x), Math.round(y), colorHex)
-      const after = fillData.data
-      const back = backCtx.getImageData(0, 0, rasterBacking.width, rasterBacking.height)
-      const b = beforeData.data
-      const d = back.data
-      let changed = false
-      for (let i = 0; i < after.length; i += 4) {
-        if (after[i] !== b[i] || after[i + 1] !== b[i + 1] || after[i + 2] !== b[i + 2] || after[i + 3] !== b[i + 3]) {
-          d[i] = after[i] ?? 0
-          d[i + 1] = after[i + 1] ?? 0
-          d[i + 2] = after[i + 2] ?? 0
-          d[i + 3] = 255
-          changed = true
-        }
-      }
-      if (!changed) return
-      backCtx.putImageData(back, 0, 0)
-      rasterImage.dirty = true
-      canvas.requestRenderAll()
-      commitRaster()
-    }
-
-    const onDown = (opt: any) => {
-      if (mode === 'fill') {
-        // Colour the clicked shape or pen path (or grouped child) by setting the object's own
-        // fill, so the colour moves with it; otherwise flood-fill the raster backing.
-        const target = (opt.subTargets && opt.subTargets[0]) || opt.target
-        const targetKind = target && fabricObjectKind(target)
-        if (target && (targetKind === 'shape' || targetKind === 'path')) {
-          target.set('fill', currentColor)
-          canvas.requestRenderAll()
-          syncToLayers(false)
-          return
-        }
-        const p2 = getPoint(opt)
-        floodRaster(p2.x, p2.y, currentColor)
-        return
-      }
-      if (mode === 'eraser') {
-        const p = getPoint(opt)
-        erasing = { last: { x: p.x, y: p.y } }
-        return
-      }
-      if (mode === 'scissor') {
-        const p = getPoint(opt)
-        const rect = new fabric.Rect({
-          left: p.x,
-          top: p.y,
-          width: 0,
-          height: 0,
-          originX: 'left',
-          originY: 'top',
-          fill: 'rgba(0,120,255,0.08)',
-          stroke: '#0078ff',
-          strokeWidth: 1,
-          strokeDashArray: [6, 4],
-          selectable: false,
-          evented: false,
-        })
-        canvas.add(rect)
-        scissorSel = { start: { x: p.x, y: p.y }, rect }
-        return
-      }
-      if (!isCreationMode) return // select mode: let Fabric handle picking/moving
-      if (opt.target) return // clicking an existing object → let Fabric select/move it
-      const p = getPoint(opt)
-      if (mode === 'shape') {
-        const obj = shapeLayerToFabricObject({
-          type: 'shape',
-          id: generateLayerId(),
-          shape: currentShape,
-          x: p.x,
-          y: p.y,
-          width: BASE,
-          height: BASE,
-          rotation: 0,
-          strokeColor: currentColor,
-          strokeWidth: 2,
-          fillColor: null,
-        })
-        obj.set({ scaleX: 0.001, scaleY: 0.001, left: p.x, top: p.y })
-        applyObjectControls(obj)
-        canvas.add(obj)
-        creating = { obj, start: { x: p.x, y: p.y } }
-      } else if (mode === 'balloon') {
-        // Balloon: same drag-to-size gesture as a shape. Built at BASE size, then grown via
-        // scaleX/scaleY by onMove — so it shares the resize + live size-readout path.
-        const obj = balloonLayerToFabricObject({
-          type: 'balloon',
-          id: generateLayerId(),
-          kind: currentBalloonKind,
-          x: p.x,
-          y: p.y,
-          width: BASE,
-          height: BASE,
-          rotation: 0,
-          text: '',
-          font: currentFont,
-          fontSize: currentFontSize,
-          color: currentColor,
-        })
-        obj.set({ scaleX: 0.001, scaleY: 0.001, left: p.x, top: p.y })
-        applyObjectControls(obj)
-        canvas.add(obj)
-        creating = { obj, start: { x: p.x, y: p.y } }
-      } else {
-        // Text: click to place, then edit in place (fabric.IText). Emoji: place the emoji
-        // character and don't enter editing.
-        const obj = textLayerToFabricIText(
-          {
-            type: 'text',
-            id: generateLayerId(),
-            text: placeEmoji ?? '',
-            x: p.x,
-            y: p.y,
-            width: 1,
-            height: 1,
-            rotation: 0,
-            font: currentFont,
-            fontSize: currentFontSize,
-            color: currentColor,
-          },
-          scale
-        )
-        obj.set({ left: p.x, top: p.y })
-        applyObjectControls(obj)
-        canvas.add(obj)
-        canvas.setActiveObject(obj)
-        if (placeEmoji) {
-          canvas.requestRenderAll()
-          syncToLayers(false)
-        } else {
-          ;(obj as fabric.IText).enterEditing()
-          canvas.requestRenderAll()
-        }
-      }
-    }
-
-    const onMove = (opt: any) => {
-      if (erasing) {
-        const p = getPoint(opt)
-        eraseSegment(erasing.last, p)
-        erasing.last = { x: p.x, y: p.y }
-        return
-      }
-      if (scissorSel) {
-        const p = getPoint(opt)
-        const r = normalizeRect(scissorSel.start, p)
-        scissorSel.rect.set({ left: r.x, top: r.y, width: r.width, height: r.height })
-        canvas.requestRenderAll()
-        return
-      }
-      if (!creating) return
-      const p = getPoint(opt)
-      const w = Math.max(1, Math.abs(p.x - creating.start.x))
-      const h = Math.max(1, Math.abs(p.y - creating.start.y))
-      creating.obj.set({
-        scaleX: w / BASE,
-        scaleY: h / BASE,
-        left: (creating.start.x + p.x) / 2,
-        top: (creating.start.y + p.y) / 2,
-      })
-      showSizeLabel(w, h, (creating.start.x + p.x) / 2, Math.max(creating.start.y, p.y))
-      canvas.requestRenderAll()
-    }
-
+    const onDown = (opt: any) => controller?.onDown?.(opt)
+    const onMove = (opt: any) => controller?.onMove?.(opt)
+    // hideSizeLabel always runs on release — it also backs the object:scaling pill in select mode —
+    // then the active tool's release logic runs.
     const onUp = () => {
       hideSizeLabel()
-      if (erasing) {
-        erasing = null
-        commitRaster() // one history entry per stroke (App snapshots the pre-stroke state)
-        return
-      }
-      if (scissorSel) {
-        const rect = scissorSel.rect
-        const rx = Math.round(rect.left ?? 0)
-        const ry = Math.round(rect.top ?? 0)
-        const rw = Math.round(rect.width ?? 0)
-        const rh = Math.round(rect.height ?? 0)
-        canvas.remove(rect)
-        scissorSel = null
-        // Clamp the cut region to the canvas bounds.
-        const cx = Math.max(0, rx)
-        const cy = Math.max(0, ry)
-        const cw = Math.min(rw - (cx - rx), 1200 - cx)
-        const ch = Math.min(rh - (cy - ry), 800 - cy)
-        if (cw < 5 || ch < 5) {
-          canvas.requestRenderAll()
-          return
-        }
-        const backCtx = rasterBacking.getContext('2d')
-        if (!backCtx) return
-        const region = backCtx.getImageData(cx, cy, cw, ch)
-        makeWhiteTransparent(region)
-        const base64 = imageDataToBase64(region)
-        backCtx.clearRect(cx, cy, cw, ch) // leave a hole where the pixels were lifted
-        rasterImage.dirty = true
-        // Build the cut-out as a Fabric image SYNCHRONOUSLY (from a backing canvas) and add it to
-        // the overlay, so the tool-switch cleanup's syncToLayers preserves it (it rebuilds the
-        // layer model from the canvas — a layer only in shapeLayers but not on the canvas is lost).
-        const cutEl = document.createElement('canvas')
-        cutEl.width = cw
-        cutEl.height = ch
-        cutEl.getContext('2d')?.putImageData(region, 0, 0)
-        const img = new fabric.FabricImage(cutEl, {
-          originX: 'center',
-          originY: 'center',
-          left: cx + cw / 2,
-          top: cy + ch / 2,
-          [IMAGE_ID_KEY]: generateLayerId(),
-          [IMAGE_DATA_KEY]: base64,
-        })
-        applyObjectControls(img)
-        canvas.add(img)
-        canvas.setActiveObject(img)
-        canvas.requestRenderAll()
-        commitRaster() // snapshots history (pre-cut data + layers) and updates panelData
-        syncToLayers(true) // lift the cut image into shapeLayers (commitRaster already snapshotted)
-        onToolChange?.('select')
-        return
-      }
-      if (!creating) return
-      const obj = creating.obj
-      const tooSmall = (obj.width ?? 0) * (obj.scaleX ?? 1) < 3 || (obj.height ?? 0) * (obj.scaleY ?? 1) < 3
-      creating = null
-      if (tooSmall) {
-        canvas.remove(obj)
-        canvas.requestRenderAll()
-        return
-      }
-      canvas.setActiveObject(obj)
-      canvas.requestRenderAll()
-      syncToLayers(false)
+      controller?.onUp?.()
     }
 
     const onModified = () => syncToLayers(false)
