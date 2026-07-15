@@ -54,7 +54,7 @@ export const layerToFabricGroup = async (layer: GroupObjectLayer, scale: number)
   ) as fabric.FabricObject[]
 
   const group = new fabric.Group(children, { originX: 'center', originY: 'center' })
-  ;(group as any)[GROUP_ID_KEY] = layer.id
+  group[GROUP_ID_KEY] = layer.id
 
   // Scale the local child bounding box up to the stored absolute size, then position it.
   const localW = group.width || layer.width || 1
@@ -82,7 +82,7 @@ export const fabricGroupToLayer = (group: fabric.Group, scale: number): GroupObj
 
   return {
     type: 'group',
-    id: ((group as any)[GROUP_ID_KEY] as string | undefined) ?? `group-${Math.round(center.x)}-${Math.round(center.y)}`,
+    id: group[GROUP_ID_KEY] ?? `group-${Math.round(center.x)}-${Math.round(center.y)}`,
     x: center.x - width / 2,
     y: center.y - height / 2,
     width,

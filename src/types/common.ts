@@ -7,6 +7,11 @@ export type PenType = 'fine' | 'small' | 'medium' | 'large' | 'thick' | 'verythi
 // structured so adding 'thought' | 'shout' | 'angry' | … is one registry entry + one path fn.
 export type BalloonKind = 'speech'
 
+// The active interaction mode of the Fabric overlay, derived from the current `Tool` (see
+// `toolToMode`). `emoji` collapses into `text` (it places a fabric.IText holding the glyph);
+// `null` means no Fabric-owned mode is active.
+export type Mode = 'shape' | 'balloon' | 'text' | 'select' | 'fill' | 'pen' | 'eraser' | 'scissor' | null
+
 export interface PanelData {
     id: number
     name: string

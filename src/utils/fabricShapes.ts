@@ -195,14 +195,14 @@ export const shapeLayerToFabricObject = (layer: ShapeObjectLayer): fabric.Fabric
  * and style; the shape kind and id come from the custom props set at creation time.
  */
 export const fabricObjectToShapeLayer = (obj: fabric.FabricObject): ShapeObjectLayer => {
-  const kind = (obj as any)[SHAPE_KIND_KEY] as Shape | undefined
-  const id = (obj as any)[SHAPE_ID_KEY] as string | undefined
+  const kind = obj[SHAPE_KIND_KEY]
+  const id = obj[SHAPE_ID_KEY]
 
   // Prefer the stored intended box (drag rect) over the object's natural extent, so
   // polygonal shapes keep their box across round-trips. Fall back to the object's own
   // dimensions for objects created outside this module.
-  const boxW = (obj as any)[SHAPE_BOX_W_KEY] as number | undefined
-  const boxH = (obj as any)[SHAPE_BOX_H_KEY] as number | undefined
+  const boxW = obj[SHAPE_BOX_W_KEY]
+  const boxH = obj[SHAPE_BOX_H_KEY]
   const width = (boxW ?? obj.width ?? 0) * (obj.scaleX ?? 1)
   const height = (boxH ?? obj.height ?? 0) * (obj.scaleY ?? 1)
   // Objects use a centered origin, so left/top is the center point.

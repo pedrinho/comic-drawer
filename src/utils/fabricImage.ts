@@ -37,15 +37,15 @@ export const imageLayerToFabricImage = async (
     scaleY: layer.height / natH,
     [IMAGE_ID_KEY]: layer.id,
     [IMAGE_DATA_KEY]: layer.data,
-  } as any)
+  })
   return img
 }
 
 /** Read a fabric.FabricImage back into an ImageObjectLayer. */
 export const fabricImageToLayer = (obj: fabric.FabricImage): ImageObjectLayer => {
-  const id = (obj as any)[IMAGE_ID_KEY] as string | undefined
+  const id = obj[IMAGE_ID_KEY]
   const data =
-    ((obj as any)[IMAGE_DATA_KEY] as string | undefined) ??
+    obj[IMAGE_DATA_KEY] ??
     (typeof obj.getSrc === 'function' ? obj.getSrc() : '')
   const width = (obj.width ?? 0) * (obj.scaleX ?? 1)
   const height = (obj.height ?? 0) * (obj.scaleY ?? 1)
@@ -68,18 +68,18 @@ export const fabricImageToLayer = (obj: fabric.FabricImage): ImageObjectLayer =>
 export const fabricObjectKind = (
   obj: fabric.FabricObject
 ): 'text' | 'image' | 'shape' | 'group' | 'path' => {
-  if (obj instanceof fabric.Group || (obj as any).type === 'group') {
+  if (obj instanceof fabric.Group || obj.type === 'group') {
     return 'group'
   }
-  if (obj instanceof fabric.IText || (obj as any).type === 'i-text' || (obj as any).type === 'text') {
+  if (obj instanceof fabric.IText || obj.type === 'i-text' || obj.type === 'text') {
     return 'text'
   }
-  if (obj instanceof fabric.FabricImage || (obj as any).type === 'image' || (obj as any)[IMAGE_ID_KEY]) {
+  if (obj instanceof fabric.FabricImage || obj.type === 'image' || obj[IMAGE_ID_KEY]) {
     return 'image'
   }
   // A pen path carries PATH_ID_KEY; a heart shape is also a fabric.Path but carries
   // SHAPE_KIND_KEY, so require the path key AND the absence of the shape key.
-  if ((obj as any)[PATH_ID_KEY] && !(obj as any)[SHAPE_KIND_KEY]) {
+  if (obj[PATH_ID_KEY] && !obj[SHAPE_KIND_KEY]) {
     return 'path'
   }
   return 'shape'

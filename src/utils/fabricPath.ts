@@ -54,7 +54,7 @@ export const pathLayerToFabricPath = (layer: PathObjectLayer): fabric.Path => {
     // with the stroke; unfilled strokes keep `null` and just draw the outline.
     fill: layer.fillColor ?? null,
     [PATH_ID_KEY]: layer.id,
-  } as any)
+  })
 }
 
 /**
@@ -65,7 +65,7 @@ export const pathLayerToFabricPath = (layer: PathObjectLayer): fabric.Path => {
  * `getCenterPoint()`.
  */
 export const fabricPathToLayer = (obj: fabric.Path): PathObjectLayer => {
-  const id = (obj as any)[PATH_ID_KEY] as string | undefined
+  const id = obj[PATH_ID_KEY]
   const scaleX = obj.scaleX ?? 1
   const scaleY = obj.scaleY ?? 1
   const offset = obj.pathOffset ?? { x: 0, y: 0 }
