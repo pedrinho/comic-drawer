@@ -2,18 +2,15 @@ import { useEffect, useRef, useCallback } from 'react'
 import * as fabric from 'fabric'
 import { Tool, Shape, PenType, BalloonKind } from '../types/common'
 import { toolToMode } from '../utils/toolMode'
-import { TextLayer, ObjectLayer, GroupObjectLayer } from '../types/layers'
+import { TextLayer, ObjectLayer } from '../types/layers'
 import { debugLog } from '../utils/canvasUtils'
-import { shapeLayerToFabricObject, fabricObjectToShapeLayer } from '../utils/fabricShapes'
-import { textLayerToFabricIText, fabricITextToTextLayer } from '../utils/fabricText'
-import { imageLayerToFabricImage, fabricImageToLayer, fabricObjectKind } from '../utils/fabricImage'
-import { layerToFabricGroup, fabricGroupToLayer, GROUP_ID_KEY } from '../utils/fabricGroup'
-import { pathLayerToFabricPath, fabricPathToLayer, PATH_ID_KEY } from '../utils/fabricPath'
+import { PATH_ID_KEY } from '../utils/fabricPath'
 import { isActiveSelection, isEditingText, getScenePoint } from '../utils/fabricMeta'
 import { backingToImageData, isChromeObject } from '../utils/fabricRaster'
-import { balloonLayerToFabricObject, fabricBalloonToLayer, isFabricBalloon } from '../utils/fabricBalloon'
 import { canvasObjectsToLayers, buildScene } from '../utils/fabricScene'
 import { createToolController } from '../utils/toolControllers'
+import { createObjectOps } from '../utils/objectOps'
+import { createObjectControls } from '../utils/fabricControls'
 import { generateLayerId } from '../utils/id'
 import './Canvas.css'
 
@@ -249,9 +246,10 @@ export default function Canvas({
     // effect deps so our own live edits don't trigger a rebuild that clobbers the active
     // selection; external model changes (undo/redo/load) re-run the effect via panelData/layout.
     fabricOwnedRef.current = new Set(['shape', 'text', 'image', 'group', 'path', 'balloon'])
-    // `applyObjectControls` is defined further down the effect body; wrap it so buildScene's
-    // async loads read it lazily (they resolve after the whole body has run) rather than at the
-    // TDZ point of this call.
+    // `applyObjectControls` is assigned further down the effect body (from createObjectControls);
+    // wrap it so buildScene's async loads read it lazily (they resolve after the whole body has
+    // run) rather than at the TDZ point of this call.
+    let applyObjectControls: (obj: fabric.FabricObject) => void
     const { rasterImage, rasterBacking } = buildScene(canvas, {
       shapeLayers: shapeLayersRef.current ?? [],
       textLayers: textLayersRef.current ?? [],
@@ -274,186 +272,20 @@ export default function Canvas({
       updateTextLayers(texts, true)
     }
 
-    // On-selection buttons (Fabric custom controls): duplicate + delete, so objects can be
-    // managed without the keyboard — matches the old on-canvas buttons, kid-friendly.
-    const OFFSET = 30 // px offset for a duplicate (mirrors legacy handleDuplicate)
-    const duplicateObject = (obj?: fabric.FabricObject | null) => {
-      if (!obj) return
-      // Balloons are a fabric.Path; fabricObjectKind would mis-read them as a plain shape, so
-      // clone them through the balloon converter first.
-      if (isFabricBalloon(obj)) {
-        const l = fabricBalloonToLayer(obj as fabric.Path)
-        const clone = balloonLayerToFabricObject({ ...l, id: generateLayerId(), x: l.x + OFFSET, y: l.y + OFFSET })
-        applyObjectControls(clone)
-        canvas.add(clone)
-        canvas.setActiveObject(clone)
-        canvas.requestRenderAll()
-        syncToLayers(false)
-        return
-      }
-      const kind = fabricObjectKind(obj)
-      if (kind === 'group') {
-        const gl = fabricGroupToLayer(obj as fabric.Group, scale)
-        const dup: GroupObjectLayer = {
-          ...gl,
-          id: generateLayerId(),
-          x: gl.x + OFFSET,
-          y: gl.y + OFFSET,
-          children: gl.children.map((c) => ({ ...c, id: generateLayerId() })),
-        }
-        layerToFabricGroup(dup, scale)
-          .then((g) => {
-            if (disposed) return
-            applyObjectControls(g)
-            canvas.add(g)
-            canvas.setActiveObject(g)
-            canvas.requestRenderAll()
-            syncToLayers(false)
-          })
-          .catch(() => {})
-        return
-      }
-      if (kind === 'image') {
-        const layer = fabricImageToLayer(obj as fabric.FabricImage)
-        imageLayerToFabricImage({ ...layer, id: generateLayerId(), x: layer.x + OFFSET, y: layer.y + OFFSET })
-          .then((img) => {
-            if (disposed) return
-            applyObjectControls(img)
-            canvas.add(img)
-            canvas.setActiveObject(img)
-            canvas.requestRenderAll()
-            syncToLayers(false)
-          })
-          .catch(() => {})
-        return
-      }
-      let clone: fabric.FabricObject
-      if (kind === 'text') {
-        const l = fabricITextToTextLayer(obj as fabric.IText, scale)
-        clone = textLayerToFabricIText({ ...l, id: generateLayerId(), x: l.x + OFFSET, y: l.y + OFFSET }, scale)
-      } else if (kind === 'path') {
-        // A pen path is a fabric.Path with no SHAPE_KIND_KEY; without this branch it would fall
-        // through to fabricObjectToShapeLayer and come back as a rectangle (the "squared" bug).
-        const l = fabricPathToLayer(obj as fabric.Path)
-        clone = pathLayerToFabricPath({ ...l, id: generateLayerId(), x: l.x + OFFSET, y: l.y + OFFSET })
-      } else {
-        const l = fabricObjectToShapeLayer(obj)
-        clone = shapeLayerToFabricObject({ ...l, id: generateLayerId(), x: l.x + OFFSET, y: l.y + OFFSET })
-      }
-      applyObjectControls(clone)
-      canvas.add(clone)
-      canvas.setActiveObject(clone)
-      canvas.requestRenderAll()
-      syncToLayers(false)
-    }
-
-    const deleteObject = (obj?: fabric.FabricObject | null) => {
-      if (!obj) return
-      canvas.remove(obj)
-      canvas.discardActiveObject()
-      canvas.requestRenderAll()
-      syncToLayers(false)
-    }
-
-    // Merge the current multi-selection into one group; un-merge a group back into pieces.
-    const mergeSelection = () => {
-      const sel = canvas.getActiveObject()
-      if (!isActiveSelection(sel)) return
-      const objs = sel.removeAll()
-      if (objs.length < 2) return
-      canvas.remove(...objs)
-      const group = new fabric.Group(objs, { originX: 'center', originY: 'center' })
-      group[GROUP_ID_KEY] = generateLayerId()
-      applyObjectControls(group)
-      canvas.add(group)
-      canvas.setActiveObject(group)
-      canvas.requestRenderAll()
-      syncToLayers(false)
-    }
-    const ungroupObject = (obj?: fabric.FabricObject | null) => {
-      if (!obj || !(obj instanceof fabric.Group)) return
-      const objs = obj.removeAll() // Fabric bakes children back to absolute canvas coords
-      canvas.remove(obj)
-      objs.forEach((o) => {
-        applyObjectControls(o)
-        canvas.add(o)
-      })
-      canvas.discardActiveObject()
-      canvas.requestRenderAll()
-      syncToLayers(false)
-    }
-
-    const iconControl = (
-      glyph: string,
-      bg: string,
-      x: number,
-      offsetX: number,
-      handler: (o?: fabric.FabricObject | null) => void,
-      y = -0.5,
-      offsetY = -16
-    ) =>
-      new fabric.Control({
-        x,
-        y,
-        offsetX,
-        offsetY,
-        cursorStyle: 'pointer',
-        sizeX: 24,
-        sizeY: 24,
-        touchSizeX: 28,
-        touchSizeY: 28,
-        mouseUpHandler: (_e, transform) => {
-          handler(transform?.target)
-          return true
-        },
-        render: (ctx, left, top) => {
-          ctx.save()
-          ctx.beginPath()
-          ctx.arc(left, top, 11, 0, Math.PI * 2)
-          ctx.fillStyle = bg
-          ctx.fill()
-          ctx.lineWidth = 1.5
-          ctx.strokeStyle = '#ffffff'
-          ctx.stroke()
-          ctx.fillStyle = '#ffffff'
-          ctx.font = '600 13px sans-serif'
-          ctx.textAlign = 'center'
-          ctx.textBaseline = 'middle'
-          ctx.fillText(glyph, left, top + 0.5)
-          ctx.restore()
-        },
-      })
-
-    const dupControl = iconControl('⧉', '#3b82f6', 0.5, 16, duplicateObject)
-    const delControl = iconControl('✕', '#ef4444', -0.5, -16, deleteObject)
-    // Bottom-centre: ⊕ merge (shown on a multi-selection) and ⊖ un-merge (shown on a group).
-    const mergeControl = iconControl('⊕', '#10b981', 0, 0, mergeSelection, 0.5, 18)
-    const ungroupControl = iconControl('⊖', '#10b981', 0, 0, ungroupObject, 0.5, 18)
-    const applyObjectControls = (obj: fabric.FabricObject) => {
-      // Balloons are a fabric.Path, so they fall through here and get the normal duplicate +
-      // delete controls (no ungroup — that's group-only).
-      obj.controls = { ...obj.controls, dup: dupControl, del: delControl }
-      if (obj instanceof fabric.Group) {
-        obj.controls = { ...obj.controls, ung: ungroupControl }
-      }
-      // Interactivity is gated by mode. `select` AND the creation modes (shape/text) let objects
-      // be picked/moved/transformed and expose their delete/duplicate controls — creation still
-      // wins because onDown only creates when the pointer is NOT over an existing object. `fill`
-      // keeps them evented for click-to-colour hit-testing. The raster tools (pen/eraser/scissor)
-      // treat objects as a non-interactive backdrop so the gesture (brush/erase/cut) always wins.
-      if (mode === 'select' || isCreationMode) {
-        obj.selectable = true
-        obj.evented = true
-      } else if (mode === 'fill') {
-        obj.selectable = false
-        obj.evented = true
-        obj.hoverCursor = 'pointer'
-        if (obj instanceof fabric.Group) obj.subTargetCheck = true
-      } else {
-        obj.selectable = false
-        obj.evented = false
-      }
-    }
+    // Object-management ops (duplicate/delete/merge/ungroup) + the on-selection Fabric controls
+    // that trigger them, split out to utils/objectOps.ts + utils/fabricControls.ts. The two are
+    // mutually recursive (an op applies controls to the object it creates; a control invokes an
+    // op), so `applyObjectControls` is late-bound via the wrapper below — assigned here, but read
+    // by ops only when a control fires (long after this body has run).
+    const objectOps = createObjectOps(canvas, {
+      syncToLayers,
+      scale,
+      isDisposed: () => disposed,
+      applyControls: (o) => applyObjectControls(o),
+    })
+    const objectControls = createObjectControls(objectOps, { mode, isCreationMode })
+    applyObjectControls = objectControls.applyObjectControls
+    const mergeControl = objectControls.mergeControl
 
     // Give every already-loaded object (not chrome) the on-selection buttons + interactivity.
     canvas.getObjects().forEach((o) => {

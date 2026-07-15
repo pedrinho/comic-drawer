@@ -1,8 +1,9 @@
 # Canvas.tsx refactor plan
 
 **Status:** Phases 1 & 2 complete (2026-07-15, branch `refactor/canvas-phase-1-2-extractions`);
-Phase 3 complete (2026-07-15, branch `refactor/canvas-phase-3-tool-controllers`); Phases 4–6 not
-started. Originally deferred from the non-functional review (2026-07-14).
+Phase 3 complete (2026-07-15, branch `refactor/canvas-phase-3-tool-controllers`); Phase 4 complete
+(2026-07-15, branch `refactor/canvas-phase-4-object-ops`); Phases 5–6 not started. Originally
+deferred from the non-functional review (2026-07-14).
 
 ## Why
 
@@ -82,12 +83,16 @@ a Playwright/Chromium pass drove real gestures for every tool (create/move/text-
 fill/eraser/emoji/scissor-cut→auto-select/undo) with objects preserved across all tool switches and
 zero Canvas/Fabric errors.
 
-### Phase 4 — Extract object-management (controls) concern
-Move `duplicateObject`/`deleteObject`/`mergeSelection`/`ungroupObject` (`Canvas.tsx:447-546`) into
-`utils/objectOps.ts` as functions taking `(canvas, syncToLayers, deps)`, and
-`iconControl`/`applyObjectControls`/the four control instances (`Canvas.tsx:548-618`) into
-`utils/fabricControls.ts` taking the op callbacks. Keeps the mode-gated interactivity rules
-(`Canvas.tsx:606-617`) in one place.
+### Phase 4 — Extract object-management (controls) concern — ✅ DONE
+Landed as `utils/objectOps.ts` (`createObjectOps(canvas, deps)` returning duplicate/delete/merge/
+ungroup, with `syncToLayers`/`scale`/`isDisposed`/`applyControls` as deps) and `utils/fabricControls.ts`
+(`createObjectControls(ops, { mode, isCreationMode })` returning `applyObjectControls` + the
+`mergeControl` instance; `iconControl` is module-private, and the mode-gated interactivity rules live
+here). The two are mutually recursive (an op applies controls to the object it creates; a control
+invokes an op), so the effect late-binds `applyObjectControls` via the same wrapper `buildScene`
+already used. Co-located `objectOps.test.ts` (7) + `fabricControls.test.ts` (7) cover the ops, the
+mode gating, and control→op wiring; a Playwright/Chromium pass drove all four on-selection buttons
+(duplicate/delete/merge/ungroup) end-to-end with zero page errors. Canvas.tsx shrank ~170 net lines.
 
 ### Phase 5 — Decompose the component into hooks
 - `useFabricCanvas(ref)` — init/dispose (`Canvas.tsx:130-152`).
