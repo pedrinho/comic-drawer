@@ -114,3 +114,49 @@ describe('textController', () => {
     expect(ctx.syncToLayers).toHaveBeenCalledWith(false)
   })
 })
+
+describe('eraserController', () => {
+  it('commits the raster once per stroke on release (one history entry)', () => {
+    const ctx = makeCtx()
+    const c = createToolController('eraser', ctx)!
+    c.onDown!({ pt: { x: 100, y: 100 } })
+    c.onMove!({ pt: { x: 200, y: 100 } })
+    c.onMove!({ pt: { x: 300, y: 100 } })
+    expect(ctx.commitRaster).not.toHaveBeenCalled() // not mid-stroke
+    c.onUp!()
+    expect(ctx.commitRaster).toHaveBeenCalledTimes(1)
+  })
+
+  it('onUp without a prior onDown does nothing', () => {
+    const ctx = makeCtx()
+    const c = createToolController('eraser', ctx)!
+    c.onUp!()
+    expect(ctx.commitRaster).not.toHaveBeenCalled()
+  })
+})
+
+describe('scissorController', () => {
+  it('adds a marquee rect on down and lifts the cut into an image, then switches to select', () => {
+    const ctx = makeCtx()
+    const c = createToolController('scissor', ctx)!
+    c.onDown!({ pt: { x: 100, y: 100 } })
+    expect(ctx.canvas.getObjects().length).toBe(1) // the marquee rect
+    c.onMove!({ pt: { x: 340, y: 260 } })
+    c.onUp!()
+    // Marquee removed; a Fabric image (the cut-out) added in its place.
+    expect(ctx.canvas.getObjects().some((o) => o instanceof fabric.FabricImage)).toBe(true)
+    expect(ctx.commitRaster).toHaveBeenCalled()
+    expect(ctx.syncToLayers).toHaveBeenCalledWith(true)
+    expect(ctx.onToolChange).toHaveBeenCalledWith('select')
+  })
+
+  it('discards a too-small cut without switching tools', () => {
+    const ctx = makeCtx()
+    const c = createToolController('scissor', ctx)!
+    c.onDown!({ pt: { x: 100, y: 100 } })
+    c.onMove!({ pt: { x: 102, y: 102 } }) // < 5px → discarded
+    c.onUp!()
+    expect(ctx.onToolChange).not.toHaveBeenCalled()
+    expect(ctx.canvas.getObjects().some((o) => o instanceof fabric.FabricImage)).toBe(false)
+  })
+})
