@@ -2,8 +2,9 @@
 
 **Status:** Phases 1 & 2 complete (2026-07-15, branch `refactor/canvas-phase-1-2-extractions`);
 Phase 3 complete (2026-07-15, branch `refactor/canvas-phase-3-tool-controllers`); Phase 4 complete
-(2026-07-15, branch `refactor/canvas-phase-4-object-ops`); Phases 5–6 not started. Originally
-deferred from the non-functional review (2026-07-14).
+(2026-07-15, branch `refactor/canvas-phase-4-object-ops`); Phase 5 complete (2026-07-15, branch
+`refactor/canvas-phase-5-hooks`); Phase 6 not started. Originally deferred from the non-functional
+review (2026-07-14).
 
 ## Why
 
@@ -94,13 +95,19 @@ already used. Co-located `objectOps.test.ts` (7) + `fabricControls.test.ts` (7) 
 mode gating, and control→op wiring; a Playwright/Chromium pass drove all four on-selection buttons
 (duplicate/delete/merge/ungroup) end-to-end with zero page errors. Canvas.tsx shrank ~170 net lines.
 
-### Phase 5 — Decompose the component into hooks
-- `useFabricCanvas(ref)` — init/dispose (`Canvas.tsx:130-152`).
-- `useOverlaySizing(containerRef)` — the CSS-size sync effects (`Canvas.tsx:154-176`, `sizeOverlay`).
-- `useSceneSync(...)` — `buildScene` + `syncToLayers` wiring, owning the render-synced refs and the
-  teardown-commit rule (invariant #3).
-- `useActiveTool(tool, services)` — resolves and wires the Phase-3 controller.
-Result: `Canvas` becomes a thin orchestrator (~100-150 lines) + the JSX at `Canvas.tsx:1018-1032`.
+### Phase 5 — Decompose the component into hooks — ✅ DONE
+Landed as `hooks/useFabricCanvas.ts` (init/dispose, returns the element + instance refs),
+`hooks/useOverlaySizing.ts` (the persistent CSS-size sync effect), and `hooks/useCanvasController.ts`
+(the render-synced model refs + `update*Layers` callbacks + the whole scene/sync/tool/events effect).
+The plan's `useSceneSync` + `useActiveTool` were **kept as one hook**: that scene+tool logic is a
+single atomic `useEffect` with one teardown (the events need the scene's raster handles + control
+instances, and the teardown must off events before clearing the scene), so splitting it into two
+effects would create cross-effect ordering/data hazards — a behavior-change risk this phase must
+avoid. `fitCanvasToContainer` was extracted to `utils/overlayFit.ts` (pure, unit-tested) and shared
+by the sizing hook and the controller. `Canvas.tsx` shrank 472→94 lines (a thin orchestrator: three
+hook calls + JSX). Hook-call order preserves the original effect run/cleanup order exactly. Verified
+by the existing component tests + a Playwright/Chromium lifecycle pass (draw, tool-switch non-clobber,
+teardown-commit of an abandoned text edit, undo/redo, responsive resize) with zero page errors.
 
 ### Phase 6 — Testing & verification
 - Unit tests for every Phase-1/2/4 extraction (`floodFill`, `toolToMode`, `canvasObjectsToLayers`,
