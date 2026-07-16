@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import * as fabric from 'fabric'
-import { createToolController, ToolContext } from './toolControllers'
+import { createToolController, findEraserConvertible, ToolContext } from './toolControllers'
 import { shapeLayerToFabricObject } from './fabricShapes'
+import { balloonLayerToFabricObject } from './fabricBalloon'
 import { buildRasterImage } from './fabricRaster'
 import { Mode } from '../types/common'
 
@@ -132,6 +133,72 @@ describe('eraserController', () => {
     const c = createToolController('eraser', ctx)!
     c.onUp!()
     expect(ctx.commitRaster).not.toHaveBeenCalled()
+  })
+
+  it('a pure raster erase (no shape touched) commits once and does NOT sync layers', () => {
+    const ctx = makeCtx()
+    const c = createToolController('eraser', ctx)!
+    c.onDown!({ pt: { x: 100, y: 100 } })
+    c.onMove!({ pt: { x: 200, y: 100 } })
+    c.onUp!()
+    expect(ctx.commitRaster).toHaveBeenCalledTimes(1)
+    expect(ctx.syncToLayers).not.toHaveBeenCalled()
+  })
+
+  it('bakes a touched vector shape into the raster, removes it, and syncs once on release', () => {
+    const ctx = makeCtx()
+    const shapeObj = shapeLayerToFabricObject({
+      type: 'shape', id: 's1', shape: 'triangle', x: 100, y: 100, width: 100, height: 100,
+      rotation: 0, strokeColor: '#000000', strokeWidth: 2, fillColor: null,
+    })
+    ctx.canvas.add(shapeObj)
+    const c = createToolController('eraser', ctx)!
+    c.onDown!({ pt: { x: 150, y: 150 } }) // inside the triangle's bbox
+    c.onMove!({ pt: { x: 160, y: 150 } }) // rubs onto it → convert
+    expect(ctx.canvas.getObjects()).not.toContain(shapeObj) // stamped to raster + removed from overlay
+    c.onUp!()
+    expect(ctx.commitRaster).toHaveBeenCalledTimes(1) // one history entry for the whole gesture
+    expect(ctx.syncToLayers).toHaveBeenCalledWith(true) // skipHistory: model reconciled without a 2nd entry
+  })
+})
+
+describe('findEraserConvertible', () => {
+  const { image } = buildRasterImage(null)
+  const mkShape = (over: Record<string, unknown> = {}) =>
+    shapeLayerToFabricObject({
+      type: 'shape', id: 's', shape: 'rectangle', x: 100, y: 100, width: 80, height: 80,
+      rotation: 0, strokeColor: '#000000', strokeWidth: 2, fillColor: null, ...over,
+    })
+
+  it('returns a shape whose inflated bbox contains the point', () => {
+    const s = mkShape()
+    expect(findEraserConvertible([s], { x: 140, y: 140 }, 10, image)).toBe(s)
+  })
+
+  it('returns null when the point is well outside every object', () => {
+    const s = mkShape()
+    expect(findEraserConvertible([s], { x: 600, y: 600 }, 10, image)).toBeNull()
+  })
+
+  it('honours the pad tolerance just outside the bbox', () => {
+    const s = mkShape() // bbox right edge ≈ 182 (x 100 + width 80 + stroke)
+    expect(findEraserConvertible([s], { x: 188, y: 140 }, 10, image)).toBe(s) // within pad
+    expect(findEraserConvertible([s], { x: 188, y: 140 }, 2, image)).toBeNull() // outside a small pad
+  })
+
+  it('excludes the raster substrate, text, and balloons', () => {
+    const text = new fabric.IText('hi', { left: 100, top: 100 })
+    const balloon = balloonLayerToFabricObject({
+      type: 'balloon', id: 'b', kind: 'speech', x: 100, y: 100, width: 80, height: 80,
+      rotation: 0, text: '', font: 'Arial', fontSize: 20, color: '#000000',
+    })
+    expect(findEraserConvertible([image, text, balloon], { x: 140, y: 140 }, 10, image)).toBeNull()
+  })
+
+  it('returns the top-most (last-drawn) matching object', () => {
+    const under = mkShape()
+    const over = mkShape()
+    expect(findEraserConvertible([under, over], { x: 140, y: 140 }, 10, image)).toBe(over)
   })
 })
 
