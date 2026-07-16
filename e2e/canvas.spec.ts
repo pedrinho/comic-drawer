@@ -161,3 +161,35 @@ test('the duplicate control clones the selected object', async ({ page }) => {
 
   expect(await canvasPixels(page), 'a duplicate should add pixels').not.toBe(before)
 })
+
+test('pasting an image adds it, switches to select, and it is the active (deletable) object', async ({ page }) => {
+  const blank = await canvasPixels(page)
+
+  // Start in a non-select tool to exercise the auto-switch into select mode on paste.
+  await selectTool(page, 'Pen')
+
+  // Synthesize a clipboard paste carrying a solid-red PNG (no OS clipboard needed).
+  await page.evaluate(async () => {
+    const c = document.createElement('canvas')
+    c.width = 200
+    c.height = 120
+    const ctx = c.getContext('2d')!
+    ctx.fillStyle = '#ff0000'
+    ctx.fillRect(0, 0, 200, 120)
+    const blob: Blob = await new Promise((res) => c.toBlob((b) => res(b!), 'image/png'))
+    const file = new File([blob], 'pasted.png', { type: 'image/png' })
+    const dt = new DataTransfer()
+    dt.items.add(file)
+    window.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
+  })
+  await page.waitForTimeout(400) // FileReader → image decode → add → tool switch → re-select
+
+  expect(await canvasPixels(page), 'paste should draw the image onto the canvas').not.toBe(blank)
+  await expect(page.locator('button[title="Select"]'), 'paste switches to the Select tool').toHaveClass(/active/)
+
+  // Deleting removes the pasted image, proving it was added as the active/selected object — the
+  // same selection that exposes the resize/rotate handles.
+  await page.keyboard.press('Backspace')
+  await page.waitForTimeout(250)
+  expect(await canvasPixels(page), 'deleting the selected paste reverts to blank').toBe(blank)
+})

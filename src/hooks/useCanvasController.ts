@@ -13,6 +13,7 @@ import { createObjectOps } from '../utils/objectOps'
 import { createObjectControls } from '../utils/fabricControls'
 import { fitOverlay } from '../utils/overlayFit'
 import { generateLayerId } from '../utils/id'
+import { createImageFromDataUrl, IMAGE_ID_KEY } from '../utils/fabricImage'
 
 const getPenWidth = (penType?: PenType): number => {
   if (!penType) return 2
@@ -105,6 +106,11 @@ export const useCanvasController = (params: CanvasControllerParams) => {
   // The set of layer types currently owned by the Fabric overlay (rendered/edited there). Populated
   // while a Fabric-owned tool is active; retained from the two-canvas era.
   const fabricOwnedRef = useRef<Set<ObjectLayer['type']>>(new Set())
+
+  // When a paste happens outside select mode we switch to 'select' (so the image is immediately
+  // resizable/rotatable), which tears down and rebuilds this effect. This survives that rebuild and
+  // holds the pasted image's id so the new scene can re-select it once it finishes loading async.
+  const pendingSelectIdRef = useRef<string | null>(null)
 
   const updateShapeLayers = useCallback((layers: ObjectLayer[], skipHistory = false) => {
     debugLog('Canvas', 'Updating shape layers', { layerCount: layers.length, skipHistory })
@@ -337,6 +343,73 @@ export const useCanvasController = (params: CanvasControllerParams) => {
       }
     }
 
+    // Drop a pasted clipboard image onto the canvas: centered, scaled to fit, then synced into the
+    // model (one history entry). Images resize/rotate for free via the select-mode controls, so if
+    // we're not already in select mode we switch to it and hand the image's id to the rebuild via
+    // pendingSelectIdRef, which re-selects it once the async image load lands (onObjectAdded below).
+    const pasteImage = async (dataUrl: string) => {
+      const id = generateLayerId()
+      let img: fabric.FabricImage
+      try {
+        img = await createImageFromDataUrl(dataUrl, {
+          canvasWidth: canvas.getWidth(),
+          canvasHeight: canvas.getHeight(),
+          id,
+        })
+      } catch {
+        return // undecodable image data — ignore
+      }
+      if (disposed) return
+      applyObjectControls(img)
+      canvas.add(img)
+      // syncToLayers reads the canvas objects, so the image must be added before we sync.
+      syncToLayers(false)
+      if (mode === 'select') {
+        canvas.setActiveObject(img)
+        canvas.requestRenderAll()
+      } else if (onToolChange) {
+        pendingSelectIdRef.current = id
+        onToolChange('select')
+      } else {
+        canvas.requestRenderAll()
+      }
+    }
+
+    // Intercept a paste carrying image data. Text edits keep the native paste (so pasting text into
+    // a text object still works); we only claim the event when an image item is present.
+    const onPaste = (e: ClipboardEvent) => {
+      const active = canvas.getActiveObject()
+      if (active && isEditingText(active)) return
+      const items = e.clipboardData?.items
+      if (!items) return
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i]
+        if (!item || !item.type.startsWith('image/')) continue
+        const file = item.getAsFile()
+        if (!file) continue
+        e.preventDefault()
+        const reader = new FileReader()
+        reader.onload = () => {
+          if (typeof reader.result === 'string') pasteImage(reader.result)
+        }
+        reader.readAsDataURL(file)
+        return
+      }
+    }
+
+    // After a paste-driven switch into select mode, the scene rebuilds and the image reloads
+    // asynchronously; select it the moment it arrives so it's ready to resize/rotate.
+    const onObjectAdded = (opt: any) => {
+      const id = pendingSelectIdRef.current
+      if (!id) return
+      const obj = opt.target as fabric.FabricObject | undefined
+      if (obj && (obj as any)[IMAGE_ID_KEY] === id) {
+        pendingSelectIdRef.current = null
+        canvas.setActiveObject(obj)
+        canvas.requestRenderAll()
+      }
+    }
+
     canvas.on('mouse:down', onDown)
     canvas.on('mouse:move', onMove)
     canvas.on('mouse:up', onUp)
@@ -347,7 +420,9 @@ export const useCanvasController = (params: CanvasControllerParams) => {
     canvas.on('text:editing:exited', onEditingExited)
     canvas.on('selection:created', onSelection)
     canvas.on('selection:updated', onSelection)
+    canvas.on('object:added', onObjectAdded)
     window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('paste', onPaste)
     window.addEventListener('resize', sizeOverlay)
 
     return () => {
@@ -362,7 +437,9 @@ export const useCanvasController = (params: CanvasControllerParams) => {
       canvas.off('text:editing:exited', onEditingExited)
       canvas.off('selection:created', onSelection)
       canvas.off('selection:updated', onSelection)
+      canvas.off('object:added', onObjectAdded)
       window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('paste', onPaste)
       window.removeEventListener('resize', sizeOverlay)
       // Every gesture already syncs immediately (create / modify / delete / fill / erase / cut
       // / text-commit), so the teardown must NOT do a blanket canvas→model sync: on a
