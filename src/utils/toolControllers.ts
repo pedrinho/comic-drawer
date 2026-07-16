@@ -4,6 +4,8 @@ import { shapeLayerToFabricObject } from './fabricShapes'
 import { textLayerToFabricIText } from './fabricText'
 import { balloonLayerToFabricObject } from './fabricBalloon'
 import { fabricObjectKind, IMAGE_ID_KEY, IMAGE_DATA_KEY } from './fabricImage'
+import { isChromeObject } from './fabricRaster'
+import { isFabricBalloon } from './fabricBalloon'
 import { floodFillImageData } from './floodFill'
 import { makeWhiteTransparent, imageDataToBase64 } from './canvasUtils'
 import { generateLayerId } from './id'
@@ -251,17 +253,58 @@ const fillController = (ctx: ToolContext): ToolController => {
   }
 }
 
-/** Eraser: wipe a round segment out of the raster backing (destination-out) while dragging. */
+/**
+ * Top-most vector *outline* (a shape or pen path) whose bounding rect — inflated by `pad` — contains
+ * `point`. Used by the eraser to decide which object to rasterize on touch. We inflate the bbox (rather
+ * than use `containsPoint`) so rubbing a thin edge from *outside* the shape still triggers, and so the
+ * test works uniformly for Polygon / Ellipse / Path. Text, images, groups, balloons and the raster
+ * substrate/grid chrome are excluded — converting those to flat ink on a stray touch would be
+ * destructive and surprising.
+ */
+export const findEraserConvertible = (
+  objects: fabric.FabricObject[],
+  point: { x: number; y: number },
+  pad: number,
+  rasterImage: fabric.FabricImage
+): fabric.FabricObject | null => {
+  for (let i = objects.length - 1; i >= 0; i--) {
+    const o = objects[i]
+    if (!o || o === rasterImage || isChromeObject(o) || isFabricBalloon(o)) continue
+    const kind = fabricObjectKind(o)
+    if (kind !== 'shape' && kind !== 'path') continue
+    o.setCoords()
+    const b = o.getBoundingRect()
+    if (
+      point.x >= b.left - pad &&
+      point.x <= b.left + b.width + pad &&
+      point.y >= b.top - pad &&
+      point.y <= b.top + b.height + pad
+    ) {
+      return o
+    }
+  }
+  return null
+}
+
+/** Eraser stroke radius, in canvas units (lineWidth / 2). Also the convertible hit-test tolerance. */
+const ERASER_RADIUS = 10
+
+/**
+ * Eraser: wipe a round segment out of the raster backing (destination-out) while dragging. When the
+ * stroke touches a vector outline (a shape or pen path — see `findEraserConvertible`), that object is
+ * first stamped into the raster backing as ink and removed from the overlay, so the eraser can then rub
+ * out just part of it. This lets a child delete, say, the top side of a triangle and fill the rest.
+ */
 const eraserController = (ctx: ToolContext): ToolController => {
   const { canvas, rasterBacking, rasterImage } = ctx
-  let erasing: { last: { x: number; y: number } } | null = null
+  let erasing: { last: { x: number; y: number }; converted: boolean } | null = null
 
   const eraseSegment = (from: { x: number; y: number }, to: { x: number; y: number }) => {
     const c = rasterBacking.getContext('2d')
     if (!c) return
     c.save()
     c.globalCompositeOperation = 'destination-out'
-    c.lineWidth = 20
+    c.lineWidth = ERASER_RADIUS * 2
     c.lineCap = 'round'
     c.lineJoin = 'round'
     c.beginPath()
@@ -273,21 +316,48 @@ const eraserController = (ctx: ToolContext): ToolController => {
     canvas.requestRenderAll()
   }
 
+  // Render a vector object into the raster backing at its canvas position, then it can be erased like
+  // any drawing. `obj.render` applies the object's own transform; the canvas viewportTransform is the
+  // identity (no zoom/pan) so object coords map 1:1 onto the 1200x800 backing.
+  const stampToBacking = (obj: fabric.FabricObject) => {
+    const c = rasterBacking.getContext('2d')
+    if (!c) return
+    c.save()
+    obj.render(c)
+    c.restore()
+    rasterImage.dirty = true
+  }
+
   return {
     onDown(opt) {
       const p = ctx.getPoint(opt)
-      erasing = { last: { x: p.x, y: p.y } }
+      erasing = { last: { x: p.x, y: p.y }, converted: false }
     },
     onMove(opt) {
       if (!erasing) return
       const p = ctx.getPoint(opt)
+      // Rub onto a vector outline → bake it into the raster first, then erase through it. Runs on move
+      // (not down) so a pure click that erases nothing never silently rasterizes a shape; rubbing
+      // across several shapes converts each as it's touched, top-most first.
+      const hit = findEraserConvertible(canvas.getObjects(), p, ERASER_RADIUS, rasterImage)
+      if (hit) {
+        stampToBacking(hit)
+        canvas.remove(hit)
+        erasing.converted = true
+      }
       eraseSegment(erasing.last, p)
       erasing.last = { x: p.x, y: p.y }
     },
     onUp() {
       if (!erasing) return
+      const { converted } = erasing
       erasing = null
-      ctx.commitRaster() // one history entry per stroke (App snapshots the pre-stroke state)
+      // One history entry per stroke. commitRaster snapshots the pre-stroke state — the OLD raster
+      // plus the OLD shapeLayers that still include any converted shape — so undo restores the intact
+      // vector shape and a clean raster together. When a shape was converted, sync the (now
+      // shape-removed) model with skipHistory so it doesn't push a second entry (mirrors scissor).
+      ctx.commitRaster()
+      if (converted) ctx.syncToLayers(true)
     },
   }
 }

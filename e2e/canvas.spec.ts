@@ -113,6 +113,36 @@ test('text typed then abandoned by a tool switch is committed (teardown-commit)'
   expect(await canvasPixels(page), 'committed text should be on the canvas').not.toBe(blank)
 })
 
+test('the eraser rasterizes a shape it touches and the whole gesture is one undo step', async ({ page }) => {
+  const { P } = mapper(await canvasBox(page))
+  const blank = await canvasPixels(page)
+
+  // Draw a vector shape.
+  await selectTool(page, 'Object Shapes')
+  await dragScene(page, P, [300, 220], [520, 420])
+  const drawn = await canvasPixels(page)
+  expect(drawn, 'shape should change the canvas').not.toBe(blank)
+
+  // Rub the eraser across the top edge (y≈220): the vector shape bakes into the raster and the edge
+  // is wiped — something the eraser could never do to a vector object before this feature.
+  await selectTool(page, 'Eraser')
+  await dragScene(page, P, [280, 220], [540, 220])
+  const erased = await canvasPixels(page)
+  expect(erased, 'erasing the edge should change the shape').not.toBe(drawn)
+
+  // The convert+erase is a SINGLE history entry: undo brings the whole vector shape back...
+  await page.click('button[title="Undo (Ctrl+Z)"]')
+  await page.waitForTimeout(250)
+  const undone = await canvasPixels(page)
+  expect(undone, 'undo should restore the shape, not blank').not.toBe(blank)
+  expect(undone, 'undo should differ from the erased state').not.toBe(erased)
+
+  // ...and redo re-applies the erase in one step.
+  await page.click('button[title="Redo (Ctrl+Shift+Z)"]')
+  await page.waitForTimeout(250)
+  expect(await canvasPixels(page), 'redo should re-apply the erase').not.toBe(undone)
+})
+
 test('the duplicate control clones the selected object', async ({ page }) => {
   const { s, P } = mapper(await canvasBox(page))
 
