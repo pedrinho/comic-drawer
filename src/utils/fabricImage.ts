@@ -20,6 +20,50 @@ export const IMAGE_DATA_KEY = 'imageData'
 const RAD_TO_DEG = 180 / Math.PI
 const DEG_TO_RAD = Math.PI / 180
 
+/** A freshly-pasted image is scaled to occupy at most this fraction of the canvas. */
+export const MAX_PASTE_FRACTION = 0.66
+
+/**
+ * Scale factor that fits a natural-size image within `maxFraction` of the canvas, preserving
+ * aspect ratio and never upscaling (a small image keeps its native size). Pure — the paste
+ * placement math, split out so it can be unit-tested without decoding an image.
+ */
+export const fitPasteScale = (
+  natWidth: number,
+  natHeight: number,
+  canvasWidth: number,
+  canvasHeight: number,
+  maxFraction = MAX_PASTE_FRACTION
+): number => {
+  const w = natWidth || 1
+  const h = natHeight || 1
+  return Math.min(1, (canvasWidth * maxFraction) / w, (canvasHeight * maxFraction) / h)
+}
+
+/**
+ * Build a fabric.FabricImage from a data URL (e.g. a pasted clipboard image), centered on the
+ * canvas and scaled to fit via `fitPasteScale`. The id + original data URL are stamped so it
+ * round-trips through `fabricImageToLayer` unchanged. Async — the browser decodes the data URL.
+ */
+export const createImageFromDataUrl = async (
+  dataUrl: string,
+  opts: { canvasWidth: number; canvasHeight: number; id: string }
+): Promise<fabric.FabricImage> => {
+  const img = await fabric.FabricImage.fromURL(dataUrl)
+  const scale = fitPasteScale(img.width || 1, img.height || 1, opts.canvasWidth, opts.canvasHeight)
+  img.set({
+    originX: 'center',
+    originY: 'center',
+    left: opts.canvasWidth / 2,
+    top: opts.canvasHeight / 2,
+    scaleX: scale,
+    scaleY: scale,
+    [IMAGE_ID_KEY]: opts.id,
+    [IMAGE_DATA_KEY]: dataUrl,
+  })
+  return img
+}
+
 /** Load an ImageObjectLayer as a fabric.FabricImage, sized/positioned to the layer bounds. */
 export const imageLayerToFabricImage = async (
   layer: ImageObjectLayer

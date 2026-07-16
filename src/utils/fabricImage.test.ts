@@ -3,6 +3,7 @@ import * as fabric from 'fabric'
 import {
   fabricImageToLayer,
   fabricObjectKind,
+  fitPasteScale,
   IMAGE_ID_KEY,
   IMAGE_DATA_KEY,
 } from './fabricImage'
@@ -33,6 +34,17 @@ describe('fabricImage conversion', () => {
     expect(layer.height).toBeCloseTo(100, 4) // 50 * scaleY
     expect(layer.x).toBeCloseTo(100, 4) // left - width/2
     expect(layer.y).toBeCloseTo(50, 4) // top - height/2
+  })
+
+  it('fits a pasted image to the canvas without upscaling', () => {
+    // Small image: kept at natural size (never upscaled).
+    expect(fitPasteScale(100, 80, 1200, 800)).toBe(1)
+    // Wide image wider than 66% of the canvas: scaled down by the width constraint.
+    expect(fitPasteScale(2400, 100, 1200, 800)).toBeCloseTo((1200 * 0.66) / 2400, 6)
+    // Tall image: scaled down by the height constraint.
+    expect(fitPasteScale(100, 1600, 1200, 800)).toBeCloseTo((800 * 0.66) / 1600, 6)
+    // Zero/degenerate dimensions don't divide by zero.
+    expect(fitPasteScale(0, 0, 1200, 800)).toBe(1)
   })
 
   it('discriminates object kinds for select-mode sync-back', () => {
