@@ -6,7 +6,9 @@ A web-based application for creating comics! Draw panels, add dialogue, and let 
 
 - ✍️ **Vector Pen**: Draw smooth freehand strokes (via Fabric's `PencilBrush`) that become
   real objects — select, move, resize, and rotate them
-- 🧽 **Eraser**: Wipe the raster layer clean
+- 🧽 **Eraser** (small / medium / large): rub out part of anything — drawings, shapes, text,
+  emoji, images, merged groups. Erased objects stay objects: move, resize, rotate, duplicate,
+  merge and un-merge them and the erased part goes along. Erasing something completely removes it
 - ⬡ **Polygon**: pick the number of sides (3–1000) with − / + or type it, with a live preview,
   then drag — 3 is a triangle, 4 a rectangle/square, lots of sides looks like a circle
 - ⭐ **Objects**: star, heart, arrow, cross, circle, diamond
@@ -48,7 +50,7 @@ Every tool is Fabric-native, so selection, move, resize, and rotation come for f
 carry their own on-canvas controls. The layer model (`ObjectLayer` / `TextLayer` + panel
 `ImageData`) remains the source of truth for **save/load** and **presentation**, and PDF export
 renders each panel through an offscreen Fabric `StaticCanvas` reusing the same converters — so
-the export matches the editor exactly. The migration deleted the legacy canvas and roughly
+the export matches the editor exactly (the presentation renders through the same path). The migration deleted the legacy canvas and roughly
 2,750 lines of hand-rolled selection/rendering machinery (`Canvas.tsx` shrank from ~3,745 to
 ~980 lines).
 

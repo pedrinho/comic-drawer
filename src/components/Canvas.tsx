@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { Tool, Shape, PenType, BalloonKind } from '../types/common'
+import { Tool, Shape, PenType, BalloonKind, EraserSize } from '../types/common'
 import { TextLayer, ObjectLayer } from '../types/layers'
 import { useFabricCanvas } from '../hooks/useFabricCanvas'
 import { useOverlaySizing } from '../hooks/useOverlaySizing'
@@ -11,6 +11,7 @@ interface CanvasProps {
   shape?: Shape
   polygonSides?: number
   penType?: PenType
+  eraserSize?: EraserSize
   color: string
   font: string
   fontSize: number
@@ -32,6 +33,7 @@ export default function Canvas({
   shape,
   polygonSides,
   penType,
+  eraserSize,
   color,
   font,
   fontSize,
@@ -60,6 +62,7 @@ export default function Canvas({
     shape,
     polygonSides,
     penType,
+    eraserSize,
     color,
     font,
     fontSize,

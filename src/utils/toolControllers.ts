@@ -4,8 +4,6 @@ import { shapeLayerToFabricObject } from './fabricShapes'
 import { textLayerToFabricIText } from './fabricText'
 import { balloonLayerToFabricObject } from './fabricBalloon'
 import { fabricObjectKind, IMAGE_ID_KEY, IMAGE_DATA_KEY } from './fabricImage'
-import { isChromeObject } from './fabricRaster'
-import { isFabricBalloon } from './fabricBalloon'
 import { floodFillImageData } from './floodFill'
 import { makeWhiteTransparent, imageDataToBase64 } from './canvasUtils'
 import { generateLayerId } from './id'
@@ -15,11 +13,12 @@ import { generateLayerId } from './id'
  *
  * Each interaction `Mode` that owns pointer behaviour resolves to one `ToolController`; the render
  * effect wires `mouse:down/move/up` straight to the active controller's methods and calls its
- * `teardown` on tool switch. Modes with no bespoke pointer behaviour (`select`, `pen`) resolve to
- * `null` — `select` lets Fabric handle picking/moving natively and `pen` uses the native brush.
+ * `teardown` on tool switch. Modes with no bespoke pointer behaviour (`select`, `pen`, `eraser`)
+ * resolve to `null` — `select` lets Fabric handle picking/moving natively, `pen` uses the native
+ * PencilBrush and `eraser` erase2d's EraserBrush (wired in `eraserTool.ts`).
  *
- * Controllers hold their own transient gesture state (the in-flight shape, eraser stroke, or
- * scissor marquee) in closures, so the effect no longer juggles it. Shared services — the canvas,
+ * Controllers hold their own transient gesture state (the in-flight shape or scissor marquee) in
+ * closures, so the effect no longer juggles it. Shared services — the canvas,
  * sync/commit callbacks, controls application, the size pill, pointer resolution — arrive via
  * `ToolContext`. Object-management (duplicate/delete/merge/ungroup) and `applyObjectControls`
  * itself remain owned by the effect (Phase 4 moves them out); controllers only receive
@@ -257,115 +256,6 @@ const fillController = (ctx: ToolContext): ToolController => {
 }
 
 /**
- * Top-most vector *outline* (a shape or pen path) whose bounding rect — inflated by `pad` — contains
- * `point`. Used by the eraser to decide which object to rasterize on touch. We inflate the bbox (rather
- * than use `containsPoint`) so rubbing a thin edge from *outside* the shape still triggers, and so the
- * test works uniformly for Polygon / Ellipse / Path. Text, images, groups, balloons and the raster
- * substrate/grid chrome are excluded — converting those to flat ink on a stray touch would be
- * destructive and surprising.
- */
-export const findEraserConvertible = (
-  objects: fabric.FabricObject[],
-  point: { x: number; y: number },
-  pad: number,
-  rasterImage: fabric.FabricImage
-): fabric.FabricObject | null => {
-  for (let i = objects.length - 1; i >= 0; i--) {
-    const o = objects[i]
-    if (!o || o === rasterImage || isChromeObject(o) || isFabricBalloon(o)) continue
-    const kind = fabricObjectKind(o)
-    if (kind !== 'shape' && kind !== 'path') continue
-    o.setCoords()
-    const b = o.getBoundingRect()
-    if (
-      point.x >= b.left - pad &&
-      point.x <= b.left + b.width + pad &&
-      point.y >= b.top - pad &&
-      point.y <= b.top + b.height + pad
-    ) {
-      return o
-    }
-  }
-  return null
-}
-
-/** Eraser stroke radius, in canvas units (lineWidth / 2). Also the convertible hit-test tolerance. */
-const ERASER_RADIUS = 10
-
-/**
- * Eraser: wipe a round segment out of the raster backing (destination-out) while dragging. When the
- * stroke touches a vector outline (a shape or pen path — see `findEraserConvertible`), that object is
- * first stamped into the raster backing as ink and removed from the overlay, so the eraser can then rub
- * out just part of it. This lets a child delete, say, the top side of a triangle and fill the rest.
- */
-const eraserController = (ctx: ToolContext): ToolController => {
-  const { canvas, rasterBacking, rasterImage } = ctx
-  let erasing: { last: { x: number; y: number }; converted: boolean } | null = null
-
-  const eraseSegment = (from: { x: number; y: number }, to: { x: number; y: number }) => {
-    const c = rasterBacking.getContext('2d')
-    if (!c) return
-    c.save()
-    c.globalCompositeOperation = 'destination-out'
-    c.lineWidth = ERASER_RADIUS * 2
-    c.lineCap = 'round'
-    c.lineJoin = 'round'
-    c.beginPath()
-    c.moveTo(from.x, from.y)
-    c.lineTo(to.x, to.y)
-    c.stroke()
-    c.restore()
-    rasterImage.dirty = true
-    canvas.requestRenderAll()
-  }
-
-  // Render a vector object into the raster backing at its canvas position, then it can be erased like
-  // any drawing. `obj.render` applies the object's own transform; the canvas viewportTransform is the
-  // identity (no zoom/pan) so object coords map 1:1 onto the 1200x800 backing.
-  const stampToBacking = (obj: fabric.FabricObject) => {
-    const c = rasterBacking.getContext('2d')
-    if (!c) return
-    c.save()
-    obj.render(c)
-    c.restore()
-    rasterImage.dirty = true
-  }
-
-  return {
-    onDown(opt) {
-      const p = ctx.getPoint(opt)
-      erasing = { last: { x: p.x, y: p.y }, converted: false }
-    },
-    onMove(opt) {
-      if (!erasing) return
-      const p = ctx.getPoint(opt)
-      // Rub onto a vector outline → bake it into the raster first, then erase through it. Runs on move
-      // (not down) so a pure click that erases nothing never silently rasterizes a shape; rubbing
-      // across several shapes converts each as it's touched, top-most first.
-      const hit = findEraserConvertible(canvas.getObjects(), p, ERASER_RADIUS, rasterImage)
-      if (hit) {
-        stampToBacking(hit)
-        canvas.remove(hit)
-        erasing.converted = true
-      }
-      eraseSegment(erasing.last, p)
-      erasing.last = { x: p.x, y: p.y }
-    },
-    onUp() {
-      if (!erasing) return
-      const { converted } = erasing
-      erasing = null
-      // One history entry per stroke. commitRaster snapshots the pre-stroke state — the OLD raster
-      // plus the OLD shapeLayers that still include any converted shape — so undo restores the intact
-      // vector shape and a clean raster together. When a shape was converted, sync the (now
-      // shape-removed) model with skipHistory so it doesn't push a second entry (mirrors scissor).
-      ctx.commitRaster()
-      if (converted) ctx.syncToLayers(true)
-    },
-  }
-}
-
-/**
  * Scissor: drag a marquee, then lift the enclosed raster pixels into a movable Fabric image
  * (leaving a hole behind) and switch to the select tool.
  */
@@ -452,8 +342,8 @@ const scissorController = (ctx: ToolContext): ToolController => {
 
 /**
  * Resolve the pointer strategy for the active `Mode`. Returns `null` for modes with no bespoke
- * pointer behaviour: `select` (Fabric handles picking/moving) and `pen` (native brush). `null`
- * (no Fabric-owned mode) also yields `null`.
+ * pointer behaviour: `select` (Fabric handles picking/moving), `pen` and `eraser` (native
+ * free-drawing brushes). `null` (no Fabric-owned mode) also yields `null`.
  */
 export const createToolController = (mode: Mode, ctx: ToolContext): ToolController | null => {
   switch (mode) {
@@ -465,12 +355,11 @@ export const createToolController = (mode: Mode, ctx: ToolContext): ToolControll
       return textController(ctx)
     case 'fill':
       return fillController(ctx)
-    case 'eraser':
-      return eraserController(ctx)
     case 'scissor':
       return scissorController(ctx)
     case 'select':
     case 'pen':
+    case 'eraser':
     default:
       return null
   }

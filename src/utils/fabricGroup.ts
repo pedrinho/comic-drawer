@@ -3,6 +3,8 @@ import { ObjectLayer, GroupObjectLayer } from '../types/layers'
 import { shapeLayerToFabricObject, fabricObjectToShapeLayer } from './fabricShapes'
 import { textLayerToFabricIText, fabricITextToTextLayer } from './fabricText'
 import { imageLayerToFabricImage, fabricImageToLayer, fabricObjectKind } from './fabricImage'
+import { pathLayerToFabricPath, fabricPathToLayer } from './fabricPath'
+import { applyErasures, erasuresOf } from './fabricErase'
 
 /**
  * Fabric.js migration — group ("merge") conversion layer.
@@ -10,8 +12,9 @@ import { imageLayerToFabricImage, fabricImageToLayer, fabricObjectKind } from '.
  * A `GroupObjectLayer` is several objects merged into one movable/duplicable unit. Children
  * are stored in GROUP-LOCAL coordinates (Fabric keeps a group's children relative to its
  * centre), and the group's own x/y/width/height/rotation give its absolute placement — so
- * the existing per-child converters can be reused directly. v1 children are shape/text/image
- * (no nested groups, no paths/balloons).
+ * the existing per-child converters can be reused directly. Children may be shapes, text, images,
+ * pen paths, or other groups (merging a group with something nests it); deprecated balloons are not
+ * supported as children.
  */
 
 export const GROUP_ID_KEY = 'groupId'
@@ -28,8 +31,12 @@ const childLayerToFabric = async (child: ObjectLayer, scale: number): Promise<fa
       return textLayerToFabricIText(child, scale)
     case 'image':
       return imageLayerToFabricImage(child)
+    case 'path':
+      return pathLayerToFabricPath(child)
+    case 'group':
+      return layerToFabricGroup(child, scale)
     default:
-      return null // path / balloon / nested group not supported as children in v1
+      return null // deprecated balloons are not supported as children
   }
 }
 
@@ -42,8 +49,12 @@ const fabricChildToLayer = (obj: fabric.FabricObject, scale: number): ObjectLaye
       return fabricImageToLayer(obj as fabric.FabricImage)
     case 'shape':
       return fabricObjectToShapeLayer(obj)
+    case 'path':
+      return fabricPathToLayer(obj as fabric.Path)
+    case 'group':
+      return fabricGroupToLayer(obj as fabric.Group, scale)
     default:
-      return null // nested group not supported in v1
+      return null
   }
 }
 
@@ -67,12 +78,13 @@ export const layerToFabricGroup = async (layer: GroupObjectLayer, scale: number)
     top: layer.y + layer.height / 2,
   })
   group.setCoords()
-  return group
+  return applyErasures(group, layer.erasures)
 }
 
 /** Read a fabric.Group back into a GroupObjectLayer. */
 export const fabricGroupToLayer = (group: fabric.Group, scale: number): GroupObjectLayer => {
-  const center = group.getCenterPoint()
+  // Centre in the PARENT plane: the canvas for a top-level group, the outer group when nested.
+  const center = group.getRelativeCenterPoint()
   const width = (group.width ?? 0) * (group.scaleX ?? 1)
   const height = (group.height ?? 0) * (group.scaleY ?? 1)
   const children = group
@@ -89,5 +101,6 @@ export const fabricGroupToLayer = (group: fabric.Group, scale: number): GroupObj
     height,
     rotation: (group.angle ?? 0) * DEG_TO_RAD,
     children,
+    ...erasuresOf(group),
   }
 }

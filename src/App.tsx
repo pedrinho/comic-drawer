@@ -8,7 +8,7 @@ import PanelLayoutModal from './components/PanelLayoutModal'
 import Presentation from './components/Presentation'
 import { TextLayer, ObjectLayer, isPathObjectLayer } from './types/layers'
 import { debugLog, debugError, debugWarn, cloneImageData, createBlankImageData } from './utils/canvasUtils'
-import { Tool, Shape, PenType, BalloonKind, PanelData, ComicFile, PanelState, PanelHistory } from './types/common'
+import { Tool, Shape, PenType, EraserSize, BalloonKind, PanelData, ComicFile, PanelState, PanelHistory } from './types/common'
 import { renderPanelToStaticCanvas } from './utils/exportPanel'
 import { serializeComic, deserializeComic } from './utils/comicFile'
 import { DEFAULT_POLYGON_SIDES } from './utils/fabricShapes'
@@ -23,6 +23,7 @@ function App() {
   // (mirroring the shape picker) can switch kinds without new plumbing.
   const [selectedBalloonKind] = useState<BalloonKind>('speech')
   const [selectedPenType, setSelectedPenType] = useState<PenType>('medium')
+  const [selectedEraserSize, setSelectedEraserSize] = useState<EraserSize>('medium')
   const [selectedColor, setSelectedColor] = useState<string>('#000000')
   const [selectedFont, setSelectedFont] = useState<string>('Arial')
   const [selectedFontSize, setSelectedFontSize] = useState<number>(24)
@@ -569,6 +570,8 @@ function App() {
           onPolygonSidesChange={setPolygonSides}
           selectedPenType={selectedPenType}
           onSelectPenType={setSelectedPenType}
+          selectedEraserSize={selectedEraserSize}
+          onSelectEraserSize={setSelectedEraserSize}
           font={selectedFont}
           onFontChange={setSelectedFont}
           fontSize={selectedFontSize}
@@ -595,6 +598,7 @@ function App() {
             polygonSides={polygonSides}
             balloonKind={selectedBalloonKind}
             penType={selectedPenType}
+            eraserSize={selectedEraserSize}
             color={selectedColor}
             font={selectedFont}
             fontSize={selectedFontSize}

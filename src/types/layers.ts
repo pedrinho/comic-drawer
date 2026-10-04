@@ -1,6 +1,18 @@
 import { Shape, BalloonKind } from './common'
 
 /**
+ * One eraser stroke that hides part of an object (see `utils/fabricErase.ts`). `d` is SVG path data
+ * in the stroke's own coordinates and `width` its round stroke width there; `matrix` places the
+ * stroke in the object's frame — the object's unrotated local plane at its current size, centred on
+ * the object's centre — so the hole moves, rotates and scales with the object.
+ */
+export interface EraseStroke {
+  d: string
+  width: number
+  matrix: [number, number, number, number, number, number]
+}
+
+/**
  * Base properties shared by all object layers
  */
 export interface BaseObjectLayer {
@@ -10,6 +22,8 @@ export interface BaseObjectLayer {
   width: number
   height: number
   rotation: number
+  /** Eraser strokes masking this object, oldest first. Absent when never erased. */
+  erasures?: EraseStroke[]
 }
 
 /**
