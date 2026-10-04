@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { GroupObjectLayer, ShapeObjectLayer, TextObjectLayer, migrateLayer, isGroupObjectLayer } from '../types/layers'
+import * as fabric from 'fabric'
+import { GroupObjectLayer, ShapeObjectLayer, TextObjectLayer, BalloonObjectLayer, migrateLayer, isGroupObjectLayer } from '../types/layers'
 import { layerToFabricGroup, fabricGroupToLayer } from './fabricGroup'
+import { balloonLayerToFabricObject, isFabricBalloon } from './fabricBalloon'
+import { shapeLayerToFabricObject } from './fabricShapes'
 
 const shapeChild = (id: string, x: number): ShapeObjectLayer => ({
   type: 'shape', id, shape: 'rectangle', x, y: -20, width: 40, height: 40,
@@ -40,5 +43,30 @@ describe('fabricGroup conversion', () => {
       expect(migrated.children).toHaveLength(1)
       expect(migrated.children[0].type).toBe('shape')
     }
+  })
+
+  it('keeps a merged speech balloon a balloon (it used to come back as a rectangle)', async () => {
+    const balloon: BalloonObjectLayer = {
+      type: 'balloon', id: 'b1', kind: 'speech', x: 100, y: 100, width: 160, height: 100, rotation: 0,
+      text: '', font: 'Arial', fontSize: 24, color: '#ff0000',
+    }
+    // Merge exactly as the ⊕ control does: a fabric.Group of the live canvas objects.
+    const merged = new fabric.Group(
+      [balloonLayerToFabricObject(balloon), shapeLayerToFabricObject(shapeChild('s1', 400))],
+      { originX: 'center', originY: 'center' }
+    )
+    const layer = fabricGroupToLayer(merged, 1)
+    const child = layer.children.find((c) => c.id === 'b1')
+    expect(child?.type).toBe('balloon')
+    expect((child as BalloonObjectLayer).kind).toBe('speech')
+    expect((child as BalloonObjectLayer).color).toBe('#ff0000')
+
+    // Rebuild (tool switch / undo / reload) → still a balloon, at the same place on screen.
+    const rebuilt = await layerToFabricGroup(layer, 1)
+    const before = merged.getObjects().find(isFabricBalloon)!.getCenterPoint()
+    const after = rebuilt.getObjects().find(isFabricBalloon)
+    expect(after).toBeDefined()
+    expect(after!.getCenterPoint().x).toBeCloseTo(before.x, 3)
+    expect(after!.getCenterPoint().y).toBeCloseTo(before.y, 3)
   })
 })
