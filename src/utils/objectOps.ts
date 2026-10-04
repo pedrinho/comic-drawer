@@ -7,6 +7,7 @@ import { layerToFabricGroup, fabricGroupToLayer, GROUP_ID_KEY } from './fabricGr
 import { pathLayerToFabricPath, fabricPathToLayer } from './fabricPath'
 import { balloonLayerToFabricObject, fabricBalloonToLayer, isFabricBalloon } from './fabricBalloon'
 import { isActiveSelection } from './fabricMeta'
+import { pushGroupEraseMaskToChildren } from './fabricErase'
 import { generateLayerId } from './id'
 
 /**
@@ -139,6 +140,7 @@ export const createObjectOps = (canvas: fabric.Canvas, deps: ObjectOpsDeps): Obj
 
   const ungroupObject = (obj?: fabric.FabricObject | null) => {
     if (!obj || !(obj instanceof fabric.Group)) return
+    pushGroupEraseMaskToChildren(obj) // the group's eraser holes move onto the pieces they cover
     const objs = obj.removeAll() // Fabric bakes children back to absolute canvas coords
     canvas.remove(obj)
     objs.forEach((o) => {

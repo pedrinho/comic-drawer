@@ -26,8 +26,11 @@ const CANVAS_H = 800
  * `scale = 1` matches the previous offscreen renderer: an offscreen canvas has no layout, so
  * the legacy renderer used the CSS font size directly, and `textLayerToFabricIText(l, 1)` does
  * the same.
+ *
+ * `multiplier` scales the output (1 → 1200x800); the presentation passes its on-screen scale ×
+ * devicePixelRatio so the slide stays crisp instead of upscaling a 1200x800 bitmap.
  */
-export const renderPanelToStaticCanvas = async (panel: PanelData): Promise<HTMLCanvasElement> => {
+export const renderPanelToStaticCanvas = async (panel: PanelData, multiplier = 1): Promise<HTMLCanvasElement> => {
   const el = document.createElement('canvas')
   const canvas = new fabric.StaticCanvas(el, {
     width: CANVAS_W,
@@ -60,7 +63,7 @@ export const renderPanelToStaticCanvas = async (panel: PanelData): Promise<HTMLC
   }
 
   canvas.renderAll()
-  const out = canvas.toCanvasElement(1)
+  const out = canvas.toCanvasElement(multiplier)
   canvas.dispose()
   return out
 }

@@ -1,5 +1,6 @@
 import * as fabric from 'fabric'
 import { PathObjectLayer } from '../types/layers'
+import { applyErasures, erasuresOf } from './fabricErase'
 
 /**
  * Fabric.js migration — path (freehand pen) conversion layer.
@@ -39,7 +40,7 @@ const anchorsFromPath = (path: any[]): Point[] => {
 export const pathLayerToFabricPath = (layer: PathObjectLayer): fabric.Path => {
   const pts = layer.points.length > 0 ? layer.points : [{ x: 0, y: 0 }]
   const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
-  return new fabric.Path(d, {
+  const path = new fabric.Path(d, {
     originX: 'center',
     originY: 'center',
     left: layer.x + layer.width / 2,
@@ -55,6 +56,7 @@ export const pathLayerToFabricPath = (layer: PathObjectLayer): fabric.Path => {
     fill: layer.fillColor ?? null,
     [PATH_ID_KEY]: layer.id,
   })
+  return applyErasures(path, layer.erasures)
 }
 
 /**
@@ -88,9 +90,11 @@ export const fabricPathToLayer = (obj: fabric.Path): PathObjectLayer => {
 
   const width = Math.max(maxX - minX, 1)
   const height = Math.max(maxY - minY, 1)
-  // pathOffset is the path bbox centre, so `rel` is centred on the object centre.
-  const center = typeof obj.getCenterPoint === 'function'
-    ? obj.getCenterPoint()
+  // pathOffset is the path bbox centre, so `rel` is centred on the object centre. The centre is
+  // taken in the PARENT plane: the canvas for a top-level path, the group for a merged child (whose
+  // layer is stored in group-local coordinates — see fabricGroup.ts).
+  const center = typeof obj.getRelativeCenterPoint === 'function'
+    ? obj.getRelativeCenterPoint()
     : { x: obj.left ?? 0, y: obj.top ?? 0 }
   const x = center.x - width / 2
   const y = center.y - height / 2
@@ -108,5 +112,6 @@ export const fabricPathToLayer = (obj: fabric.Path): PathObjectLayer => {
     strokeWidth: obj.strokeWidth ?? 2,
     fillColor: typeof obj.fill === 'string' ? obj.fill : null,
     points,
+    ...erasuresOf(obj),
   }
 }

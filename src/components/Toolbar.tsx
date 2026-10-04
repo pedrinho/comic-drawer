@@ -1,10 +1,11 @@
-import { Tool, Shape, PenType } from '../types/common'
+import { Tool, Shape, PenType, EraserSize } from '../types/common'
 import './Toolbar.css'
 import React, { useState, useEffect } from 'react'
 import ShapePicker, { OBJECT_SHAPES } from './ShapePicker'
 import PolygonPicker from './PolygonPicker'
 import { DEFAULT_POLYGON_SIDES } from '../utils/fabricShapes'
 import PenPicker from './PenPicker'
+import EraserPicker from './EraserPicker'
 import FontPicker from './FontPicker'
 import EmojiPicker from './EmojiPicker'
 
@@ -19,6 +20,8 @@ interface ToolbarProps {
   onPolygonSidesChange?: (sides: number) => void
   selectedPenType: PenType
   onSelectPenType: (penType: PenType) => void
+  selectedEraserSize?: EraserSize
+  onSelectEraserSize?: (size: EraserSize) => void
   font: string
   onFontChange: (font: string) => void
   fontSize: number
@@ -28,8 +31,9 @@ interface ToolbarProps {
   onSelectEmoji?: (emoji: string) => void
 }
 
-export default function Toolbar({ currentTool, onToolChange, color, onColorChange, selectedObject = 'star', onSelectObject, polygonSides = DEFAULT_POLYGON_SIDES, onPolygonSidesChange, selectedPenType, onSelectPenType, font, onFontChange, fontSize, onFontSizeChange, isTextEditing = false, selectedEmoji = '😀', onSelectEmoji }: ToolbarProps) {
+export default function Toolbar({ currentTool, onToolChange, color, onColorChange, selectedObject = 'star', onSelectObject, polygonSides = DEFAULT_POLYGON_SIDES, onPolygonSidesChange, selectedPenType, onSelectPenType, selectedEraserSize = 'medium', onSelectEraserSize, font, onFontChange, fontSize, onFontSizeChange, isTextEditing = false, selectedEmoji = '😀', onSelectEmoji }: ToolbarProps) {
   const [showPenSubmenu, setShowPenSubmenu] = useState(false)
+  const [showEraserSubmenu, setShowEraserSubmenu] = useState(false)
   const [showShapesSubmenu, setShowShapesSubmenu] = useState(false)
   const [showObjectsSubmenu, setShowObjectsSubmenu] = useState(false)
   const [showTextSubmenu, setShowTextSubmenu] = useState(false)
@@ -52,6 +56,9 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
   useEffect(() => {
     if (currentTool !== 'pen') {
       setShowPenSubmenu(false)
+    }
+    if (currentTool !== 'eraser') {
+      setShowEraserSubmenu(false)
     }
     if (currentTool !== 'objectShapes') {
       setShowShapesSubmenu(false)
@@ -97,6 +104,17 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     }
   }
 
+  const handleEraserButtonClick = () => {
+    if (currentTool === 'eraser') {
+      setShowEraserSubmenu(!showEraserSubmenu)
+    } else {
+      onToolChange('eraser')
+      setShowEraserSubmenu(true)
+    }
+    setShowPenSubmenu(false)
+    setShowShapesSubmenu(false)
+  }
+
   const handleTextButtonClick = () => {
     if (currentTool === 'text') {
       // Toggle submenu
@@ -130,6 +148,7 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
   const handleOtherToolClick = (tool: Tool) => {
     onToolChange(tool)
     setShowPenSubmenu(false)
+    setShowEraserSubmenu(false)
     setShowShapesSubmenu(false)
     setShowObjectsSubmenu(false)
     setShowTextSubmenu(false)
@@ -145,13 +164,15 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
             onClick={
               tool.name === 'pen'
                 ? handlePenButtonClick
-                : tool.name === 'objectShapes' || tool.name === 'objects'
-                  ? () => handleShapeToolClick(tool.name as 'objectShapes' | 'objects')
-                  : tool.name === 'text'
-                    ? handleTextButtonClick
-                    : tool.name === 'emoji'
-                      ? handleEmojiButtonClick
-                      : () => handleOtherToolClick(tool.name)
+                : tool.name === 'eraser'
+                  ? handleEraserButtonClick
+                  : tool.name === 'objectShapes' || tool.name === 'objects'
+                    ? () => handleShapeToolClick(tool.name as 'objectShapes' | 'objects')
+                    : tool.name === 'text'
+                      ? handleTextButtonClick
+                      : tool.name === 'emoji'
+                        ? handleEmojiButtonClick
+                        : () => handleOtherToolClick(tool.name)
             }
             title={tool.label}
           >
@@ -163,6 +184,14 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
               isOpen={true}
               selectedPenType={selectedPenType}
               onSelectPenType={onSelectPenType}
+            />
+          )}
+
+          {tool.name === 'eraser' && currentTool === 'eraser' && showEraserSubmenu && onSelectEraserSize && (
+            <EraserPicker
+              isOpen={true}
+              selectedSize={selectedEraserSize}
+              onSelectSize={onSelectEraserSize}
             />
           )}
 

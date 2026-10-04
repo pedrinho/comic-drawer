@@ -1,5 +1,6 @@
 import * as fabric from 'fabric'
 import { TextObjectLayer } from '../types/layers'
+import { applyErasures, erasuresOf } from './fabricErase'
 
 /**
  * Fabric.js migration — text conversion layer.
@@ -22,7 +23,7 @@ const DEG_TO_RAD = Math.PI / 180
 /** Build a fabric.IText from a TextObjectLayer. Uses a centered origin so rotation matches. */
 export const textLayerToFabricIText = (layer: TextObjectLayer, scale: number): fabric.IText => {
   const s = scale || 1
-  return new fabric.IText(layer.text, {
+  const text = new fabric.IText(layer.text, {
     originX: 'center',
     originY: 'center',
     left: layer.x + layer.width / 2,
@@ -33,6 +34,7 @@ export const textLayerToFabricIText = (layer: TextObjectLayer, scale: number): f
     fill: layer.color,
     [TEXT_ID_KEY]: layer.id,
   })
+  return applyErasures(text, layer.erasures)
 }
 
 /** Read a fabric.IText back into a TextObjectLayer. */
@@ -58,5 +60,6 @@ export const fabricITextToTextLayer = (obj: fabric.IText, scale: number): TextOb
     font: typeof obj.fontFamily === 'string' ? obj.fontFamily : 'Arial',
     fontSize: effectiveFontSize * s, // convert canvas-internal units back to CSS pixels
     color: typeof obj.fill === 'string' ? obj.fill : '#000000',
+    ...erasuresOf(obj),
   }
 }

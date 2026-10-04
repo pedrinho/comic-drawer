@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { PanelData } from '../types/common'
-import { ShapeLayer, TextLayer, PathObjectLayer, isPathObjectLayer, isShapeObjectLayer } from '../types/layers'
-import { traceShapePath } from '../utils/canvasUtils'
+import { renderPanelToStaticCanvas } from '../utils/exportPanel'
 import './Presentation.css'
 
 interface PresentationProps {
@@ -10,70 +9,6 @@ interface PresentationProps {
   onNext: () => void
   onPrevious: () => void
   onClose: () => void
-}
-
-const renderShapeLayerOnContext = (ctx: CanvasRenderingContext2D, layer: ShapeLayer) => {
-  const { x, y, width, height, rotation, strokeColor, strokeWidth, fillColor, shape } = layer
-  const centerX = x + width / 2
-  const centerY = y + height / 2
-  ctx.save()
-  ctx.translate(centerX, centerY)
-  ctx.rotate(rotation)
-  traceShapePath(ctx, shape, -width / 2, -height / 2, width / 2, height / 2, layer.sides)
-  if (fillColor) {
-    ctx.fillStyle = fillColor
-    ctx.fill()
-  }
-  ctx.strokeStyle = strokeColor
-  ctx.lineWidth = strokeWidth
-  ctx.stroke()
-  ctx.restore()
-}
-
-const renderPathLayerOnContext = (ctx: CanvasRenderingContext2D, layer: PathObjectLayer) => {
-  const { x, y, width, height, rotation, strokeColor, strokeWidth, points } = layer
-  const centerX = x + width / 2
-  const centerY = y + height / 2
-
-  ctx.save()
-  ctx.translate(centerX, centerY)
-  ctx.rotate(rotation)
-
-  ctx.strokeStyle = strokeColor
-  ctx.lineWidth = strokeWidth
-  ctx.beginPath()
-
-  if (points.length > 0 && points[0]) {
-    // Offset points to center them around (0,0) in the rotated context
-    const offsetX = -width / 2
-    const offsetY = -height / 2
-
-    ctx.moveTo(points[0].x + offsetX, points[0].y + offsetY)
-    for (let i = 1; i < points.length; i++) {
-      const p = points[i]
-      if (p) ctx.lineTo(p.x + offsetX, p.y + offsetY)
-    }
-  }
-
-  ctx.stroke()
-  ctx.restore()
-}
-
-const renderTextLayerOnContext = (ctx: CanvasRenderingContext2D, layer: TextLayer) => {
-  const { x, y, width, height, rotation, text, font, fontSize, color } = layer
-  const centerX = x + width / 2
-  const centerY = y + height / 2
-
-  // In presentation mode, the context is already scaled, so we use fontSize directly
-  ctx.save()
-  ctx.translate(centerX, centerY)
-  ctx.rotate(rotation)
-  ctx.fillStyle = color
-  ctx.font = `${fontSize}px ${font}`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(text, 0, 0)
-  ctx.restore()
 }
 
 export default function Presentation({ panels, currentIndex, onNext, onPrevious, onClose }: PresentationProps) {
@@ -89,13 +24,12 @@ export default function Presentation({ panels, currentIndex, onNext, onPrevious,
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    // Set canvas size to match container
-    // Account for padding when calculating available space
     const container = canvas.parentElement
     if (!container) return
 
-    // Use requestAnimationFrame to ensure layout is calculated
-    requestAnimationFrame(() => {
+    let cancelled = false // a newer slide (or closing) supersedes this async render
+
+    requestAnimationFrame(async () => {
       const containerRect = container.getBoundingClientRect()
       const containerStyle = window.getComputedStyle(container)
       const paddingTop = parseFloat(containerStyle.paddingTop) || 0
@@ -107,124 +41,37 @@ export default function Presentation({ panels, currentIndex, onNext, onPrevious,
       const availableWidth = containerRect.width - paddingLeft - paddingRight
       const availableHeight = containerRect.height - paddingTop - paddingBottom
 
-      // Set canvas size to match container (accounting for device pixel ratio for crisp rendering)
+      // Fit the 1200x800 panel inside the available space, preserving its aspect ratio, centred.
+      const scale = Math.min(availableWidth / 1200, availableHeight / 800)
+      const drawWidth = 1200 * scale
+      const drawHeight = 800 * scale
+      const offsetX = paddingLeft + (availableWidth - drawWidth) / 2
+      const offsetY = paddingTop + (availableHeight - drawHeight) / 2
       const dpr = window.devicePixelRatio || 1
+
+      // The panel (raster, grid and every object — eraser masks, images, groups included) renders
+      // through the same Fabric StaticCanvas path as PDF export, so the slide matches the editor.
+      // Rendered at on-screen resolution so it stays crisp.
+      let slide: HTMLCanvasElement | null = null
+      try {
+        slide = await renderPanelToStaticCanvas(panel, Math.max(scale * dpr, 0.01))
+      } catch {
+        slide = null
+      }
+      if (cancelled) return
+
+      // Size the canvas to the container (device pixel ratio for crisp rendering), white ground.
       canvas.width = containerRect.width * dpr
       canvas.height = containerRect.height * dpr
-      ctx.scale(dpr, dpr)
-
-      // Adjust available dimensions for device pixel ratio
-      const scaledAvailableWidth = availableWidth
-      const scaledAvailableHeight = availableHeight
-
-      // Fill with white background
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       ctx.fillStyle = 'white'
       ctx.fillRect(0, 0, containerRect.width, containerRect.height)
-
-      // Calculate scale to fit panel (1200x800) in canvas while maintaining aspect ratio
-      // Ensure the entire panel fits - use the smaller scale to guarantee everything is visible
-      let drawWidth: number
-      let drawHeight: number
-      let offsetX: number
-      let offsetY: number
-
-      // Calculate scale factors for both dimensions using available space
-      const scaleToFitWidth = scaledAvailableWidth / 1200
-      const scaleToFitHeight = scaledAvailableHeight / 800
-
-      // Use the smaller scale to ensure the entire panel fits (both width and height)
-      const scale = Math.min(scaleToFitWidth, scaleToFitHeight)
-
-      drawWidth = 1200 * scale
-      drawHeight = 800 * scale
-
-      // Center in the available space (accounting for padding)
-      offsetX = paddingLeft + (scaledAvailableWidth - drawWidth) / 2
-      offsetY = paddingTop + (scaledAvailableHeight - drawHeight) / 2
-
-      // Scale context to fit panel
-      const scaleX = drawWidth / 1200
-      const scaleY = drawHeight / 800
-      ctx.save()
-      ctx.translate(offsetX, offsetY)
-      ctx.scale(scaleX, scaleY)
-
-      // Draw panel data if available
-      if (panel.data) {
-        // Create a temporary canvas to hold the ImageData
-        const tempCanvas = document.createElement('canvas')
-        tempCanvas.width = 1200
-        tempCanvas.height = 800
-        const tempCtx = tempCanvas.getContext('2d')
-        if (tempCtx) {
-          tempCtx.putImageData(panel.data, 0, 0)
-          // Draw the temporary canvas onto the main canvas
-          // drawImage respects the current transformation matrix (scale and translate)
-          ctx.drawImage(tempCanvas, 0, 0)
-        }
-      }
-
-      ctx.restore() // Restore before drawing grid so we can use screen-space coordinates
-
-      // Draw grid in screen space with fixed line width
-      ctx.save()
-      ctx.strokeStyle = '#000000'
-      ctx.lineWidth = 3 // Fixed pixel width in screen space
-
-      const totalRows = panel.layout.rows
-      const gutter = 12 // Space between panels (and around edges)
-
-      for (let row = 0; row < totalRows; row++) {
-        const columnsInRow = panel.layout.columns[row] || 1
-
-        // Calculate spacing: gutter on each side + gutters between cells
-        const totalVerticalGutters = gutter * 2 + (totalRows - 1) * gutter
-        const totalHorizontalGutters = gutter * 2 + (columnsInRow - 1) * gutter
-        const panelHeight = (800 - totalVerticalGutters) / totalRows
-        const panelWidth = (1200 - totalHorizontalGutters) / columnsInRow
-
-        // Convert to screen coordinates
-        let currentX = offsetX + gutter * scaleX
-        const currentY = offsetY + (gutter + (row * (panelHeight + gutter))) * scaleY
-        const scaledPanelWidth = panelWidth * scaleX
-        const scaledPanelHeight = panelHeight * scaleY
-        const scaledGutter = gutter * scaleX
-
-        // Draw rectangle for each cell in the row
-        for (let col = 0; col < columnsInRow; col++) {
-          ctx.beginPath()
-          ctx.rect(currentX, currentY, scaledPanelWidth, scaledPanelHeight)
-          ctx.stroke()
-          currentX += scaledPanelWidth + scaledGutter
-        }
-      }
-      ctx.restore()
-
-      // Re-apply scale for shape and text layers
-      ctx.save()
-      ctx.translate(offsetX, offsetY)
-      ctx.scale(scaleX, scaleY)
-
-      // Draw shape layers
-      if (panel.shapeLayers && panel.shapeLayers.length > 0) {
-        panel.shapeLayers.forEach((layer) => {
-          if (isPathObjectLayer(layer)) {
-            renderPathLayerOnContext(ctx, layer)
-          } else if (isShapeObjectLayer(layer)) {
-            renderShapeLayerOnContext(ctx, layer)
-          }
-        })
-      }
-
-      // Draw text layers
-      if (panel.textLayers && panel.textLayers.length > 0) {
-        panel.textLayers.forEach((layer) => {
-          renderTextLayerOnContext(ctx, layer)
-        })
-      }
-
-      ctx.restore()
+      if (slide) ctx.drawImage(slide, offsetX, offsetY, drawWidth, drawHeight)
     })
+
+    return () => {
+      cancelled = true
+    }
   }, [panels, currentIndex])
 
   // Handle keyboard navigation

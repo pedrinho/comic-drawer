@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, MutableRefObject, RefObject } from 'react'
 import * as fabric from 'fabric'
-import { Tool, Shape, PenType, BalloonKind } from '../types/common'
+import { Tool, Shape, PenType, BalloonKind, EraserSize } from '../types/common'
 import { TextLayer, ObjectLayer } from '../types/layers'
 import { toolToMode } from '../utils/toolMode'
 import { debugLog } from '../utils/canvasUtils'
@@ -15,6 +15,8 @@ import { fitOverlay } from '../utils/overlayFit'
 import { generateLayerId } from '../utils/id'
 import { createImageFromDataUrl, IMAGE_ID_KEY } from '../utils/fabricImage'
 import { DEFAULT_POLYGON_SIDES } from '../utils/fabricShapes'
+import { installEraser, ERASER_WIDTHS } from '../utils/eraserTool'
+import { fitEraseMask } from '../utils/fabricErase'
 
 const getPenWidth = (penType?: PenType): number => {
   if (!penType) return 2
@@ -34,6 +36,7 @@ export interface CanvasControllerParams {
   shape?: Shape
   polygonSides?: number
   penType?: PenType
+  eraserSize?: EraserSize
   color: string
   font: string
   fontSize: number
@@ -78,6 +81,7 @@ export const useCanvasController = (params: CanvasControllerParams) => {
     shape,
     polygonSides,
     penType,
+    eraserSize,
     color,
     font,
     fontSize,
@@ -135,7 +139,8 @@ export const useCanvasController = (params: CanvasControllerParams) => {
   // text/emoji → text, select → all object types — those objects are created, selected,
   // moved, resized and rotated on the Fabric overlay canvas (which gives us all of that
   // machinery for free), then synced back into the layer model so save/load and the rest of
-  // the app keep working. The raster tools (pen/eraser/fill/scissor) paint on the raster backing.
+  // the app keep working. Fill/scissor paint on the raster backing; the eraser masks objects (see
+  // utils/fabricErase.ts) and wipes raster pixels.
   useEffect(() => {
     const canvas = fabricCanvasRef.current
     if (!canvas) return
@@ -170,8 +175,9 @@ export const useCanvasController = (params: CanvasControllerParams) => {
     // select allows picking/moving existing objects; creation modes disable rubber-band so
     // an empty-canvas drag/click creates a new object instead of starting a selection box.
     canvas.selection = mode === 'select'
-    // Pen draws with a native brush; every other mode has drawing off.
-    canvas.isDrawingMode = mode === 'pen'
+    // Pen and eraser draw with native free-drawing brushes (the eraser's is installed further down,
+    // once the raster handles exist); every other mode has drawing off.
+    canvas.isDrawingMode = mode === 'pen' || mode === 'eraser'
     if (mode === 'pen') {
       const brush = new fabric.PencilBrush(canvas)
       brush.color = currentColor
@@ -182,7 +188,7 @@ export const useCanvasController = (params: CanvasControllerParams) => {
     // Single canvas: the overlay renders the WHOLE scene — white page + raster substrate + grid
     // (chrome, at the back) + every vector object on top. Interactivity is gated per-mode by
     // applyObjectControls; the raster tools (eraser / fill fallback / scissor) paint on
-    // `rasterBacking` and re-render `rasterImage`.
+    // `rasterBacking` and re-render `rasterImage` (the eraser also masks the objects it crosses).
     // Load from the render-synced refs (== current props, plus any value the cleanup just wrote
     // when committing an in-progress text edit). shapeLayers/textLayers stay OUT of the effect deps
     // so our own live edits don't trigger a rebuild that clobbers the active selection; external
@@ -258,6 +264,20 @@ export const useCanvasController = (params: CanvasControllerParams) => {
     // Push the current raster backing back into panelData (App snapshots history + re-renders).
     const commitRaster = () => onCanvasChange(backingToImageData(rasterBacking))
 
+    // Eraser: erase2d's brush with our commit (per-object persisted masks + real raster erase).
+    const disposeEraser =
+      mode === 'eraser'
+        ? installEraser({
+            canvas,
+            width: ERASER_WIDTHS[eraserSize ?? 'medium'],
+            displayScale: scale,
+            rasterImage,
+            rasterBacking,
+            commitRaster,
+            syncToLayers,
+          })
+        : null
+
     // Resolve the per-tool pointer strategy and wire the raw Fabric pointer events to it. Modes
     // with no bespoke pointer behaviour — `select` (Fabric handles picking/moving) and `pen`
     // (native brush) — resolve to null, so the wrappers below no-op. The controller owns its own
@@ -294,6 +314,10 @@ export const useCanvasController = (params: CanvasControllerParams) => {
     }
 
     const onModified = () => syncToLayers(false)
+
+    // Keep eraser masks fitted to their objects — an erased text object changes its own size while
+    // being typed into (fitEraseMask re-anchors its holes); a no-op for everything else.
+    const onBeforeRender = () => canvas.getObjects().forEach(fitEraseMask)
 
     // Resizing an existing object via its corner handles: show the live "W × H" pill.
     // getScaledWidth/Height give the object's own size; getBoundingRect gives placement.
@@ -426,6 +450,7 @@ export const useCanvasController = (params: CanvasControllerParams) => {
     canvas.on('selection:created', onSelection)
     canvas.on('selection:updated', onSelection)
     canvas.on('object:added', onObjectAdded)
+    canvas.on('before:render', onBeforeRender)
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('paste', onPaste)
     window.addEventListener('resize', sizeOverlay)
@@ -443,6 +468,8 @@ export const useCanvasController = (params: CanvasControllerParams) => {
       canvas.off('selection:created', onSelection)
       canvas.off('selection:updated', onSelection)
       canvas.off('object:added', onObjectAdded)
+      canvas.off('before:render', onBeforeRender)
+      disposeEraser?.()
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('paste', onPaste)
       window.removeEventListener('resize', sizeOverlay)
@@ -462,5 +489,5 @@ export const useCanvasController = (params: CanvasControllerParams) => {
       canvas.requestRenderAll()
       fabricOwnedRef.current = new Set()
     }
-  }, [tool, shape, polygonSides, balloonKind, color, penType, font, fontSize, emoji, layout, panelData, updateShapeLayers, updateTextLayers])
+  }, [tool, shape, polygonSides, balloonKind, color, penType, eraserSize, font, fontSize, emoji, layout, panelData, updateShapeLayers, updateTextLayers])
 }

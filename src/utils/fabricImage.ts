@@ -2,6 +2,7 @@ import * as fabric from 'fabric'
 import { ImageObjectLayer } from '../types/layers'
 import { PATH_ID_KEY } from './fabricPath'
 import { SHAPE_KIND_KEY } from './fabricShapes'
+import { applyErasures, erasuresOf } from './fabricErase'
 
 /**
  * Fabric.js migration — image conversion layer.
@@ -82,7 +83,7 @@ export const imageLayerToFabricImage = async (
     [IMAGE_ID_KEY]: layer.id,
     [IMAGE_DATA_KEY]: layer.data,
   })
-  return img
+  return applyErasures(img, layer.erasures)
 }
 
 /** Read a fabric.FabricImage back into an ImageObjectLayer. */
@@ -105,6 +106,7 @@ export const fabricImageToLayer = (obj: fabric.FabricImage): ImageObjectLayer =>
     height,
     rotation: (obj.angle ?? 0) * DEG_TO_RAD,
     data,
+    ...erasuresOf(obj),
   }
 }
 

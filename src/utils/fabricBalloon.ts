@@ -1,6 +1,7 @@
 import * as fabric from 'fabric'
 import { BalloonKind } from '../types/common'
 import { BalloonObjectLayer } from '../types/layers'
+import { applyErasures, erasuresOf } from './fabricErase'
 
 /**
  * Fabric.js balloon (speech-bubble) conversion layer.
@@ -96,7 +97,7 @@ export const balloonLayerToFabricObject = (layer: BalloonObjectLayer): fabric.Pa
     [BALLOON_META_KEY]: { text: layer.text ?? '', font: layer.font, fontSize: layer.fontSize },
   })
   path.setCoords()
-  return path
+  return applyErasures(path, layer.erasures)
 }
 
 /** True if a Fabric object is a balloon bubble. */
@@ -130,5 +131,6 @@ export const fabricBalloonToLayer = (obj: fabric.Path): BalloonObjectLayer => {
     font: meta.font ?? 'Arial',
     fontSize: meta.fontSize ?? 24,
     color: typeof obj.stroke === 'string' ? obj.stroke : '#000000',
+    ...erasuresOf(obj),
   }
 }

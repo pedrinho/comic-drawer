@@ -70,7 +70,15 @@ from ~3745 to ~994 lines.
 - [x] **raster substrate + grid** — the per-panel `panelData` bitmap is a bottom
   `fabric.Image` over an offscreen backing canvas, and the grid is non-interactive
   `fabric.Rect`s (`src/utils/fabricRaster.ts`, tagged chrome, excluded from sync).
-- [x] **eraser** — `destination-out` on the raster backing; one history entry per stroke.
+- [x] **eraser** — erase2d's `EraserBrush` (`@erase2d/fabric`, by Fabric's maintainer) as a
+  free-drawing brush, committed by us (`src/utils/eraserTool.ts`): raster pixels are wiped
+  (`destination-out` on the backing) and every object the stroke crosses gets it in a per-object
+  mask — an erase2d `ClippingGroup` as its `clipPath` — so it stays a movable object. The masks are
+  persisted in the layer model as `erasures` (`src/utils/fabricErase.ts`) in the object's *frame*
+  (scaled, unrotated, centred local plane) because the converters rebuild objects at a different
+  scale than they were edited at; fully-erased objects are deleted; ungroup hands a group's
+  strokes to its children; one history entry per stroke. (Replaced the earlier approach that baked
+  touched shapes/paths into the raster, which made them immovable.)
 - [x] **fill** — vector-shape recolor OR a composite-snapshot flood stamped onto the backing
   (respects ink/grid/shape bounds).
 - [x] **scissor** — marquee cuts the backing region into a `fabric.Image` (built synchronously
@@ -85,7 +93,7 @@ from ~3745 to ~994 lines.
   helpers, legacy effects/refs) are DELETED. Overlay sizing re-anchored to the container.
 - [x] **export** — rendered through a Fabric `StaticCanvas` reusing the same converters
   (`src/utils/exportPanel.ts`), so PDF matches the editor. Layer model stays the persistence
-  source of truth; `Presentation.tsx` still renders from it.
+  source of truth; `Presentation.tsx` renders through the same `renderPanelToStaticCanvas`.
 - [x] **undo/redo** — fixed for the single-canvas model: one history entry per action, saves
   moved OUT of the `setPanels` updaters (StrictMode-safe, `panelsRef`), model-aware cleanup
   that never clobbers a restored model.

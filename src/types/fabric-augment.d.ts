@@ -35,5 +35,9 @@ declare module 'fabric' {
     // chrome (raster substrate + grid rects)
     isRaster?: boolean
     isGrid?: boolean
+    // eraser (@erase2d/fabric): whether the EraserBrush may erase this object
+    erasable?: boolean | 'deep'
+    // eraser mask: the owner's width/height the mask was last fitted to (see fabricErase.ts)
+    maskOwnerSize?: { w: number; h: number }
   }
 }

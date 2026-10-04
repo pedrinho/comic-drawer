@@ -1,4 +1,5 @@
 import * as fabric from 'fabric'
+import { applyErasures, erasuresOf } from './fabricErase'
 import { Shape } from '../types/common'
 import { ShapeObjectLayer } from '../types/layers'
 
@@ -203,7 +204,10 @@ const commonProps = (layer: ShapeObjectLayer): Partial<fabric.FabricObject> => (
  * id and shape kind as custom props so it can be round-tripped back via
  * `fabricObjectToShapeLayer`.
  */
-export const shapeLayerToFabricObject = (layer: ShapeObjectLayer): fabric.FabricObject => {
+export const shapeLayerToFabricObject = (layer: ShapeObjectLayer): fabric.FabricObject =>
+  applyErasures(buildShapeObject(layer), layer.erasures)
+
+const buildShapeObject = (layer: ShapeObjectLayer): fabric.FabricObject => {
   const { shape, width, height } = layer
   const base = commonProps(layer)
   const meta = {
@@ -274,5 +278,6 @@ export const fabricObjectToShapeLayer = (obj: fabric.FabricObject): ShapeObjectL
     strokeColor: typeof obj.stroke === 'string' ? obj.stroke : '#000000',
     strokeWidth: obj.strokeWidth ?? 2,
     fillColor,
+    ...erasuresOf(obj),
   }
 }
