@@ -4,6 +4,7 @@ import { shapeLayerToFabricObject, fabricObjectToShapeLayer } from './fabricShap
 import { textLayerToFabricIText, fabricITextToTextLayer } from './fabricText'
 import { imageLayerToFabricImage, fabricImageToLayer, fabricObjectKind } from './fabricImage'
 import { pathLayerToFabricPath, fabricPathToLayer } from './fabricPath'
+import { balloonLayerToFabricObject, fabricBalloonToLayer, isFabricBalloon } from './fabricBalloon'
 import { applyErasures, erasuresOf } from './fabricErase'
 
 /**
@@ -13,8 +14,7 @@ import { applyErasures, erasuresOf } from './fabricErase'
  * are stored in GROUP-LOCAL coordinates (Fabric keeps a group's children relative to its
  * centre), and the group's own x/y/width/height/rotation give its absolute placement — so
  * the existing per-child converters can be reused directly. Children may be shapes, text, images,
- * pen paths, or other groups (merging a group with something nests it); deprecated balloons are not
- * supported as children.
+ * pen paths, speech balloons, or other groups (merging a group with something nests it).
  */
 
 export const GROUP_ID_KEY = 'groupId'
@@ -35,13 +35,18 @@ const childLayerToFabric = async (child: ObjectLayer, scale: number): Promise<fa
       return pathLayerToFabricPath(child)
     case 'group':
       return layerToFabricGroup(child, scale)
+    case 'balloon':
+      return balloonLayerToFabricObject(child)
     default:
-      return null // deprecated balloons are not supported as children
+      return null
   }
 }
 
 /** grouped fabric child → child layer (local coordinates). */
 const fabricChildToLayer = (obj: fabric.FabricObject, scale: number): ObjectLayer | null => {
+  // A balloon is a fabric.Path that fabricObjectKind reads as a plain shape (→ a rectangle), so
+  // route it through its own converter first — as canvasObjectsToLayers and duplicate do.
+  if (isFabricBalloon(obj)) return fabricBalloonToLayer(obj as fabric.Path)
   switch (fabricObjectKind(obj)) {
     case 'text':
       return fabricITextToTextLayer(obj as fabric.IText, scale)

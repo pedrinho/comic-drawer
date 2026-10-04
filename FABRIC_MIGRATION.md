@@ -1,106 +1,119 @@
-# Fabric.js Migration — Status & TODO
+# Fabric.js Migration — Complete
 
-Migrating the canvas core from the hand-rolled HTML5 Canvas 2D implementation to
-[Fabric.js](http://fabricjs.com/). Strategy: **incremental, one tool per commit**, keeping
-the legacy canvas working alongside a Fabric overlay until every tool is ported.
+The canvas core was migrated from a hand-rolled HTML5 Canvas 2D implementation to
+[Fabric.js](http://fabricjs.com/), incrementally, one tool per commit. It ended as a **single
+Fabric canvas** that renders the whole scene and owns every tool. The layer model
+(`ObjectLayer` / `TextLayer` in `src/types/layers.ts` + each panel's raster `ImageData`) stays the
+source of truth for save/load, undo/redo, PDF export and the presentation.
 
-## Architecture (how the overlay works today)
+## Architecture (current)
 
-- The Fabric canvas is an overlay (`fabricRef`) sized to match the legacy canvas.
-- While a **Fabric-owned tool** is active, the overlay becomes the interactive top layer
-  (`zIndex`/`pointerEvents` toggled by `tool` in `Canvas.tsx`), the owned layer type is
-  loaded as Fabric objects, and the legacy canvas stops drawing that type
-  (`shapesOnFabricRef` / `textOnFabricRef`). On tool change the objects are synced back into
-  the layer model (`shapeLayers` / `textLayers`) so save/load, undo/redo and the `select`
-  tool keep working unchanged.
-- Conversion layers live in `src/utils/`: `fabricShapes.ts`, `fabricText.ts`.
-- The generalized overlay effect in `Canvas.tsx` drives one `mode` at a time
-  (`'shape' | 'text' | null`); adding a tool = add a mode branch + a conversion module.
+- **Component → hooks.** `src/components/Canvas.tsx` (~100 lines) wires three hooks:
+  `useFabricCanvas` (creates the `fabric.Canvas`), `useOverlaySizing` (fits it to its container at
+  3:2 via `fitOverlay`; the internal resolution stays 1200×800) and `useCanvasController`.
+- **One atomic effect.** `src/hooks/useCanvasController.ts` rebuilds the scene from the model on
+  every tool- or model-driven change (`buildScene` in `fabricScene.ts`), syncs edits back
+  (`canvasObjectsToLayers`, one sync = one history entry), and binds every canvas and window event.
+  Its load-bearing invariants (refs assigned during render, no blanket sync on teardown, …) are
+  documented in `CANVAS_REFACTOR_PLAN.md`. Read that before changing the effect.
+- **Tools.** `toolToMode` (`toolMode.ts`) maps a `Tool` to a `Mode`
+  (`shape | balloon | text | select | fill | pen | eraser | scissor`). `createToolController`
+  (`toolControllers.ts`) returns the mode's pointer controller. `select` uses Fabric's own
+  picking; `pen` and `eraser` are native free-drawing brushes (`eraserTool.ts` installs the
+  eraser's).
+- **Converters.** One module per layer type maps model ↔ Fabric: `fabricShapes.ts`,
+  `fabricPath.ts`, `fabricText.ts`, `fabricImage.ts`, `fabricGroup.ts`, `fabricBalloon.ts`. Each also
+  attaches and reads the object's eraser `erasures` via `fabricErase.ts`.
+- **Chrome.** The raster substrate (a bottom `fabric.Image` over an offscreen backing canvas) and
+  the panel grid (non-interactive `fabric.Rect`s) come from `fabricRaster.ts`. They're tagged
+  (`isChromeObject`) and excluded from sync.
+- **Object management.** The on-selection controls ⧉ duplicate, ✕ delete, ⊕ merge (on a
+  multi-selection) and ⊖ un-merge (on a group) are built by `createObjectControls`
+  (`fabricControls.ts`) and run the ops in `createObjectOps` (`objectOps.ts`). Delete/Backspace also
+  deletes. `applyObjectControls` gates interactivity per mode.
+- **Rendering outside the editor.** `renderPanelToStaticCanvas` (`exportPanel.ts`) draws a panel
+  through a `fabric.StaticCanvas` using the same converters. Both PDF export and `Presentation.tsx`
+  use it, so they match the editor.
 
-## Done
+## Tools — all on Fabric
 
-- [x] **objectShapes** — all 12 shapes, native create/select/move/resize/rotate, round-trip
-  serialization. (`src/utils/fabricShapes.ts`, tests `fabricShapes.test.ts`)
-- [x] **text** — `fabric.IText` in-place editing, scale-aware font size.
-  (`src/utils/fabricText.ts`, tests `fabricText.test.ts`)
-- [x] **emoji** — places the selected emoji as a `fabric.IText` (text-mode variant).
-- [x] **balloon** — a creatable Fabric tool again: drag to draw a speech bubble (a `fabric.Path`
-  built from a per-kind path generator; see the `BALLOON_KINDS` registry in
-  `src/utils/fabricBalloon.ts`). Move/resize/duplicate/delete like a shape. Shape-only for now
-  (no caption); the registry is structured for more kinds (thought, shout, …).
-- Integration tests: `src/components/CanvasFabricShapes.test.tsx`.
-
-## Image + select unification (done on branch `feature/fabric-select-unification` — NEEDS BROWSER VERIFICATION)
-
-- [x] **image** — `ImageObjectLayer` ↔ `fabric.FabricImage` (`src/utils/fabricImage.ts`,
-  async load from base64). The scissor cut still produces base64 on the legacy raster; the
-  resulting object is manipulated on Fabric. Tests: `fabricImage.test.ts` (pure read-back +
-  kind discrimination; async decode is browser-only).
-- [x] **unify `select`** — the `select` tool now loads all object types (shape/text/image)
-  onto Fabric and uses native selection/move/resize/rotate. Text edits in place on
-  double-click. Legacy object rendering is skipped for the owned types via `fabricOwnedRef`.
-  Export is unaffected — it renders from the layer arrays (`App.tsx` `renderObjectLayer`).
-
-### Browser verification (Playwright, headless Chromium) — PASSED
-Ran a scripted pass driving real mouse gestures + screenshots. All green, zero page errors:
-- Shapes render correctly and land **under the cursor** (overlay alignment confirmed — the
-  Fabric and legacy canvases share the same box).
-- `select`: loads all objects onto Fabric; click-select, **move, resize (corner handle),
-  rotate (rotation handle)** all work with native controls.
-- **Undo** while in `select` refreshes correctly (App restores the panel's `data` reference
-  on undo/redo, which re-triggers the overlay reload — so the earlier concern was unfounded).
-- Text: place + type + commit renders; emoji places on Fabric.
-- **PDF export** produces a valid multi-hundred-KB file (renders from the layer arrays).
-
-### Remaining minor limitations (non-blocking)
-- **Duplicate button** is gone in Fabric select (the old on-canvas 📋 button keyed off the
-  legacy selection). Delete works via Delete/Backspace. Consider Cmd/Ctrl+D later.
-- The hand-rolled `SelectionHandle` / `getHandleAtPoint` machinery is now **unused** in
-  select mode but left in place (safe to delete in a later cleanup).
-- **Scissor → image** was not driven in the automated pass (needs a raster cut first);
-  the conversion is unit-tested and the object path is the same as other objects.
-
-## Raster phase + teardown — DONE (single-canvas end state)
-
-The migration is **complete**: the Fabric overlay is now the ONLY canvas. `Canvas.tsx` went
-from ~3745 to ~994 lines.
-
-- [x] **pen** — native `fabric.PencilBrush` → `fabric.Path` ↔ `PathObjectLayer`
-  (`src/utils/fabricPath.ts`). Paths are selectable/movable in select/fill.
-- [x] **raster substrate + grid** — the per-panel `panelData` bitmap is a bottom
-  `fabric.Image` over an offscreen backing canvas, and the grid is non-interactive
-  `fabric.Rect`s (`src/utils/fabricRaster.ts`, tagged chrome, excluded from sync).
+- [x] **pen** — `fabric.PencilBrush` → `fabric.Path` ↔ `PathObjectLayer`. Strokes are real objects
+  (select, move, resize, rotate, duplicate, merge).
 - [x] **eraser** — erase2d's `EraserBrush` (`@erase2d/fabric`, by Fabric's maintainer) as a
-  free-drawing brush, committed by us (`src/utils/eraserTool.ts`): raster pixels are wiped
-  (`destination-out` on the backing) and every object the stroke crosses gets it in a per-object
-  mask — an erase2d `ClippingGroup` as its `clipPath` — so it stays a movable object. The masks are
-  persisted in the layer model as `erasures` (`src/utils/fabricErase.ts`) in the object's *frame*
-  (scaled, unrotated, centred local plane) because the converters rebuild objects at a different
-  scale than they were edited at; fully-erased objects are deleted; ungroup hands a group's
-  strokes to its children; one history entry per stroke. (Replaced the earlier approach that baked
-  touched shapes/paths into the raster, which made them immovable.)
-- [x] **fill** — vector-shape recolor OR a composite-snapshot flood stamped onto the backing
-  (respects ink/grid/shape bounds).
-- [x] **scissor** — marquee cuts the backing region into a `fabric.Image` (built synchronously
-  so the sync preserves it), leaves a hole, switches to select.
-- [x] **balloon** — creatable speech-bubble tool: a `fabric.Path` from a per-kind path
-  generator (`BALLOON_KINDS` registry), drawn/resized like a shape (`src/utils/fabricBalloon.ts`,
-  tests `fabricBalloon.test.ts` / `BalloonTool.test.tsx`).
-- [x] **single canvas** — the overlay renders raster + grid + ALL object types in every mode;
-  interactivity is gated per tool. Legacy `<canvas>`, the HTML text `<input>`, the DOM
-  duplicate/delete buttons, and ~2750 lines of dead machinery
-  (startDrawing/draw/stopDrawing, SelectionHandle/getHandleAtPoint, repaintCanvas + draw
-  helpers, legacy effects/refs) are DELETED. Overlay sizing re-anchored to the container.
-- [x] **export** — rendered through a Fabric `StaticCanvas` reusing the same converters
-  (`src/utils/exportPanel.ts`), so PDF matches the editor. Layer model stays the persistence
-  source of truth; `Presentation.tsx` renders through the same `renderPanelToStaticCanvas`.
-- [x] **undo/redo** — fixed for the single-canvas model: one history entry per action, saves
-  moved OUT of the `setPanels` updaters (StrictMode-safe, `panelsRef`), model-aware cleanup
-  that never clobbers a restored model.
+  free-drawing brush. Fabric ≥6 has no eraser in core, and erase2d is the successor to v5's
+  `EraserBrush`. We use only its brush (stroke + live preview) and `ClippingGroup` (the mask
+  object), so it's swappable. The stroke is committed by us (`src/utils/eraserTool.ts`): raster
+  pixels are wiped (`destination-out` on the backing), and every object the stroke crosses gets it
+  in a per-object mask, an erase2d `ClippingGroup` as its `clipPath`, so it stays a movable object.
+  The masks are persisted in the layer model as `erasures` (`src/utils/fabricErase.ts`) in the
+  object's *frame* (scaled, unrotated, centred local plane), because the converters rebuild objects
+  at a different scale than they were edited at. Fully erased objects are deleted; un-merge hands a
+  group's strokes to its children (`pushGroupEraseMaskToChildren`); one history entry per stroke.
+  Size picker small/medium/large = 10/20/40 canvas px (`ERASER_WIDTHS`, `EraserPicker.tsx`) with a
+  ring cursor of that size. (Replaced an earlier approach that baked touched shapes/paths into the
+  raster, which made them immovable.)
+- [x] **Polygon** — one tool, any number of sides (3–1000, `POLYGON_MIN_SIDES`/`POLYGON_MAX_SIDES`)
+  chosen in `PolygonPicker`. 3 is a triangle, 4 a rectangle; the polygon stretches to fill the
+  dragged box. Legacy fixed shape kinds in saved comics (rectangle, triangle, pentagon, …) still load
+  with their geometry.
+- [x] **Objects** — star, heart, arrow, cross, circle, diamond (`OBJECT_SHAPES` in
+  `ShapePicker.tsx`). Like polygons, they store the intended drag box so they don't shrink on
+  round-trip.
+- [x] **text** — `fabric.IText` in-place editing with scale-aware font size. The toolbar keeps the
+  font controls open while typing; switching tools mid-edit commits the text.
+- [x] **emoji** — a `fabric.IText` holding the glyph (a text-mode variant).
+- [x] **balloon** — drag to draw a speech bubble: a `fabric.Path` from a per-kind generator
+  (`BALLOON_KINDS` registry in `fabricBalloon.ts`). Behaves like a shape. Shape only for now (no
+  caption); the registry is ready for more kinds (thought, shout, …).
+- [x] **fill** — clicking a shape or a pen path recolours that object's own fill (it moves with it).
+  Otherwise a composite-snapshot flood is stamped onto the raster backing, respecting
+  ink/grid/object bounds.
+- [x] **scissor** — a marquee cuts the raster region into a `fabric.Image` (built synchronously so
+  the sync keeps it), leaves a hole, and switches to select.
+- [x] **image** — `ImageObjectLayer` ↔ `fabric.FabricImage` (async load from base64). Produced by
+  scissor cuts and by **pasting a clipboard image** (`createImageFromDataUrl` / `fitPasteScale`:
+  centred, at most 66% of the canvas, never upscaled; the tool switches to select with the image
+  selected).
+- [x] **select** — native pick/move/resize/rotate for every object type; double-click edits text.
+  Objects are also pickable in the creation modes (a drag on empty canvas still creates).
+- [x] **merge / un-merge** — `fabric.Group` ↔ `GroupObjectLayer` (`fabricGroup.ts`), children stored
+  in group-local coordinates. Children may be shapes, text, images, pen paths, speech balloons and
+  nested groups. (A merged balloon used to come back as a rectangle, and pen paths and nested
+  groups were dropped. `fabricChildToLayer` must route balloons through their own converter,
+  because `fabricObjectKind` reads a balloon's `fabric.Path` as a plain shape.)
+- [x] **undo/redo** — one history entry per action, snapshotted outside the `setPanels` updaters
+  (`panelsRef`, StrictMode-safe). The effect cleanup never clobbers a restored model.
+- [x] **export + presentation** — both through `renderPanelToStaticCanvas` (see Architecture).
+  Presentation renders at screen resolution, so slides stay crisp.
 
-## Verification note
+## Known behaviours / limitations
 
-Fabric's correctness is largely **visual** — confirmed via a Playwright + headless Chromium
-pass (see `[[fabric-migration-verification-gap]]`): all tools draw under the cursor, eraser
-wipes raster, fill/scissor work, undo/redo `[2,1,0]`/`[1,2,3]`, valid multi-panel PDF,
-presentation renders, correct 3:2 sizing, zero page errors. 132 unit tests pass; prod build OK.
+- The eraser rubs out **everything under it**, including objects stacked below other objects.
+- Text scaled non-uniformly round-trips with a uniform font size (`fontSize × scaleY`), so it
+  reflows. Its eraser marks follow the same approximation.
+- The presentation draws the panel grid in canvas units, so the border scales with the slide (it
+  used to be a fixed 3px line).
+
+## Verification
+
+Fabric's correctness is largely visual, so it's covered at two levels:
+
+- **Unit:** `npm test` (vitest + jsdom) — 264 tests across the converters, scene build/sync,
+  controllers, object ops, eraser masks (`fabricErase.test.ts`), file round-trip and components.
+- **Browser:** `npm run e2e` — a committed Playwright suite (`e2e/canvas.spec.ts`, 15 tests,
+  headless Chromium; setup and tips in `docs/e2e.md`). It drives real gestures and asserts on the
+  rendered pixels: drawing, undo/redo, polygon sides, text commit, the eraser flows (move after
+  erase, resize/rebuild, typing into erased text, auto-delete, size picker), duplicate, paste.
+- `npm run type-check` and `npm run build` must pass (Vercel build).
+
+## History
+
+- **Overlay phase:** while tools were being ported, a Fabric overlay sat above the legacy 2D
+  canvas and took pointer events only for the tools it owned. Objects were synced back to the layer
+  model on every tool switch.
+- **Raster phase + teardown:** pen, eraser, fill and scissor moved onto Fabric (with the raster
+  substrate as a bottom `fabric.Image`). The legacy `<canvas>`, the HTML text `<input>`, the DOM
+  duplicate/delete buttons and ~2,750 lines of hand-rolled selection/rendering machinery
+  (`SelectionHandle`/`getHandleAtPoint`, repaint helpers, legacy effects) were deleted.
+- **Refactor:** the remaining god-effect was split into converters, per-tool controllers, object
+  ops and hooks (`CANVAS_REFACTOR_PLAN.md`). `Canvas.tsx` went from ~3,745 lines to ~100.
