@@ -19,7 +19,7 @@ const renderShapeLayerOnContext = (ctx: CanvasRenderingContext2D, layer: ShapeLa
   ctx.save()
   ctx.translate(centerX, centerY)
   ctx.rotate(rotation)
-  traceShapePath(ctx, shape, -width / 2, -height / 2, width / 2, height / 2)
+  traceShapePath(ctx, shape, -width / 2, -height / 2, width / 2, height / 2, layer.sides)
   if (fillColor) {
     ctx.fillStyle = fillColor
     ctx.fill()

@@ -7,11 +7,13 @@ import {
   computeShapePoints,
   SHAPE_ID_KEY,
   SHAPE_KIND_KEY,
+  regularPolygonPoints,
+  clampSides,
 } from './fabricShapes'
 
 const ALL_SHAPES: Shape[] = [
   'rectangle', 'circle', 'triangle', 'star', 'heart', 'diamond',
-  'hexagon', 'pentagon', 'arrow', 'cross', 'heptagon', 'octagon',
+  'hexagon', 'pentagon', 'arrow', 'cross', 'heptagon', 'octagon', 'polygon',
 ]
 
 const makeLayer = (overrides: Partial<ShapeObjectLayer> = {}): ShapeObjectLayer => ({
@@ -88,5 +90,52 @@ describe('fabricShapes conversion', () => {
     expect(computeShapePoints('diamond', 100, 100)).toHaveLength(4)
     expect(computeShapePoints('star', 100, 100)).toHaveLength(10)
     expect(computeShapePoints('octagon', 100, 100)).toHaveLength(8)
+  })
+})
+
+describe('polygon (any number of sides)', () => {
+  it.each([3, 7, 1000])('builds a %i-sided polygon inside its box, first vertex at top-center', (n) => {
+    const pts = computeShapePoints('polygon', 200, 100, n)!
+    expect(pts).toHaveLength(n)
+    expect(pts[0].x).toBeCloseTo(100)
+    expect(pts[0].y).toBeCloseTo(0)
+    for (const p of pts) {
+      expect(p.x).toBeGreaterThanOrEqual(-1e-9)
+      expect(p.x).toBeLessThanOrEqual(200 + 1e-9)
+      expect(p.y).toBeGreaterThanOrEqual(-1e-9)
+      expect(p.y).toBeLessThanOrEqual(100 + 1e-9)
+    }
+  })
+
+  it('defaults to 6 sides when none given', () => {
+    expect(computeShapePoints('polygon', 100, 100)).toHaveLength(6)
+  })
+
+  it('clampSides rounds and clamps to 3..1000, NaN → default', () => {
+    expect(clampSides(2)).toBe(3)
+    expect(clampSides(1001)).toBe(1000)
+    expect(clampSides(4.6)).toBe(5)
+    expect(clampSides(NaN)).toBe(6)
+    expect(regularPolygonPoints(0, 10, 10)).toHaveLength(3)
+  })
+
+  it('round-trips the side count through Fabric', () => {
+    const layer = makeLayer({ shape: 'polygon', sides: 11 })
+    const obj = shapeLayerToFabricObject(layer)
+    expect((obj as any).points).toHaveLength(11)
+    const back = fabricObjectToShapeLayer(obj)
+    expect(back.shape).toBe('polygon')
+    expect(back.sides).toBe(11)
+    expect(back.width).toBeCloseTo(layer.width)
+    expect(back.height).toBeCloseTo(layer.height)
+  })
+
+  it('non-polygon shapes carry no sides', () => {
+    expect(fabricObjectToShapeLayer(shapeLayerToFabricObject(makeLayer({ shape: 'hexagon' }))).sides).toBeUndefined()
+  })
+
+  it('legacy hexagon geometry is unchanged (old comics keep their orientation)', () => {
+    const pts = computeShapePoints('hexagon', 200, 100)!
+    expect(pts[0]).toEqual({ x: 200, y: 50 })
   })
 })

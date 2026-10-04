@@ -9,6 +9,7 @@ import './Canvas.css'
 interface CanvasProps {
   tool: Tool
   shape?: Shape
+  polygonSides?: number
   penType?: PenType
   color: string
   font: string
@@ -29,6 +30,7 @@ interface CanvasProps {
 export default function Canvas({
   tool,
   shape,
+  polygonSides,
   penType,
   color,
   font,
@@ -56,6 +58,7 @@ export default function Canvas({
   useCanvasController({
     tool,
     shape,
+    polygonSides,
     penType,
     color,
     font,

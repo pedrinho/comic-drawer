@@ -16,6 +16,7 @@ declare module 'fabric' {
     shapeKind?: Shape
     shapeBoxW?: number
     shapeBoxH?: number
+    shapeSides?: number
     // text / emoji
     textId?: string
     // images (cut-outs)

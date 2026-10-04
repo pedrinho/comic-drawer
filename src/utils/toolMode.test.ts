@@ -5,6 +5,7 @@ import { toolToMode } from './toolMode'
 describe('toolToMode', () => {
   const cases: Array<[Tool, Mode]> = [
     ['objectShapes', 'shape'],
+    ['objects', 'shape'], // Objects (star/heart/…) draw through the same shape mode
     ['balloon', 'balloon'],
     ['text', 'text'],
     ['emoji', 'text'], // emoji collapses into text mode
@@ -20,7 +21,7 @@ describe('toolToMode', () => {
   })
 
   it('covers every Tool value', () => {
-    const tools: Tool[] = ['select', 'scissor', 'pen', 'eraser', 'objectShapes', 'text', 'fill', 'balloon', 'emoji']
+    const tools: Tool[] = ['select', 'scissor', 'pen', 'eraser', 'objectShapes', 'objects', 'text', 'fill', 'balloon', 'emoji']
     expect(cases.map(([t]) => t).sort()).toEqual([...tools].sort())
   })
 })

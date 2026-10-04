@@ -18,6 +18,8 @@ export interface BaseObjectLayer {
 export interface ShapeObjectLayer extends BaseObjectLayer {
   type: 'shape'
   shape: Shape
+  /** Number of sides — only meaningful for `shape: 'polygon'`. */
+  sides?: number
   strokeColor: string
   strokeWidth: number
   fillColor: string | null
