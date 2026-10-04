@@ -26,7 +26,7 @@ export const SHAPE_SIDES_KEY = 'shapeSides'
 
 export const POLYGON_MIN_SIDES = 3
 export const POLYGON_MAX_SIDES = 1000
-export const DEFAULT_POLYGON_SIDES = 6
+export const DEFAULT_POLYGON_SIDES = 3
 
 /** Coerce any input (typed text, NaN, fractions, out-of-range) to a valid polygon side count. */
 export const clampSides = (n: number): number => {
@@ -40,19 +40,30 @@ const DEG_TO_RAD = Math.PI / 180
 type Point = { x: number; y: number }
 
 /**
- * Vertices of a regular `sides`-gon inscribed in the w×h box's ellipse, first vertex at top-center.
- * Shared by the polygon shape, the 2D renderer (`traceShapePath`), and the picker's preview.
+ * Vertices of a regular `sides`-gon stretched to fill the w×h box. It always sits on a flat base
+ * (odd n: a vertex at top-center; even n: a flat top), so 3 → the classic triangle and 4 → the
+ * box's own rectangle. Shared by the polygon shape, the 2D renderer (`traceShapePath`), and the
+ * picker's preview.
  */
 export const regularPolygonPoints = (sides: number, width: number, height: number): Point[] => {
   const n = clampSides(sides)
-  const cx = width / 2
-  const cy = height / 2
-  const pts: Point[] = []
+  const start = -Math.PI / 2 + (n % 2 === 0 ? Math.PI / n : 0)
+  const unit: Point[] = []
   for (let i = 0; i < n; i++) {
-    const angle = (i * 2 * Math.PI) / n - Math.PI / 2
-    pts.push({ x: cx + cx * Math.cos(angle), y: cy + cy * Math.sin(angle) })
+    const angle = start + (i * 2 * Math.PI) / n
+    unit.push({ x: Math.cos(angle), y: Math.sin(angle) })
   }
-  return pts
+  // Normalize the unit polygon's extents onto [0,w]×[0,h] so it fills the dragged box.
+  const xs = unit.map((p) => p.x)
+  const ys = unit.map((p) => p.y)
+  const minX = Math.min(...xs)
+  const minY = Math.min(...ys)
+  const spanX = Math.max(...xs) - minX
+  const spanY = Math.max(...ys) - minY
+  return unit.map((p) => ({
+    x: ((p.x - minX) / spanX) * width,
+    y: ((p.y - minY) / spanY) * height,
+  }))
 }
 
 /**

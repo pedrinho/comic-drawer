@@ -94,28 +94,34 @@ describe('fabricShapes conversion', () => {
 })
 
 describe('polygon (any number of sides)', () => {
-  it.each([3, 7, 1000])('builds a %i-sided polygon inside its box, first vertex at top-center', (n) => {
+  it.each([3, 4, 5, 7, 8, 1000])('builds a %i-sided polygon that exactly fills its box', (n) => {
     const pts = computeShapePoints('polygon', 200, 100, n)!
     expect(pts).toHaveLength(n)
-    expect(pts[0].x).toBeCloseTo(100)
-    expect(pts[0].y).toBeCloseTo(0)
-    for (const p of pts) {
-      expect(p.x).toBeGreaterThanOrEqual(-1e-9)
-      expect(p.x).toBeLessThanOrEqual(200 + 1e-9)
-      expect(p.y).toBeGreaterThanOrEqual(-1e-9)
-      expect(p.y).toBeLessThanOrEqual(100 + 1e-9)
-    }
+    const xs = pts.map((p) => p.x)
+    const ys = pts.map((p) => p.y)
+    expect(Math.min(...xs)).toBeCloseTo(0)
+    expect(Math.max(...xs)).toBeCloseTo(200)
+    expect(Math.min(...ys)).toBeCloseTo(0)
+    expect(Math.max(...ys)).toBeCloseTo(100)
   })
 
-  it('defaults to 6 sides when none given', () => {
-    expect(computeShapePoints('polygon', 100, 100)).toHaveLength(6)
+  it.each([3, 4, 5, 6, 9, 12])('a %i-sided polygon sits on a flat base', (n) => {
+    const pts = computeShapePoints('polygon', 200, 100, n)!
+    expect(pts.filter((p) => Math.abs(p.y - 100) < 1e-9)).toHaveLength(2)
+  })
+
+  it('3 sides is the classic triangle and 4 sides is the box rectangle', () => {
+    const sortPts = (ps: { x: number; y: number }[]) =>
+      ps.map((p) => [Math.round(p.x * 1e6) / 1e6, Math.round(p.y * 1e6) / 1e6]).sort((a, b) => a[0] - b[0] || a[1] - b[1])
+    expect(sortPts(computeShapePoints('polygon', 200, 100, 3)!)).toEqual(sortPts(computeShapePoints('triangle', 200, 100)!))
+    expect(sortPts(computeShapePoints('polygon', 200, 100, 4)!)).toEqual([[0, 0], [0, 100], [200, 0], [200, 100]])
   })
 
   it('clampSides rounds and clamps to 3..1000, NaN → default', () => {
     expect(clampSides(2)).toBe(3)
     expect(clampSides(1001)).toBe(1000)
     expect(clampSides(4.6)).toBe(5)
-    expect(clampSides(NaN)).toBe(6)
+    expect(clampSides(NaN)).toBe(3)
     expect(regularPolygonPoints(0, 10, 10)).toHaveLength(3)
   })
 

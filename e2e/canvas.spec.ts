@@ -70,7 +70,7 @@ test('renders the interactive canvas', async ({ page }) => {
 })
 
 test('every tool activates without a runtime error', async ({ page }) => {
-  for (const t of ['Select', 'Scissor', 'Pen', 'Eraser', 'Shapes', 'Objects', 'Fill', 'Text', 'Balloon', 'Emoji']) {
+  for (const t of ['Select', 'Scissor', 'Pen', 'Eraser', 'Polygon', 'Objects', 'Fill', 'Text', 'Balloon', 'Emoji']) {
     await selectTool(page, t)
   }
   // errors asserted in afterEach
@@ -80,7 +80,7 @@ test('drawing a shape changes the canvas; undo reverts and redo restores', async
   const { P } = mapper(await canvasBox(page))
   const blank = await canvasPixels(page)
 
-  await selectTool(page, 'Shapes')
+  await selectTool(page, 'Polygon')
   await dragScene(page, P, [200, 150], [450, 380])
   const drawn = await canvasPixels(page)
   expect(drawn, 'shape should change the canvas').not.toBe(blank)
@@ -99,9 +99,8 @@ test('drawing a shape changes the canvas; undo reverts and redo restores', async
 test('the polygon draws with the chosen number of sides', async ({ page }) => {
   const { P } = mapper(await canvasBox(page))
   const drawPolygon = async (sides: string) => {
-    await selectTool(page, 'Select') // re-clicking an active Shapes button would toggle its picker shut
-    await selectTool(page, 'Shapes')
-    await page.click('button[title="polygon"]')
+    await selectTool(page, 'Select') // re-clicking an active Polygon button would toggle its picker shut
+    await selectTool(page, 'Polygon')
     const input = page.getByLabel('Number of sides')
     await input.fill(sides)
     await input.press('Enter')
@@ -121,9 +120,9 @@ test('the polygon draws with the chosen number of sides', async ({ page }) => {
   await expect(page.getByLabel('Number of sides')).toHaveValue('1000')
 })
 
-test('the Objects button draws its own kind of shape (star)', async ({ page }) => {
+test('the Objects button draws its own kind of shape (star vs a polygon)', async ({ page }) => {
   const { P } = mapper(await canvasBox(page))
-  await selectTool(page, 'Shapes')
+  await selectTool(page, 'Polygon')
   await dragScene(page, P, [200, 150], [450, 380])
   const rect = await canvasPixels(page)
   await page.click('button[title="Undo (Ctrl+Z)"]')
@@ -133,7 +132,7 @@ test('the Objects button draws its own kind of shape (star)', async ({ page }) =
   await page.click('button[title="star"]')
   await dragScene(page, P, [200, 150], [450, 380])
   const star = await canvasPixels(page)
-  expect(star, 'the star should differ from the rectangle').not.toBe(rect)
+  expect(star, 'the star should differ from the polygon').not.toBe(rect)
 })
 
 test('text typed then abandoned by a tool switch is committed (teardown-commit)', async ({ page }) => {
@@ -158,7 +157,7 @@ test('the eraser rasterizes a shape it touches and the whole gesture is one undo
   const blank = await canvasPixels(page)
 
   // Draw a vector shape.
-  await selectTool(page, 'Shapes')
+  await selectTool(page, 'Polygon')
   await dragScene(page, P, [300, 220], [520, 420])
   const drawn = await canvasPixels(page)
   expect(drawn, 'shape should change the canvas').not.toBe(blank)
@@ -186,7 +185,7 @@ test('the eraser rasterizes a shape it touches and the whole gesture is one undo
 test('the duplicate control clones the selected object', async ({ page }) => {
   const { s, P } = mapper(await canvasBox(page))
 
-  await selectTool(page, 'Shapes')
+  await selectTool(page, 'Polygon')
   await dragScene(page, P, [200, 150], [400, 320]) // bounds ~[200,400]x[150,320]
   await selectTool(page, 'Select')
   const center = P(300, 235)

@@ -81,14 +81,14 @@ describe('App', () => {
     expect(eraserButton).toHaveClass('active')
   })
 
-  it('shows shape picker when shapes tool is clicked', async () => {
+  it('shows the sides chooser when the polygon tool is clicked', async () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByText('Shapes'))
+    await user.click(screen.getByText('Polygon'))
 
     await waitFor(() => {
-      expect(screen.getByTitle('rectangle')).toBeInTheDocument()
+      expect(screen.getByLabelText('Number of sides')).toHaveValue(3)
     })
   })
 

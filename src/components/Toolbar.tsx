@@ -1,7 +1,9 @@
 import { Tool, Shape, PenType } from '../types/common'
 import './Toolbar.css'
 import React, { useState, useEffect } from 'react'
-import ShapePicker, { GEOMETRIC_SHAPES, OBJECT_SHAPES } from './ShapePicker'
+import ShapePicker, { OBJECT_SHAPES } from './ShapePicker'
+import PolygonPicker from './PolygonPicker'
+import { DEFAULT_POLYGON_SIDES } from '../utils/fabricShapes'
 import PenPicker from './PenPicker'
 import FontPicker from './FontPicker'
 import EmojiPicker from './EmojiPicker'
@@ -11,8 +13,6 @@ interface ToolbarProps {
   onToolChange: (tool: Tool) => void
   color: string
   onColorChange: (color: string) => void
-  selectedShape: Shape
-  onSelectShape: (shape: Shape) => void
   selectedObject?: Shape
   onSelectObject?: (shape: Shape) => void
   polygonSides?: number
@@ -28,7 +28,7 @@ interface ToolbarProps {
   onSelectEmoji?: (emoji: string) => void
 }
 
-export default function Toolbar({ currentTool, onToolChange, color, onColorChange, selectedShape, onSelectShape, selectedObject = 'star', onSelectObject, polygonSides, onPolygonSidesChange, selectedPenType, onSelectPenType, font, onFontChange, fontSize, onFontSizeChange, isTextEditing = false, selectedEmoji = '😀', onSelectEmoji }: ToolbarProps) {
+export default function Toolbar({ currentTool, onToolChange, color, onColorChange, selectedObject = 'star', onSelectObject, polygonSides = DEFAULT_POLYGON_SIDES, onPolygonSidesChange, selectedPenType, onSelectPenType, font, onFontChange, fontSize, onFontSizeChange, isTextEditing = false, selectedEmoji = '😀', onSelectEmoji }: ToolbarProps) {
   const [showPenSubmenu, setShowPenSubmenu] = useState(false)
   const [showShapesSubmenu, setShowShapesSubmenu] = useState(false)
   const [showObjectsSubmenu, setShowObjectsSubmenu] = useState(false)
@@ -39,7 +39,7 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     { name: 'scissor', icon: '✂️', label: 'Scissor' },
     { name: 'pen', icon: '✏️', label: 'Pen' },
     { name: 'eraser', icon: '🧹', label: 'Eraser' },
-    { name: 'objectShapes', icon: '⬚', label: 'Shapes' },
+    { name: 'objectShapes', icon: '⬡', label: 'Polygon' },
     { name: 'objects', icon: '⭐', label: 'Objects' },
     { name: 'fill', icon: '🪣', label: 'Fill' },
     { name: 'text', icon: '💬', label: 'Text' },
@@ -70,7 +70,7 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     }
   }, [currentTool, isTextEditing])
 
-  // Shapes and Objects each toggle their own picker (the tool switch closes the other via the effect).
+  // Polygon and Objects each toggle their own picker (the tool switch closes the other via the effect).
   const handleShapeToolClick = (toolName: 'objectShapes' | 'objects') => {
     const [isOpen, setOpen] =
       toolName === 'objects'
@@ -167,13 +167,10 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
           )}
 
           {tool.name === 'objectShapes' && currentTool === 'objectShapes' && showShapesSubmenu && (
-            <ShapePicker
+            <PolygonPicker
               isOpen={true}
-              shapes={GEOMETRIC_SHAPES}
-              selectedShape={selectedShape}
-              onSelectShape={onSelectShape}
               sides={polygonSides}
-              onSidesChange={onPolygonSidesChange}
+              onSidesChange={onPolygonSidesChange ?? (() => {})}
             />
           )}
           {tool.name === 'objects' && currentTool === 'objects' && showObjectsSubmenu && onSelectObject && (

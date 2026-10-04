@@ -9,8 +9,6 @@ describe('Toolbar', () => {
     onToolChange: vi.fn(),
     color: '#000000',
     onColorChange: vi.fn(),
-    selectedShape: 'rectangle' as const,
-    onSelectShape: vi.fn(),
     selectedPenType: 'medium' as const,
     onSelectPenType: vi.fn(),
     font: 'Arial',
@@ -25,7 +23,7 @@ describe('Toolbar', () => {
     expect(screen.getByText('Select')).toBeInTheDocument()
     expect(screen.getByText('Pen')).toBeInTheDocument()
     expect(screen.getByText('Eraser')).toBeInTheDocument()
-    expect(screen.getByText('Shapes')).toBeInTheDocument()
+    expect(screen.getByText('Polygon')).toBeInTheDocument()
     expect(screen.getByText('Objects')).toBeInTheDocument()
     expect(screen.getByText('Text')).toBeInTheDocument()
   })
@@ -53,7 +51,7 @@ describe('Toolbar', () => {
     expect(toolIcons.length).toBeGreaterThan(0)
     expect(screen.getByText('🖱️')).toBeInTheDocument()
     expect(screen.getByText('🧹')).toBeInTheDocument()
-    expect(screen.getByText('⬚')).toBeInTheDocument()
+    expect(screen.getByText('⬡')).toBeInTheDocument()
     expect(screen.getByText('🪣')).toBeInTheDocument()
     expect(screen.getByText('💬')).toBeInTheDocument()
   })
@@ -102,15 +100,15 @@ describe('Toolbar', () => {
     expect(screen.getByText('Medium')).toBeInTheDocument()
   })
 
-  it('shows shape picker when shapes tool is active and clicked', async () => {
+  it('Polygon opens the sides chooser and no shape grid', async () => {
     const user = userEvent.setup()
     render(<Toolbar {...defaultProps} currentTool="objectShapes" />)
+    await user.click(screen.getByText('Polygon').closest('button')!)
 
-    // Click shapes button to show submenu
-    await user.click(screen.getByText('Shapes').closest('button')!)
-
-    expect(screen.getByTitle('rectangle')).toBeInTheDocument()
-    expect(screen.getByTitle('circle')).toBeInTheDocument()
+    expect(screen.getByLabelText('Number of sides')).toHaveValue(3)
+    for (const s of ['triangle', 'rectangle', 'polygon', 'circle', 'star']) {
+      expect(screen.queryByTitle(s)).not.toBeInTheDocument()
+    }
   })
 
   it('calls onSelectPenType when pen type is clicked', async () => {
@@ -126,17 +124,13 @@ describe('Toolbar', () => {
     expect(onSelectPenType).toHaveBeenCalledWith('fine')
   })
 
-  it('calls onSelectShape when shape is clicked', async () => {
+  it('calls onPolygonSidesChange from the sides chooser', async () => {
     const user = userEvent.setup()
-    const onSelectShape = vi.fn()
-    render(<Toolbar {...defaultProps} currentTool="objectShapes" onSelectShape={onSelectShape} />)
-
-    // First click to show submenu
-    await user.click(screen.getByText('Shapes').closest('button')!)
-
-    // Then click shape (using title attribute)
-    await user.click(screen.getByTitle('circle'))
-    expect(onSelectShape).toHaveBeenCalledWith('circle')
+    const onPolygonSidesChange = vi.fn()
+    render(<Toolbar {...defaultProps} currentTool="objectShapes" polygonSides={5} onPolygonSidesChange={onPolygonSidesChange} />)
+    await user.click(screen.getByText('Polygon').closest('button')!)
+    await user.click(screen.getByLabelText('More sides'))
+    expect(onPolygonSidesChange).toHaveBeenCalledWith(6)
   })
 
   it('shows font controls when text tool is active', async () => {
@@ -185,9 +179,9 @@ describe('Toolbar', () => {
     expect(screen.queryByText('Fine')).not.toBeInTheDocument()
   })
 
-  it('hides shape picker when shapes tool is not active', () => {
+  it('hides the sides chooser when the polygon tool is not active', () => {
     render(<Toolbar {...defaultProps} currentTool="pen" />)
-    expect(screen.queryByTitle('rectangle')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Number of sides')).not.toBeInTheDocument()
   })
 
   it('hides font controls when text tool is not active', () => {
@@ -220,26 +214,22 @@ describe('Toolbar', () => {
     render(<Toolbar {...defaultProps} currentTool="objectShapes" onToolChange={onToolChange} />)
 
     // Click shapes button to toggle submenu
-    await user.click(screen.getByText('Shapes').closest('button')!)
+    await user.click(screen.getByText('Polygon').closest('button')!)
 
-    // Should show shape picker (check by title attribute)
-    expect(screen.getByTitle('rectangle')).toBeInTheDocument()
+    expect(screen.getByLabelText('Number of sides')).toBeInTheDocument()
 
     // Click again to hide
-    await user.click(screen.getByText('Shapes').closest('button')!)
+    await user.click(screen.getByText('Polygon').closest('button')!)
 
-    // Should hide shape picker
-    expect(screen.queryByTitle('rectangle')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Number of sides')).not.toBeInTheDocument()
   })
 })
 
-describe('Toolbar — Shapes vs Objects', () => {
+describe('Toolbar — Polygon vs Objects', () => {
   const props = {
     onToolChange: vi.fn(),
     color: '#000000',
     onColorChange: vi.fn(),
-    selectedShape: 'polygon' as const,
-    onSelectShape: vi.fn(),
     selectedObject: 'heart' as const,
     onSelectObject: vi.fn(),
     polygonSides: 6,
@@ -252,21 +242,6 @@ describe('Toolbar — Shapes vs Objects', () => {
     onFontSizeChange: vi.fn(),
   }
 
-  it('Shapes picker holds geometric shapes (with one polygon) and no objects', async () => {
-    const user = userEvent.setup()
-    render(<Toolbar {...props} currentTool="objectShapes" />)
-    await user.click(screen.getByText('Shapes').closest('button')!)
-
-    for (const s of ['triangle', 'rectangle', 'polygon', 'circle', 'diamond']) {
-      expect(screen.getByTitle(s)).toBeInTheDocument()
-    }
-    for (const s of ['star', 'heart', 'arrow', 'cross', 'hexagon', 'pentagon']) {
-      expect(screen.queryByTitle(s)).not.toBeInTheDocument()
-    }
-    // polygon is selected → the sides chooser shows
-    expect(screen.getByLabelText('Number of sides')).toHaveValue(6)
-  })
-
   it('Objects button switches tool and opens its own picker', async () => {
     const user = userEvent.setup()
     const onToolChange = vi.fn()
@@ -276,10 +251,10 @@ describe('Toolbar — Shapes vs Objects', () => {
     expect(onToolChange).toHaveBeenCalledWith('objects')
 
     rerender(<Toolbar {...props} currentTool="objects" onToolChange={onToolChange} onSelectObject={onSelectObject} />)
-    for (const s of ['star', 'heart', 'arrow', 'cross']) {
+    for (const s of ['star', 'heart', 'arrow', 'cross', 'circle', 'diamond']) {
       expect(screen.getByTitle(s)).toBeInTheDocument()
     }
-    expect(screen.queryByTitle('rectangle')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Number of sides')).not.toBeInTheDocument()
     expect(screen.getByTitle('heart')).toHaveClass('selected')
 
     await user.click(screen.getByTitle('arrow'))
