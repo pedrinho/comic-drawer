@@ -34,3 +34,67 @@
   color: var(--primary);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
+
+.polygon-sides {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs, 4px);
+  margin-top: var(--spacing-sm, 6px);
+  padding: 4px 2px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: var(--radius-md);
+}
+
+.polygon-sides-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.polygon-sides-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.polygon-sides-btn {
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--primary);
+  font-size: 1.1rem;
+  font-weight: bold;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.polygon-sides-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.polygon-sides-input {
+  width: 3.2em;
+  text-align: center;
+  font-size: 0.9rem;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: var(--radius-sm);
+  padding: 2px 0;
+  -moz-appearance: textfield;
+}
+
+.polygon-sides-input::-webkit-outer-spin-button,
+.polygon-sides-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.polygon-sides-preview polygon {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}

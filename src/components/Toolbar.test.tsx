@@ -25,7 +25,8 @@ describe('Toolbar', () => {
     expect(screen.getByText('Select')).toBeInTheDocument()
     expect(screen.getByText('Pen')).toBeInTheDocument()
     expect(screen.getByText('Eraser')).toBeInTheDocument()
-    expect(screen.getByText('Object Shapes')).toBeInTheDocument()
+    expect(screen.getByText('Shapes')).toBeInTheDocument()
+    expect(screen.getByText('Objects')).toBeInTheDocument()
     expect(screen.getByText('Text')).toBeInTheDocument()
   })
 
@@ -101,12 +102,12 @@ describe('Toolbar', () => {
     expect(screen.getByText('Medium')).toBeInTheDocument()
   })
 
-  it('shows shape picker when object shapes tool is active and clicked', async () => {
+  it('shows shape picker when shapes tool is active and clicked', async () => {
     const user = userEvent.setup()
     render(<Toolbar {...defaultProps} currentTool="objectShapes" />)
 
     // Click shapes button to show submenu
-    await user.click(screen.getByText('Object Shapes').closest('button')!)
+    await user.click(screen.getByText('Shapes').closest('button')!)
 
     expect(screen.getByTitle('rectangle')).toBeInTheDocument()
     expect(screen.getByTitle('circle')).toBeInTheDocument()
@@ -131,7 +132,7 @@ describe('Toolbar', () => {
     render(<Toolbar {...defaultProps} currentTool="objectShapes" onSelectShape={onSelectShape} />)
 
     // First click to show submenu
-    await user.click(screen.getByText('Object Shapes').closest('button')!)
+    await user.click(screen.getByText('Shapes').closest('button')!)
 
     // Then click shape (using title attribute)
     await user.click(screen.getByTitle('circle'))
@@ -219,15 +220,69 @@ describe('Toolbar', () => {
     render(<Toolbar {...defaultProps} currentTool="objectShapes" onToolChange={onToolChange} />)
 
     // Click shapes button to toggle submenu
-    await user.click(screen.getByText('Object Shapes').closest('button')!)
+    await user.click(screen.getByText('Shapes').closest('button')!)
 
     // Should show shape picker (check by title attribute)
     expect(screen.getByTitle('rectangle')).toBeInTheDocument()
 
     // Click again to hide
-    await user.click(screen.getByText('Object Shapes').closest('button')!)
+    await user.click(screen.getByText('Shapes').closest('button')!)
 
     // Should hide shape picker
     expect(screen.queryByTitle('rectangle')).not.toBeInTheDocument()
+  })
+})
+
+describe('Toolbar — Shapes vs Objects', () => {
+  const props = {
+    onToolChange: vi.fn(),
+    color: '#000000',
+    onColorChange: vi.fn(),
+    selectedShape: 'polygon' as const,
+    onSelectShape: vi.fn(),
+    selectedObject: 'heart' as const,
+    onSelectObject: vi.fn(),
+    polygonSides: 6,
+    onPolygonSidesChange: vi.fn(),
+    selectedPenType: 'medium' as const,
+    onSelectPenType: vi.fn(),
+    font: 'Arial',
+    onFontChange: vi.fn(),
+    fontSize: 24,
+    onFontSizeChange: vi.fn(),
+  }
+
+  it('Shapes picker holds geometric shapes (with one polygon) and no objects', async () => {
+    const user = userEvent.setup()
+    render(<Toolbar {...props} currentTool="objectShapes" />)
+    await user.click(screen.getByText('Shapes').closest('button')!)
+
+    for (const s of ['triangle', 'rectangle', 'polygon', 'circle', 'diamond']) {
+      expect(screen.getByTitle(s)).toBeInTheDocument()
+    }
+    for (const s of ['star', 'heart', 'arrow', 'cross', 'hexagon', 'pentagon']) {
+      expect(screen.queryByTitle(s)).not.toBeInTheDocument()
+    }
+    // polygon is selected → the sides chooser shows
+    expect(screen.getByLabelText('Number of sides')).toHaveValue(6)
+  })
+
+  it('Objects button switches tool and opens its own picker', async () => {
+    const user = userEvent.setup()
+    const onToolChange = vi.fn()
+    const onSelectObject = vi.fn()
+    const { rerender } = render(<Toolbar {...props} currentTool="pen" onToolChange={onToolChange} onSelectObject={onSelectObject} />)
+    await user.click(screen.getByText('Objects').closest('button')!)
+    expect(onToolChange).toHaveBeenCalledWith('objects')
+
+    rerender(<Toolbar {...props} currentTool="objects" onToolChange={onToolChange} onSelectObject={onSelectObject} />)
+    for (const s of ['star', 'heart', 'arrow', 'cross']) {
+      expect(screen.getByTitle(s)).toBeInTheDocument()
+    }
+    expect(screen.queryByTitle('rectangle')).not.toBeInTheDocument()
+    expect(screen.getByTitle('heart')).toHaveClass('selected')
+
+    await user.click(screen.getByTitle('arrow'))
+    expect(onSelectObject).toHaveBeenCalledWith('arrow')
   })
 })

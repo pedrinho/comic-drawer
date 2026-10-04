@@ -50,6 +50,8 @@ export interface ToolContext {
   /** Display px per internal px, used to convert CSS font sizes for placed text. */
   scale: number
   shape: Shape
+  /** Side count for the next `polygon` shape drawn. */
+  polygonSides: number
   balloonKind: BalloonKind
   color: string
   font: string
@@ -97,6 +99,7 @@ const dragCreateController = (ctx: ToolContext, kind: 'shape' | 'balloon'): Tool
               type: 'shape',
               id: generateLayerId(),
               shape: ctx.shape,
+              ...(ctx.shape === 'polygon' ? { sides: ctx.polygonSides } : {}),
               x: p.x,
               y: p.y,
               width: BASE,

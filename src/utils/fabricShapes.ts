@@ -21,6 +21,18 @@ export const SHAPE_KIND_KEY = 'shapeKind'
 // intended box here to preserve it across save/load round-trips.
 export const SHAPE_BOX_W_KEY = 'shapeBoxW'
 export const SHAPE_BOX_H_KEY = 'shapeBoxH'
+// Side count for `polygon` shapes (the any-sided polygon from the Shapes picker).
+export const SHAPE_SIDES_KEY = 'shapeSides'
+
+export const POLYGON_MIN_SIDES = 3
+export const POLYGON_MAX_SIDES = 1000
+export const DEFAULT_POLYGON_SIDES = 6
+
+/** Coerce any input (typed text, NaN, fractions, out-of-range) to a valid polygon side count. */
+export const clampSides = (n: number): number => {
+  if (!Number.isFinite(n)) return DEFAULT_POLYGON_SIDES
+  return Math.min(POLYGON_MAX_SIDES, Math.max(POLYGON_MIN_SIDES, Math.round(n)))
+}
 
 const RAD_TO_DEG = 180 / Math.PI
 const DEG_TO_RAD = Math.PI / 180
@@ -28,11 +40,32 @@ const DEG_TO_RAD = Math.PI / 180
 type Point = { x: number; y: number }
 
 /**
+ * Vertices of a regular `sides`-gon inscribed in the w×h box's ellipse, first vertex at top-center.
+ * Shared by the polygon shape, the 2D renderer (`traceShapePath`), and the picker's preview.
+ */
+export const regularPolygonPoints = (sides: number, width: number, height: number): Point[] => {
+  const n = clampSides(sides)
+  const cx = width / 2
+  const cy = height / 2
+  const pts: Point[] = []
+  for (let i = 0; i < n; i++) {
+    const angle = (i * 2 * Math.PI) / n - Math.PI / 2
+    pts.push({ x: cx + cx * Math.cos(angle), y: cy + cy * Math.sin(angle) })
+  }
+  return pts
+}
+
+/**
  * Points for polygonal shapes in local bbox coordinates (0..width, 0..height).
  * Mirrors the non-curve branches of `traceShapePath`. Returns null for shapes that are
  * not polygons (rectangle, circle, heart) — those are built as dedicated Fabric types.
  */
-export const computeShapePoints = (shape: Shape, width: number, height: number): Point[] | null => {
+export const computeShapePoints = (
+  shape: Shape,
+  width: number,
+  height: number,
+  sides: number = DEFAULT_POLYGON_SIDES,
+): Point[] | null => {
   const w = width
   const h = height
   const cx = w / 2
@@ -90,6 +123,8 @@ export const computeShapePoints = (shape: Shape, width: number, height: number):
       }
       return pts
     }
+    case 'polygon':
+      return regularPolygonPoints(sides, w, h)
     case 'arrow': {
       const notch = w - rx * 0.3
       return [
@@ -165,6 +200,7 @@ export const shapeLayerToFabricObject = (layer: ShapeObjectLayer): fabric.Fabric
     [SHAPE_KIND_KEY]: shape,
     [SHAPE_BOX_W_KEY]: width,
     [SHAPE_BOX_H_KEY]: height,
+    ...(shape === 'polygon' ? { [SHAPE_SIDES_KEY]: clampSides(layer.sides ?? DEFAULT_POLYGON_SIDES) } : {}),
   }
 
   if (shape === 'rectangle') {
@@ -181,7 +217,7 @@ export const shapeLayerToFabricObject = (layer: ShapeObjectLayer): fabric.Fabric
     return new fabric.Path(heartPathData(width, height), { ...base, ...meta })
   }
 
-  const points = computeShapePoints(shape, width, height)
+  const points = computeShapePoints(shape, width, height, layer.sides)
   if (points) {
     return new fabric.Polygon(points, { ...base, ...meta })
   }
@@ -212,10 +248,13 @@ export const fabricObjectToShapeLayer = (obj: fabric.FabricObject): ShapeObjectL
   const fill = obj.fill
   const fillColor = typeof fill === 'string' && fill !== 'transparent' ? fill : null
 
+  const sides = obj[SHAPE_SIDES_KEY]
+
   return {
     type: 'shape',
     id: id ?? `shape-${Math.round(x)}-${Math.round(y)}`,
     shape: kind ?? 'rectangle',
+    ...(kind === 'polygon' ? { sides: sides ?? DEFAULT_POLYGON_SIDES } : {}),
     x,
     y,
     width,

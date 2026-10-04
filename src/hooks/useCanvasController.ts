@@ -14,6 +14,7 @@ import { createObjectControls } from '../utils/fabricControls'
 import { fitOverlay } from '../utils/overlayFit'
 import { generateLayerId } from '../utils/id'
 import { createImageFromDataUrl, IMAGE_ID_KEY } from '../utils/fabricImage'
+import { DEFAULT_POLYGON_SIDES } from '../utils/fabricShapes'
 
 const getPenWidth = (penType?: PenType): number => {
   if (!penType) return 2
@@ -31,6 +32,7 @@ const getPenWidth = (penType?: PenType): number => {
 export interface CanvasControllerParams {
   tool: Tool
   shape?: Shape
+  polygonSides?: number
   penType?: PenType
   color: string
   font: string
@@ -74,6 +76,7 @@ export const useCanvasController = (params: CanvasControllerParams) => {
   const {
     tool,
     shape,
+    polygonSides,
     penType,
     color,
     font,
@@ -157,6 +160,7 @@ export const useCanvasController = (params: CanvasControllerParams) => {
     const computeScale = () => fitOverlay(containerRef.current).scale
 
     const currentShape = shape ?? 'rectangle'
+    const currentPolygonSides = polygonSides ?? DEFAULT_POLYGON_SIDES
     const currentBalloonKind = balloonKind ?? 'speech'
     const currentColor = color
     const currentFont = font
@@ -263,6 +267,7 @@ export const useCanvasController = (params: CanvasControllerParams) => {
       canvas,
       scale,
       shape: currentShape,
+      polygonSides: currentPolygonSides,
       balloonKind: currentBalloonKind,
       color: currentColor,
       font: currentFont,
@@ -457,5 +462,5 @@ export const useCanvasController = (params: CanvasControllerParams) => {
       canvas.requestRenderAll()
       fabricOwnedRef.current = new Set()
     }
-  }, [tool, shape, balloonKind, color, penType, font, fontSize, emoji, layout, panelData, updateShapeLayers, updateTextLayers])
+  }, [tool, shape, polygonSides, balloonKind, color, penType, font, fontSize, emoji, layout, panelData, updateShapeLayers, updateTextLayers])
 }

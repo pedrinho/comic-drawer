@@ -1,7 +1,7 @@
 import { Tool, Shape, PenType } from '../types/common'
 import './Toolbar.css'
 import React, { useState, useEffect } from 'react'
-import ShapePicker from './ShapePicker'
+import ShapePicker, { GEOMETRIC_SHAPES, OBJECT_SHAPES } from './ShapePicker'
 import PenPicker from './PenPicker'
 import FontPicker from './FontPicker'
 import EmojiPicker from './EmojiPicker'
@@ -13,6 +13,10 @@ interface ToolbarProps {
   onColorChange: (color: string) => void
   selectedShape: Shape
   onSelectShape: (shape: Shape) => void
+  selectedObject?: Shape
+  onSelectObject?: (shape: Shape) => void
+  polygonSides?: number
+  onPolygonSidesChange?: (sides: number) => void
   selectedPenType: PenType
   onSelectPenType: (penType: PenType) => void
   font: string
@@ -24,9 +28,10 @@ interface ToolbarProps {
   onSelectEmoji?: (emoji: string) => void
 }
 
-export default function Toolbar({ currentTool, onToolChange, color, onColorChange, selectedShape, onSelectShape, selectedPenType, onSelectPenType, font, onFontChange, fontSize, onFontSizeChange, isTextEditing = false, selectedEmoji = '😀', onSelectEmoji }: ToolbarProps) {
+export default function Toolbar({ currentTool, onToolChange, color, onColorChange, selectedShape, onSelectShape, selectedObject = 'star', onSelectObject, polygonSides, onPolygonSidesChange, selectedPenType, onSelectPenType, font, onFontChange, fontSize, onFontSizeChange, isTextEditing = false, selectedEmoji = '😀', onSelectEmoji }: ToolbarProps) {
   const [showPenSubmenu, setShowPenSubmenu] = useState(false)
   const [showShapesSubmenu, setShowShapesSubmenu] = useState(false)
+  const [showObjectsSubmenu, setShowObjectsSubmenu] = useState(false)
   const [showTextSubmenu, setShowTextSubmenu] = useState(false)
   const [showEmojiSubmenu, setShowEmojiSubmenu] = useState(false)
   const tools: { name: Tool; icon: string; label: string }[] = [
@@ -34,7 +39,8 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     { name: 'scissor', icon: '✂️', label: 'Scissor' },
     { name: 'pen', icon: '✏️', label: 'Pen' },
     { name: 'eraser', icon: '🧹', label: 'Eraser' },
-    { name: 'objectShapes', icon: '⬚', label: 'Object Shapes' },
+    { name: 'objectShapes', icon: '⬚', label: 'Shapes' },
+    { name: 'objects', icon: '⭐', label: 'Objects' },
     { name: 'fill', icon: '🪣', label: 'Fill' },
     { name: 'text', icon: '💬', label: 'Text' },
     // Balloon: draw a speech bubble (drag to size). Single 'speech' kind today; when more kinds
@@ -50,6 +56,9 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     if (currentTool !== 'objectShapes') {
       setShowShapesSubmenu(false)
     }
+    if (currentTool !== 'objects') {
+      setShowObjectsSubmenu(false)
+    }
     // Show text submenu when editing text or when the text tool is active
     if (currentTool !== 'text' && !isTextEditing) {
       setShowTextSubmenu(false)
@@ -61,15 +70,19 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     }
   }, [currentTool, isTextEditing])
 
-  const handleShapeToolClick = (toolName: Tool) => {
+  // Shapes and Objects each toggle their own picker (the tool switch closes the other via the effect).
+  const handleShapeToolClick = (toolName: 'objectShapes' | 'objects') => {
+    const [isOpen, setOpen] =
+      toolName === 'objects'
+        ? [showObjectsSubmenu, setShowObjectsSubmenu]
+        : [showShapesSubmenu, setShowShapesSubmenu]
     if (currentTool === toolName) {
-      setShowShapesSubmenu(!showShapesSubmenu)
-      setShowPenSubmenu(false)
+      setOpen(!isOpen)
     } else {
       onToolChange(toolName)
-      setShowShapesSubmenu(true)
-      setShowPenSubmenu(false)
+      setOpen(true)
     }
+    setShowPenSubmenu(false)
   }
 
   const handlePenButtonClick = () => {
@@ -118,6 +131,7 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
     onToolChange(tool)
     setShowPenSubmenu(false)
     setShowShapesSubmenu(false)
+    setShowObjectsSubmenu(false)
     setShowTextSubmenu(false)
     setShowEmojiSubmenu(false)
   }
@@ -131,8 +145,8 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
             onClick={
               tool.name === 'pen'
                 ? handlePenButtonClick
-                : tool.name === 'objectShapes'
-                  ? () => handleShapeToolClick(tool.name)
+                : tool.name === 'objectShapes' || tool.name === 'objects'
+                  ? () => handleShapeToolClick(tool.name as 'objectShapes' | 'objects')
                   : tool.name === 'text'
                     ? handleTextButtonClick
                     : tool.name === 'emoji'
@@ -155,8 +169,19 @@ export default function Toolbar({ currentTool, onToolChange, color, onColorChang
           {tool.name === 'objectShapes' && currentTool === 'objectShapes' && showShapesSubmenu && (
             <ShapePicker
               isOpen={true}
+              shapes={GEOMETRIC_SHAPES}
               selectedShape={selectedShape}
               onSelectShape={onSelectShape}
+              sides={polygonSides}
+              onSidesChange={onPolygonSidesChange}
+            />
+          )}
+          {tool.name === 'objects' && currentTool === 'objects' && showObjectsSubmenu && onSelectObject && (
+            <ShapePicker
+              isOpen={true}
+              shapes={OBJECT_SHAPES}
+              selectedShape={selectedObject}
+              onSelectShape={onSelectObject}
             />
           )}
           {tool.name === 'text' && ((currentTool === 'text' || isTextEditing) && showTextSubmenu) && (

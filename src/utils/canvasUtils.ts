@@ -1,4 +1,5 @@
 import { Shape } from '../types/common'
+import { regularPolygonPoints, DEFAULT_POLYGON_SIDES } from './fabricShapes'
 
 /**
  * Debug logging utility
@@ -34,7 +35,8 @@ export const traceShapePath = (
   startX: number,
   startY: number,
   endX: number,
-  endY: number
+  endY: number,
+  sides?: number
 ) => {
   // debugLog('CanvasUtils', `Tracing shape: ${shape}`, { startX, startY, endX, endY })
 
@@ -148,6 +150,15 @@ export const traceShapePath = (
         if (i === 0) ctx.moveTo(x, y)
         else ctx.lineTo(x, y)
       }
+      ctx.closePath()
+      break
+    case 'polygon':
+      regularPolygonPoints(sides ?? DEFAULT_POLYGON_SIDES, Math.abs(width), Math.abs(height)).forEach((pt, i) => {
+        const x = Math.min(startX, endX) + pt.x
+        const y = Math.min(startY, endY) + pt.y
+        if (i === 0) ctx.moveTo(x, y)
+        else ctx.lineTo(x, y)
+      })
       ctx.closePath()
       break
     case 'octagon':

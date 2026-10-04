@@ -11,12 +11,15 @@ import { debugLog, debugError, debugWarn, cloneImageData, createBlankImageData }
 import { Tool, Shape, PenType, BalloonKind, PanelData, ComicFile, PanelState, PanelHistory } from './types/common'
 import { renderPanelToStaticCanvas } from './utils/exportPanel'
 import { serializeComic, deserializeComic } from './utils/comicFile'
+import { DEFAULT_POLYGON_SIDES } from './utils/fabricShapes'
 
 const MAX_HISTORY = 10
 
 function App() {
   const [currentTool, setCurrentTool] = useState<Tool>('pen')
   const [selectedShape, setSelectedShape] = useState<Shape>('rectangle')
+  const [selectedObject, setSelectedObject] = useState<Shape>('star')
+  const [polygonSides, setPolygonSides] = useState<number>(DEFAULT_POLYGON_SIDES)
   // Balloon variant for the balloon tool. Only 'speech' today; state exists so a future picker
   // (mirroring the shape picker) can switch kinds without new plumbing.
   const [selectedBalloonKind] = useState<BalloonKind>('speech')
@@ -563,6 +566,10 @@ function App() {
           onColorChange={setSelectedColor}
           selectedShape={selectedShape}
           onSelectShape={setSelectedShape}
+          selectedObject={selectedObject}
+          onSelectObject={setSelectedObject}
+          polygonSides={polygonSides}
+          onPolygonSidesChange={setPolygonSides}
           selectedPenType={selectedPenType}
           onSelectPenType={setSelectedPenType}
           font={selectedFont}
@@ -587,7 +594,8 @@ function App() {
           <Canvas
             tool={currentTool}
             onToolChange={setCurrentTool}
-            shape={selectedShape}
+            shape={currentTool === 'objects' ? selectedObject : selectedShape}
+            polygonSides={polygonSides}
             balloonKind={selectedBalloonKind}
             penType={selectedPenType}
             color={selectedColor}

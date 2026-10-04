@@ -7,9 +7,11 @@ A web-based application for creating comics! Draw panels, add dialogue, and let 
 - ✍️ **Vector Pen**: Draw smooth freehand strokes (via Fabric's `PencilBrush`) that become
   real objects — select, move, resize, and rotate them
 - 🧽 **Eraser**: Wipe the raster layer clean
-- 🔷 **Object Shapes**: 12 shapes (rectangle, circle, triangle, star, heart, diamond, hexagon,
-  pentagon, heptagon, octagon, arrow, cross) as editable objects you can move, resize, rotate,
-  recolor, duplicate, and delete
+- 🔷 **Shapes**: triangle, rectangle, circle, diamond, and a **polygon with any number of sides**
+  (3–1000 — pick it with − / + or type the number, with a live preview)
+- ⭐ **Objects**: star, heart, arrow, cross
+- Shapes and objects are editable objects you can move, resize, rotate, recolor, duplicate, and
+  delete. Older comics with pentagons/hexagons/heptagons/octagons still open unchanged
 - 💬 **Text**: Place and edit text in place; the toolbar keeps font/size controls open while
   you type
 - 🗨️ **Balloon**: Draw a comic speech bubble (rounded rectangle with a tail) by dragging to

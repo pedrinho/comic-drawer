@@ -20,6 +20,7 @@ const makeCtx = (over: Partial<ToolContext> = {}): ToolContext => {
     canvas: new fabric.Canvas(document.createElement('canvas'), { width: 1200, height: 800 }),
     scale: 1,
     shape: 'rectangle',
+    polygonSides: 6,
     balloonKind: 'speech',
     color: '#123456',
     font: 'Arial',
@@ -71,6 +72,15 @@ describe('dragCreateController (shape)', () => {
     expect(ctx.syncToLayers).toHaveBeenCalledWith(false)
     expect(ctx.canvas.getActiveObject()).toBe(ctx.canvas.getObjects()[0])
     expect(ctx.canvas.getObjects().length).toBe(1)
+  })
+
+  it('stamps the chosen side count on a polygon', () => {
+    const ctx = makeCtx({ shape: 'polygon', polygonSides: 9 })
+    const c = createToolController('shape', ctx)!
+    c.onDown!({ pt: { x: 100, y: 100 } })
+    const obj = ctx.canvas.getObjects()[0] as fabric.Polygon
+    expect(obj.shapeSides).toBe(9)
+    expect(obj.points).toHaveLength(9)
   })
 
   it('onUp discards a too-small drag without syncing', () => {
