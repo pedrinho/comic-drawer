@@ -17,7 +17,6 @@ const MAX_HISTORY = 10
 
 function App() {
   const [currentTool, setCurrentTool] = useState<Tool>('pen')
-  const [selectedShape, setSelectedShape] = useState<Shape>('rectangle')
   const [selectedObject, setSelectedObject] = useState<Shape>('star')
   const [polygonSides, setPolygonSides] = useState<number>(DEFAULT_POLYGON_SIDES)
   // Balloon variant for the balloon tool. Only 'speech' today; state exists so a future picker
@@ -564,8 +563,6 @@ function App() {
           onToolChange={setCurrentTool}
           color={selectedColor}
           onColorChange={setSelectedColor}
-          selectedShape={selectedShape}
-          onSelectShape={setSelectedShape}
           selectedObject={selectedObject}
           onSelectObject={setSelectedObject}
           polygonSides={polygonSides}
@@ -594,7 +591,7 @@ function App() {
           <Canvas
             tool={currentTool}
             onToolChange={setCurrentTool}
-            shape={currentTool === 'objects' ? selectedObject : selectedShape}
+            shape={currentTool === 'objects' ? selectedObject : 'polygon'}
             polygonSides={polygonSides}
             balloonKind={selectedBalloonKind}
             penType={selectedPenType}
